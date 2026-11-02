@@ -61,6 +61,6 @@ Beyond CEL's standard library, expressions get CEL's math, strings, optional-val
 Translation takes two steps. First, [`lower`](mod@lower) rewrites the checked expression in cel-emit's own simpler form: a tree of small pieces, each marked with its type. Compilers call that step lowering. Next, [`emit`] writes the tree as Rust that uses cel-emit-runtime.
 
 cel-emit knows nothing about the program around it. [`decls::Decls`] tells it what an expression reads and calls, [`emit::Vars`] how to read each input, and your program writes the Rust around the translated code. 
-[`cel-emit-cli`](https://github.com/nodeve-com/cel-emit/tree/main/cel-emit-cli), in this repo, is the shortest way to see it work: a CEL expression over JSON in, a whole Rust program out, with no Rust of your own. [`examples/by_hand`](https://github.com/nodeve-com/cel-emit/tree/main/examples/by_hand) uses cel-emit as a library: one expression over a struct you write, translated in a `build.rs`.
+[`cel-emit-cli`](https://github.com/nodeve-com/cel-emit/tree/main/cel-emit-cli), in this repo, is the shortest way to see it work: a CEL expression over JSON in, with a JSON Schema if you have one, a whole Rust program out, with no Rust of your own. [`examples/by_hand`](https://github.com/nodeve-com/cel-emit/tree/main/examples/by_hand) uses cel-emit as a library: one expression over a struct you write, translated in a `build.rs`.
 
 cel-emit-runtime's functions sit in [`stdlib`]'s tables; its README gives their conventions.

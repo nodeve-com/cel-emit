@@ -23,7 +23,6 @@ An expression checked inside a container (a namespace), reading or building a de
 - **`null` as a value of its own type**, outside a nullable field.
 - **A list literal of records**, such as `[Sample{v: 1}]`: refused as "a list of records".
 - **A list of records in `json.decode(text, Message)`**: refused as "a field in a decode".
-- **Selecting through a nullable message**: `undefined field`, as CEL's checker reads it as a wrapper. An optional field holds one instead.
 - **`flatten(depth)` of a typed nested list**, such as a list of lists of ints: no conversion makes a dyn list of one nested two deep, so only a list of dyn takes the depth form. `flatten()` takes either. `[].flatten()` has no element type to read.
 - **A comprehension written out by hand**, rather than through a macro such as `all` or `map`; and `transformMap` over a non-empty map.
 - **A duration written `.5s`, `.5h`, or `5.s`**: `humantime` reads none of them, and CEL does.

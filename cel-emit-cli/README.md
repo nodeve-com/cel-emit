@@ -1,6 +1,6 @@
 # cel-emit-cli
 
-Write [CEL](https://cel.dev), get a Rust program. You write one CEL expression in a file, and `cel-emit` writes a Cargo package that reads JSON on stdin, computes the expression over it, and prints the result as JSON. You write no Rust, no types, and no schema.
+Write [CEL](https://cel.dev), get a Rust program. You write one CEL expression in a file, and `cel-emit` writes a Cargo package that reads JSON on stdin, computes the expression over it, and prints the result as JSON. You write no Rust and no types. A [schema](#with-a-schema) is optional.
 
 It's the shortest way to see [cel-emit](../README.md) work. The program it writes carries no CEL interpreter.
 
@@ -61,11 +61,28 @@ Expressions get everything [cel-emit](../README.md#extras) gives them, plus:
 
 A generated program links the time zone database and `jiff` only if its expression calls one of these.
 
+## With a schema
+
+Without a schema, `input` is dynamic JSON: every read looks up a key at run time, in the program's own loop. Give the program a [JSON Schema](https://json-schema.org) and `input` has types:
+
+```sh
+cargo run -p cel-emit-cli --bin cel-emit -- rows.cel target/rows --schema answer.schema.json
+```
+
+The same expression gives the same output. The program gains a struct for each object, and [schema-emit](https://github.com/nodeve-com/schema-emit) writes its decode:
+
+- **Reads are plain Rust.** `row.pricing.total` is a field read, not a map search and a cast. Arithmetic needs no `int()`.
+- **A bad answer fails where it's wrong.** The error names the field, as `Input.options[0].pricing.total`, before the expression runs.
+- **Write only what you read.** Keys the schema doesn't name are skipped unread, unless it closes the object with `additionalProperties: false`.
+
+[`examples/answer_rows`](../examples/answer_rows) runs both ways: `answer.schema.json` names what `rows.cel` reads.
+
 ## Limits
 
-- **JSON values have no declared types**, so CEL can't know a value from the JSON is a number. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which is refused when translating.
-- **One failure stops the run.** An expression fails whole, so a lookup that finds nothing ends the program with a non-zero exit and prints nothing. The error names its kind, not its place.
+- **Without a schema, JSON values have no declared types**, so CEL can't know a value from the JSON is a number. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which is refused when translating.
+- **One failure stops the run.** An expression fails whole, so a lookup that finds nothing ends the program with a non-zero exit and prints nothing. That error names its kind, not its place.
 - **The whole input is read into memory.**
 - **The program builds inside this repo.** Its `Cargo.toml` points at this checkout's cel-emit-runtime by path.
+- **A schema's models must each hold a type CEL can read.** One naming a key no field holds, as `additionalProperties` with a schema does, or a mixed-kind tuple, is refused.
 
 What cel-emit itself can't translate yet: [`MISSING.md`](../MISSING.md).
