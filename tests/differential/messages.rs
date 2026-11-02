@@ -1,0 +1,68 @@
+//! Message cases: `M` has a nullable `f`, an int `n`, and a string `s` (main.rs). The interpreter
+//! has no message values, so each case is read against the CEL in `REFERENCES`.
+
+/// Expressions the two evaluators must agree on.
+pub const CASES: &[&str] = &[
+    "M{f: null} == M{}",
+    "M{f: 0} == M{}",
+    "M{f: 5} == M{f: 5}",
+    "M{n: 0} == M{}",
+    "M{n: 1} != M{n: 2}",
+    "M{s: 'a', n: 2} == M{n: 2, s: 'a'}",
+    "M{?f: optional.of(5)} == M{f: 5}",
+    "M{?f: optional.none()} == M{}",
+    "M{?n: optional.of(5)}.n",
+    "M{?n: optional.none()}.n",
+    "M{f: 5}.f == 5",
+    "M{f: null}.f == null",
+    "optional.of(M{n: 1}).hasValue()",
+    "optional.of(M{n: 1}).value() == M{n: 1}",
+    "optional.of(M{}) == optional.of(M{})",
+    "optional.of(M{n: 1}) == optional.of(M{n: 2})",
+    "optional.of(M{n: 7}).value().n",
+    "optional.of(M{n: 7}).?n.value()",
+    "optional.of(M{}).?n.hasValue()",
+    "cel.bind(c, optional.of(M{n: 4}), math.greatest([?c.?n, 3]))",
+    "cel.bind(c, optional.of(M{}), math.greatest([?c.?n, 3]))",
+    "cel.bind(m, M{n: 1 + 1}, m.n + m.n)",
+    "cel.bind(m, M{n: 3}, m == M{n: 3} && m.n == 3)",
+    "cel.bind(m, M{n: 1 / 0}, 5)",
+    "M{n: 1 / 0}.s == ''",
+    "M{n: 1, s: 'x'}.s",
+];
+
+/// What the interpreter evaluates for a message case: the same answer, written without a message.
+pub const REFERENCES: &[(&str, &str)] = &[
+    ("M{f: null} == M{}", "true"),
+    ("M{f: 0} == M{}", "false"),
+    ("M{f: 5} == M{f: 5}", "true"),
+    ("M{n: 0} == M{}", "true"),
+    ("M{n: 1} != M{n: 2}", "true"),
+    ("M{s: 'a', n: 2} == M{n: 2, s: 'a'}", "true"),
+    ("M{?f: optional.of(5)} == M{f: 5}", "true"),
+    ("M{?f: optional.none()} == M{}", "true"),
+    ("M{?n: optional.of(5)}.n", "5"),
+    ("M{?n: optional.none()}.n", "0"),
+    ("M{f: 5}.f == 5", "true"),
+    ("M{f: null}.f == null", "true"),
+    ("optional.of(M{n: 1}).hasValue()", "true"),
+    ("optional.of(M{n: 1}).value() == M{n: 1}", "true"),
+    ("optional.of(M{}) == optional.of(M{})", "true"),
+    ("optional.of(M{n: 1}) == optional.of(M{n: 2})", "false"),
+    ("optional.of(M{n: 7}).value().n", "7"),
+    ("optional.of(M{n: 7}).?n.value()", "7"),
+    ("optional.of(M{}).?n.hasValue()", "false"),
+    (
+        "cel.bind(c, optional.of(M{n: 4}), math.greatest([?c.?n, 3]))",
+        "4",
+    ),
+    (
+        "cel.bind(c, optional.of(M{}), math.greatest([?c.?n, 3]))",
+        "3",
+    ),
+    ("cel.bind(m, M{n: 1 + 1}, m.n + m.n)", "4"),
+    ("cel.bind(m, M{n: 3}, m == M{n: 3} && m.n == 3)", "true"),
+    ("cel.bind(m, M{n: 1 / 0}, 5)", "1 / 0 == 1 ? 5 : 5"),
+    ("M{n: 1 / 0}.s == ''", "1 / 0 == 1"),
+    ("M{n: 1, s: 'x'}.s", "'x'"),
+];

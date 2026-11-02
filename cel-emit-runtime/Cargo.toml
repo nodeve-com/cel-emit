@@ -1,0 +1,35 @@
+[package]
+name = "cel-emit-runtime"
+description = "What Rust that cel-emit writes links: CEL's semantics, one module per area, over std values."
+version = "0.6.2"
+edition = "2021"
+license = "MPL-2.0"
+repository = "https://github.com/nodeve-com/cel-emit"
+include = ["src", "README.md", "LICENSE"]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+struct_excessive_bools = "deny"
+fn_params_excessive_bools = "deny"
+
+[dependencies]
+# RE2's syntax without Unicode tables: linear-time matching, small enough to link into each build.
+regex-lite = "0.1"
+# A constant `matches` pattern: the search over its table; building tables stays in cel-emit.
+pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "787bf8ce5c92ebc0b84ae91f028f1861d8744252", version = "0.6.2" }
+# `math.pow` on every target, so builds agree to the bit.
+libm = "0.2"
+# Timestamps and durations, and civil time from an instant and an offset; no clock, no zone
+# database (src/time.rs).
+chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"] }
+# A duration's text: an optional sign, then its units (src/time/parse.rs).
+humantime = "2"
+# `base64.encode` and `base64.decode`: no std, its `alloc` for the owned output.
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+# `json.decode` and `json.encode` (src/json.rs): the parser and writer, floats parsed to the
+# nearest double; no derive, no proc macro. `std` for `finite`'s writer into a sink.
+serde = { version = "1", default-features = false, features = ["alloc"] }
+serde_json = { version = "1", default-features = false, features = ["std", "float_roundtrip"] }

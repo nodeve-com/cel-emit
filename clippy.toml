@@ -1,0 +1,8 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+# One way to do each job: the listed call lives in one wrapper (allowed there), the rest of the
+# code calls the wrapper.
+disallowed-methods = [
+  { path = "humantime::parse_duration", reason = "call cel_emit_runtime's parse_duration" },
+]

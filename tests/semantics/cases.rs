@@ -1,0 +1,278 @@
+//! Cases of CEL semantics: an expression over bindings, and what it must give. [`check`] lowers
+//! every case, emits it, builds all of them as one native program against the prebuilt
+//! cel-emit-runtime rlib, runs it, and compares each answer with what the case expects.
+
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use cel_core::{Activation, Value};
+use cel_emit::emit::Emitter;
+use cel_emit::{Decls, Error, Name, Type};
+use cel_emit_runtime as s;
+
+use crate::common::bind::{answers, show, Bound};
+use crate::common::values::{fits, infer, rust, show_with};
+use crate::common::{build_run, program};
+
+/// What a case gives: a value, or an error.
+pub enum Got {
+    Value(Value),
+    Error,
+    /// An error of this kind.
+    Status(s::Error),
+}
+
+enum Want {
+    /// What cel-core gives.
+    Reference,
+    /// This, which cel-core does not give.
+    Exactly(Got),
+    /// No value: a fold of nothing.
+    Absent,
+}
+
+struct Case {
+    source: String,
+    /// The bindings' types, where their values don't say.
+    types: Option<Vec<(String, Type)>>,
+    /// One program run takes these in order, sharing what the emitted code keeps between calls.
+    messages: Vec<Vec<(String, Value)>>,
+    want: Want,
+}
+
+/// Cases to check together, and the messages they build; [`check`] builds and compares them.
+#[derive(Default)]
+pub struct Cases(Vec<Case>, BTreeMap<String, Type>);
+
+impl Cases {
+    fn push(&mut self, source: &str, messages: &[Vec<(&str, Value)>], want: Want) {
+        let messages = messages
+            .iter()
+            .map(|r| r.iter().map(|(n, v)| (n.to_string(), v.clone())).collect())
+            .collect();
+        self.0.push(Case {
+            source: source.into(),
+            types: None,
+            messages,
+            want,
+        });
+    }
+
+    /// `source` over `inputs` gives what cel-core does.
+    pub fn agrees(&mut self, source: &str, inputs: &[(&str, Value)]) {
+        self.push(source, &[inputs.to_vec()], Want::Reference);
+    }
+
+    /// `source` over `inputs` gives `want`, where cel-emit follows cel-go over cel-core.
+    pub fn gives(&mut self, source: &str, inputs: &[(&str, Value)], want: Got) {
+        self.push(source, &[inputs.to_vec()], Want::Exactly(want));
+    }
+
+    /// `source` over `inputs` holds no value.
+    pub fn absent(&mut self, source: &str, inputs: &[(&str, Value)]) {
+        self.push(source, &[inputs.to_vec()], Want::Absent);
+    }
+
+    /// A message the cases may build or read by `name`.
+    pub fn message(&mut self, name: &str, ty: Type) {
+        self.1.insert(name.into(), ty);
+    }
+
+    /// `source` over `v`, a stored value of `ty`, gives `want`.
+    pub fn stored(&mut self, source: &str, ty: Type, v: Value, want: Got) {
+        self.push(source, &[vec![("v", v)]], Want::Exactly(want));
+        if let Some(case) = self.0.last_mut() {
+            case.types = Some(vec![("v".into(), ty)]);
+        }
+    }
+
+    /// `source` over `v`, a stored value of `ty`, holds no value.
+    pub fn stored_absent(&mut self, source: &str, ty: Type, v: Value) {
+        self.push(source, &[vec![("v", v)]], Want::Absent);
+        if let Some(case) = self.0.last_mut() {
+            case.types = Some(vec![("v".into(), ty)]);
+        }
+    }
+
+    /// `source` over each of `each` in order, in one run, each giving what cel-core does.
+    pub fn messages(&mut self, source: &str, each: &[Vec<(&str, Value)>]) {
+        self.push(source, each, Want::Reference);
+    }
+}
+
+pub fn s(v: &str) -> Value {
+    Value::String(v.into())
+}
+
+pub fn list(items: Vec<Value>) -> Value {
+    Value::list(items)
+}
+
+pub fn map(entries: &[(&str, Value)]) -> Value {
+    Value::map(entries.to_vec())
+}
+
+/// Separates a case's messages in an answer.
+const SEP: char = '\u{1f}';
+
+/// Doubles to the bit, as `{:?}` writes them: a negative zero stays one.
+const PRELUDE: &str = "fn dbl(d: f64) -> String { format!(\"{d:?}\") }\n";
+
+fn exact(d: f64) -> String {
+    format!("{d:?}")
+}
+
+struct Names(HashMap<String, Value>);
+
+impl Activation for Names {
+    fn resolve(&self, name: &str) -> Option<Value> {
+        self.0.get(name).cloned()
+    }
+}
+
+/// The types of a case's bindings, an empty list's or map's elements doubles.
+fn declared(case: &Case) -> Vec<(String, Type)> {
+    if let Some(types) = &case.types {
+        return types.clone();
+    }
+    let first = case.messages.first().unwrap();
+    first
+        .iter()
+        .map(|(n, v)| (n.clone(), infer(v, Some(&Type::Double)).unwrap()))
+        .collect()
+}
+
+/// What cel-core gives for `source` over `message`, as a native program writes it.
+fn reference(source: &str, types: &[(String, Type)], message: &[(String, Value)]) -> String {
+    let names: BTreeMap<String, Name> = types
+        .iter()
+        .enumerate()
+        .map(|(i, (n, t))| (n.clone(), Name::var(t.clone(), i)))
+        .collect();
+    let env = cel_emit::env::environment(&Decls::new(names));
+    let ast = cel_emit::macros::compile(&env, source).unwrap();
+    let program = env.program(&ast).unwrap();
+    let names = Names(message.iter().cloned().collect());
+    match program.eval(&names) {
+        Value::Error(_) => "err".into(),
+        v => show_with(&v, exact),
+    }
+}
+
+/// The Rust of case `n`: a function `c{n}` writing what each message gives, joined by [`SEP`].
+fn function(
+    n: usize,
+    case: &Case,
+    types: &[(String, Type)],
+    messages: &BTreeMap<String, Type>,
+    em: &mut Emitter,
+) -> String {
+    let source = &case.source;
+    let mut decls = Decls::default();
+    decls.messages.clone_from(messages);
+    for (i, (name, ty)) in types.iter().enumerate() {
+        decls.names.insert(name.clone(), Name::var(ty.clone(), i));
+    }
+    let tree = cel_emit::lower(source, &decls).unwrap_or_else(|e| panic!("{source}: {e}"));
+    let bound = Bound((0..types.len()).map(|i| format!("i{i}.clone()")).collect());
+    let expr = em
+        .expr(&tree, &bound)
+        .unwrap_or_else(|e| panic!("{source}: {e}"));
+    let rust_ty = em.rust(&tree.ty).unwrap();
+    let shown = show(&tree.ty, "v", 0);
+    let params: Vec<String> = types
+        .iter()
+        .enumerate()
+        .map(|(i, (_, t))| format!("i{i}: {}", em.rust(t).unwrap()))
+        .collect();
+    let mut body = format!(
+        "    let f = |{}| -> s::Result<String> {{ let v: {rust_ty} = {expr}; s::ok({shown}) }};\n    let mut out: Vec<String> = Vec::new();\n",
+        params.join(", ")
+    );
+    let err = match case.want {
+        Want::Exactly(Got::Status(_)) => "format!(\"err {e:?}\")",
+        _ => "{ let _ = e; String::from(\"err\") }",
+    };
+    for message in &case.messages {
+        let args: Vec<String> = types
+            .iter()
+            .zip(message)
+            .map(|((_, t), (_, v))| {
+                assert!(fits(v, t), "{source}: {v:?} is no {t:?}");
+                rust(v, t, em)
+            })
+            .collect();
+        body.push_str(&format!(
+            "    out.push(match (|| f({}))() {{ Ok(t) => t, Err(s::Error::Absent) => String::from(\"absent\"), Err(e) => {err} }});\n",
+            args.join(", ")
+        ));
+    }
+    format!("fn c{n}() -> String {{\n{body}    out.join(\"{SEP}\")\n}}\n")
+}
+
+/// What case `case` must answer.
+fn expected(case: &Case, types: &[(String, Type)]) -> String {
+    let each: Vec<String> = case
+        .messages
+        .iter()
+        .map(|message| match &case.want {
+            Want::Reference => reference(&case.source, types, message),
+            Want::Exactly(Got::Error) => "err".into(),
+            Want::Exactly(Got::Status(e)) => format!("err {e:?}"),
+            Want::Exactly(Got::Value(v)) => show_with(v, exact),
+            Want::Absent => "absent".into(),
+        })
+        .collect();
+    each.join(&SEP.to_string())
+}
+
+/// The cases `fill` adds, built as one native program and checked: every case that differs is
+/// named, with what it should give and what it gave.
+pub fn check(fill: impl FnOnce(&mut Cases)) {
+    static RUNS: AtomicUsize = AtomicUsize::new(0);
+    let mut cases = Cases::default();
+    fill(&mut cases);
+    let types: Vec<_> = cases.0.iter().map(declared).collect();
+    let mut em = Emitter::new(&[], Box::new(crate::common::Positional));
+    let fns: Vec<(usize, String)> = cases
+        .0
+        .iter()
+        .zip(&types)
+        .enumerate()
+        .map(|(n, (case, types))| (n, function(n, case, types, &cases.1, &mut em)))
+        .collect();
+    let items = crate::common::items(&mut em).unwrap_or_else(|e| panic!("{e}"));
+    let dir: PathBuf = std::env::temp_dir().join(format!(
+        "cel-emit-semantics-{}-{}",
+        std::process::id(),
+        RUNS.fetch_add(1, Ordering::Relaxed)
+    ));
+    let lines = build_run(&dir, &program(&fns, PRELUDE, &items));
+    let _ = std::fs::remove_dir_all(&dir);
+    let got: BTreeMap<usize, String> = answers(lines.unwrap_or_else(|e| panic!("rustc: {e}")))
+        .into_iter()
+        .collect();
+    let mut wrong = Vec::new();
+    for (n, (case, types)) in cases.0.iter().zip(&types).enumerate() {
+        let want = expected(case, types);
+        match got.get(&n) {
+            Some(g) if *g == want => {}
+            other => wrong.push(format!(
+                "{} {:?}\n    want {want:?}\n    got  {other:?}",
+                case.source, case.messages
+            )),
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// Why `source` over `names` does not lower, or `None` where it does.
+pub fn refusal(source: &str, names: &[(&str, Type)]) -> Option<Error> {
+    let names = names
+        .iter()
+        .enumerate()
+        .map(|(i, (n, t))| (n.to_string(), Name::var(t.clone(), i)))
+        .collect();
+    cel_emit::lower(source, &Decls::new(names)).err()
+}

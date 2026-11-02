@@ -1,0 +1,46 @@
+[package]
+name = "cel-emit"
+description = "CEL to Rust: checked expressions lowered to a typed tree and emitted as Rust that links cel-emit-runtime, then built by rustc."
+version = "0.6.2"
+edition = "2021"
+license = "MPL-2.0"
+repository = "https://github.com/nodeve-com/cel-emit"
+include = ["src", "README.md", "MISSING.md", "LICENSE"]
+
+[workspace]
+members = ["cel-emit-runtime"]
+resolver = "2"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+struct_excessive_bools = "deny"
+fn_params_excessive_bools = "deny"
+
+[dependencies]
+# The front end: parse and check (src/lower.rs). A fork's branch: upstream plus
+# `fix/chrono-default-features` (chrono without its clock, for wasm) and
+# `fix/checker-mismatched-type-params` (the checker rejects `"s" == 3`, as cel-go does).
+cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+# What the Rust it writes links: here for its time constants and zone tables.
+cel-emit-runtime = { path = "cel-emit-runtime", version = "0.6.2" }
+# A constant `matches` pattern as a search table, built while translating.
+pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "787bf8ce5c92ebc0b84ae91f028f1861d8744252", version = "0.6.2", features = ["build"] }
+# `math.pow`'s reference, as cel-emit-runtime computes it. One pure-Rust libm on every target, so
+# builds give identical results on every target.
+libm = "0.2"
+# A `timestamp()` literal; a zone a CEL accessor names, fixed as a table (src/zone.rs).
+chrono = { version = "0.4", default-features = false }
+chrono-tz = "0.10"
+# `json.decode` and `json.encode` as the interpreter runs them (src/functions/json.rs).
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+
+[dev-dependencies]
+# The cel-spec suite, its loader, and its values, from cel-core's repo (tests/conformance).
+cel-core-conformance = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+cel-core-proto = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+# The descriptors cel-core-proto reads: the suite's messages and enums, declared to cel-emit.
+prost-reflect = "0.16"

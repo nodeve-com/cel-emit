@@ -1,0 +1,244 @@
+//! The CEL environment an expression checks against: each name a variable, each message a message,
+//! and each type in CEL.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use cel_core::{CelType, Env, FunctionDecl, OverloadDecl, Value};
+
+use crate::decls::{Decl, Decls};
+use crate::types::Type;
+
+/// The CEL environment `decls` make: the standard library, the math, optionals, and string
+/// extensions, cel-emit's functions and the embedder's, each name, and each message. A dotted
+/// name's prefixes are messages: `prev.?Smooth.watts` selects through them.
+pub fn environment(decls: &Decls) -> Env {
+    let mut messages = Messages {
+        enums: decls.enums.keys().cloned().collect(),
+        ..Messages::default()
+    };
+    let mut declared = crate::functions::declarations();
+    let embedder = decls.functions.iter().map(|f| &f.decl);
+    let embedder = embedder.chain(decls.expansions.iter().map(|x| &x.decl));
+    declared.extend(embedder.map(|d| declared_as(d, &mut messages)));
+    let mut env = Env::with_standard_library().with_extension(declared);
+    for (name, ty) in &decls.messages {
+        let held = message_name(ty);
+        messages.declare(&held, ty);
+        messages.names.insert(name.clone(), held);
+    }
+    let mut roots = BTreeMap::new();
+    for (name, n) in &decls.names {
+        let Some((root, rest)) = name.split_once('.') else {
+            roots.insert(name.clone(), cel_type(&n.ty, &mut messages));
+            continue;
+        };
+        let mut message =
+            (messages.names.get(root).cloned()).unwrap_or_else(|| format!("{MESSAGE}{root}"));
+        // A map of messages: each field's map is the message's field.
+        let leaf = match (&n.ty, decls.columns.contains_key(root)) {
+            (Type::Map(_, ty), true) => {
+                let held = CelType::message(&message);
+                roots.insert(root.to_string(), CelType::map(CelType::String, held));
+                cel_type(ty, &mut messages)
+            }
+            (ty, _) => {
+                roots.insert(root.to_string(), CelType::message(&message));
+                cel_type(ty, &mut messages)
+            }
+        };
+        let mut segments = rest.split('.').peekable();
+        while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                messages.field(message.clone(), segment, leaf.clone());
+            } else {
+                // A declared message's field is a message already.
+                let inner = match messages.fields.get(&message).and_then(|f| f.get(segment)) {
+                    Some(CelType::Message(held)) => held.to_string(),
+                    _ => format!("{message}.{segment}"),
+                };
+                messages.field(message, segment, CelType::message(&inner));
+                message = inner;
+            }
+        }
+    }
+    // A message's name is also a type value, `json.decode(text, Message)`'s second argument, unless
+    // a name in scope already takes it.
+    for (name, held) in &messages.names {
+        if !roots.contains_key(name) {
+            let message = CelType::message(held);
+            roots.insert(name.clone(), CelType::type_of(message));
+        }
+    }
+    for (root, ty) in roots {
+        env.add_variable(root, ty);
+    }
+    env.with_proto_registry(std::sync::Arc::new(messages))
+}
+
+/// Each message type's name starts so.
+const MESSAGE: &str = "message.";
+
+/// The message types a module's names make: each one's fields and their types.
+#[derive(Debug, Default)]
+struct Messages {
+    fields: BTreeMap<String, BTreeMap<String, CelType>>,
+    /// Each declared message's name, and its CEL name: equal messages are one type.
+    names: BTreeMap<String, String>,
+    /// The enum names an expression may write, as [`Decls::enums`] keys them.
+    enums: BTreeSet<String>,
+}
+
+impl Messages {
+    fn field(&mut self, message: String, field: &str, ty: CelType) {
+        self.fields
+            .entry(message)
+            .or_default()
+            .insert(field.into(), ty);
+    }
+
+    /// A message's fields under the CEL name `name`.
+    fn declare(&mut self, name: &str, ty: &Type) {
+        self.fields.entry(name.into()).or_default();
+        for f in ty.fields() {
+            // CEL reads an optional field as its value; `has` and `.?` ask its presence.
+            let held = match &f.ty {
+                Type::Optional(t) => t,
+                t => t,
+            };
+            let held = cel_type(held, self);
+            self.field(name.into(), &f.name, held);
+        }
+    }
+}
+
+impl cel_core::ProtoTypeResolver for Messages {
+    fn get_field_type(&self, message: &str, field: &str) -> Option<CelType> {
+        self.fields.get(message)?.get(field).cloned()
+    }
+    fn has_message(&self, message: &str) -> bool {
+        self.fields.contains_key(message)
+    }
+    fn is_extension(&self, _: &str, _: &str) -> bool {
+        false
+    }
+    fn get_enum_value(&self, _: &str, _: &str) -> Option<i32> {
+        None
+    }
+    fn resolve_qualified(&self, parts: &[&str], _: &str) -> Option<cel_core::ResolvedProtoType> {
+        let name = parts.join(".");
+        self.enums
+            .contains(&name)
+            .then(|| cel_core::ResolvedProtoType::Enum {
+                cel_type: CelType::enum_type(&name),
+                name,
+            })
+    }
+    fn resolve_message_name(&self, name: &str, _: &str) -> Option<String> {
+        self.names.get(name).cloned()
+    }
+    fn message_field_names(&self, message: &str) -> Option<Vec<String>> {
+        Some(self.fields.get(message)?.keys().cloned().collect())
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+/// Only the checker reads it: no expression runs over a message here.
+impl cel_core::ProtoRegistry for Messages {
+    fn construct_message(&self, name: &str, _: &[cel_core::StructFieldValue], _: bool) -> Value {
+        Value::error(format!("{name}: no message values"))
+    }
+    fn message_field_access(
+        &self,
+        _: &dyn cel_core::MessageValue,
+        field: &str,
+        _: bool,
+        _: bool,
+    ) -> Value {
+        Value::error(format!("{field}: no message values"))
+    }
+    fn message_has_field(&self, _: &dyn cel_core::MessageValue, field: &str) -> Value {
+        Value::error(format!("{field}: no message values"))
+    }
+    fn get_extension_value(
+        &self,
+        _: &dyn cel_core::MessageValue,
+        _: &str,
+        _: bool,
+        _: bool,
+    ) -> Option<Value> {
+        None
+    }
+    fn has_extension(&self, _: &dyn cel_core::MessageValue, _: &str) -> Option<bool> {
+        None
+    }
+}
+
+/// `decl` in CEL, each message it names declared in `messages`.
+fn declared_as(decl: &Decl, messages: &mut Messages) -> FunctionDecl {
+    let mut made = FunctionDecl::new(decl.name.clone());
+    for o in &decl.overloads {
+        let params = o.params.iter().map(|p| cel_type(p, messages)).collect();
+        let result = cel_type(&o.result, messages);
+        made = made.with_overload(OverloadDecl::function(o.id.clone(), params, result));
+    }
+    made
+}
+
+/// `ty` in CEL: a message named by its fields, declared in `messages`.
+fn cel_type(ty: &Type, messages: &mut Messages) -> CelType {
+    match ty {
+        Type::Int => CelType::Int,
+        Type::Uint => CelType::UInt,
+        Type::Double => CelType::Double,
+        Type::Bool => CelType::Bool,
+        Type::String => CelType::String,
+        Type::Bytes => CelType::Bytes,
+        Type::Null => CelType::Null,
+        Type::Timestamp => CelType::Timestamp,
+        Type::Duration => CelType::Duration,
+        Type::Dyn => CelType::Dyn,
+        // A declared name is never a mixed number: a dyn that lowering refuses.
+        Type::Number => CelType::Dyn,
+        Type::Narrow(w) => cel_type(&w.cel(), messages),
+        Type::Optional(t) => CelType::optional(cel_type(t, messages)),
+        Type::Nullable(t) => CelType::wrapper(cel_type(t, messages)),
+        Type::List(t) => CelType::list(cel_type(t, messages)),
+        Type::Map(k, v) => CelType::map(cel_type(k, messages), cel_type(v, messages)),
+        Type::Message(_) => {
+            let name = message_name(ty);
+            messages.declare(&name, ty);
+            CelType::message(&name)
+        }
+    }
+}
+
+/// A message type's CEL name: its fields and their types, so equal messages share one.
+fn message_name(ty: &Type) -> String {
+    let fields: Vec<String> = ty
+        .fields()
+        .iter()
+        .map(|f| match &f.ty {
+            Type::Message(_) => format!("{}:{{{}}}", f.name, message_name(&f.ty)),
+            t => format!("{}:{}", f.name, t.display()),
+        })
+        .collect();
+    format!("{MESSAGE}message<{}>", fields.join(","))
+}
+
+/// Each message type in `ty`, by its CEL name, into `messages`.
+pub(crate) fn register(ty: &Type, messages: &mut BTreeMap<String, Type>) {
+    match ty {
+        Type::Message(fields) => {
+            for f in fields {
+                register(&f.ty, messages);
+            }
+            messages.insert(message_name(ty), ty.clone());
+        }
+        Type::List(t) | Type::Map(_, t) | Type::Optional(t) | Type::Nullable(t) => {
+            register(t, messages)
+        }
+        _ => {}
+    }
+}

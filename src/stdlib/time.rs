@@ -1,0 +1,43 @@
+//! Timestamps and durations: cel-emit-runtime's `time`. An accessor's `_with_tz` overload takes the
+//! zone as the table [`crate::zone`] makes of its literal.
+
+use crate::functions::Std;
+
+pub(super) const FUNCTIONS: &[Std] = &[
+    Std::any("add_timestamp_duration", "time::add"),
+    Std::any("add_duration_timestamp", "time::add_to"),
+    Std::any("add_duration_duration", "time::add_durations"),
+    Std::any("subtract_timestamp_duration", "time::subtract"),
+    Std::any("subtract_timestamp_timestamp", "time::between"),
+    Std::any("subtract_duration_duration", "time::subtract_durations"),
+    Std::any("int_to_timestamp", "time::from_seconds"),
+    Std::reads("string_to_timestamp", "time::string_to_timestamp"),
+    Std::reads("string_to_duration", "time::string_to_duration"),
+    Std::any("timestamp_to_int", "time::to_seconds"),
+    Std::any("timestamp_to_string", "time::timestamp_string"),
+    Std::any("duration_to_string", "time::duration_string"),
+    Std::any("timestamp_to_fullyear", "time::full_year"),
+    Std::reads("timestamp_to_fullyear_with_tz", "time::full_year_in"),
+    Std::any("timestamp_to_month", "time::month"),
+    Std::reads("timestamp_to_month_with_tz", "time::month_in"),
+    Std::any("timestamp_to_dayofyear", "time::day_of_year"),
+    Std::reads("timestamp_to_dayofyear_with_tz", "time::day_of_year_in"),
+    Std::any("timestamp_to_dayofmonth", "time::day_of_month"),
+    Std::reads("timestamp_to_dayofmonth_with_tz", "time::day_of_month_in"),
+    Std::any("timestamp_to_date", "time::date"),
+    Std::reads("timestamp_to_date_with_tz", "time::date_in"),
+    Std::any("timestamp_to_dayofweek", "time::day_of_week"),
+    Std::reads("timestamp_to_dayofweek_with_tz", "time::day_of_week_in"),
+    Std::any("timestamp_to_hours", "time::hours"),
+    Std::reads("timestamp_to_hours_with_tz", "time::hours_in"),
+    Std::any("timestamp_to_minutes", "time::minutes"),
+    Std::reads("timestamp_to_minutes_with_tz", "time::minutes_in"),
+    Std::any("timestamp_to_seconds", "time::seconds"),
+    Std::reads("timestamp_to_seconds_with_tz", "time::seconds_in"),
+    Std::any("timestamp_to_milliseconds", "time::milliseconds"),
+    Std::reads("timestamp_to_milliseconds_with_tz", "time::milliseconds_in"),
+    Std::any("duration_to_hours", "time::duration_hours"),
+    Std::any("duration_to_minutes", "time::duration_minutes"),
+    Std::any("duration_to_seconds", "time::duration_seconds"),
+    Std::any("duration_to_milliseconds", "time::duration_milliseconds"),
+];
