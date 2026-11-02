@@ -1,0 +1,21 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - run: sh scripts/guard-words.sh
+      - run: cargo fmt --all --check
+      # The conformance test resolves the dependency graph offline through cargo metadata: every
+      # crate must be fetched first.
+      - run: cargo fetch --locked
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo nextest run --locked --workspace
