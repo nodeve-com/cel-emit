@@ -1,0 +1,481 @@
+{
+  "currency": "XTS",
+  "options": [
+    {
+      "type": "time",
+      "important_info": "",
+      "time_title": null,
+      "start_date": "2030-01-15",
+      "start_time": "20:00:00",
+      "timezone": "Etc/GMT",
+      "duration": "PT12H45M",
+      "end_date": "2030-01-16",
+      "end_time": "08:45:00",
+      "product_id": "route-standard",
+      "instance_id": "00000000-0000-4000-8000-000000000101",
+      "segment_entity_id": "00000000-0000-4000-8000-000000000102",
+      "venue": {"id": "1000001", "title": "Vessel One"},
+      "max_uses": 1,
+      "legs": [
+        {
+          "important_info": "",
+          "start": "2030-01-15T20:00:00Z",
+          "end": "2030-01-16T08:45:00Z",
+          "start_date": "2030-01-15",
+          "start_time": "20:00:00",
+          "end_date": "2030-01-16",
+          "end_time": "08:45:00",
+          "operator_type": "internal",
+          "duration": "PT12H45M",
+          "provisional": false,
+          "operator_confirmed": true,
+          "location": {"id": "XAAAA"},
+          "end_location": {"id": "XBBBB"},
+          "operator_reference": null,
+          "stops": [
+            {"location": {"id": "XAAAA"}, "start_date": "2030-01-15", "start_time": "20:00:00", "end_date": "2030-01-16", "end_time": "08:45:00"},
+            {"location": {"id": "XBBBB"}, "start_date": "2030-01-16", "start_time": "08:45:00", "end_date": "2030-01-16", "end_time": "08:45:00"}
+          ]
+        }
+      ],
+      "initial_capacity_allocation": [
+        {
+          "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201", "entity_revision_id": "00000000-0000-4000-8000-000000000202", "always_show_in_cart": true, "skip_initial_allocation": false, "image": "Inside Cabin - 2 Bunks", "order": 1},
+          "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "unit_price": 9000, "vat_rate": 0, "vat": 0, "discount_qty": 1, "unit_price_supplement": 0},
+          "qty": 1,
+          "instance_id": "00000000-0000-4000-8000-000000000103"
+        }
+      ],
+      "pricing": {
+        "combo_id": null,
+        "promo_id": null,
+        "total": 14000,
+        "subtotal": 14000,
+        "discount": 0,
+        "donation": 0,
+        "capacity_allocation": [
+          {
+            "instance_id": "00000000-0000-4000-8000-000000000103",
+            "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201"},
+            "qty": 1,
+            "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "vat": 0, "unit_price": 9000, "vat_rate": 0, "discount_qty": 1, "unit_price_supplement": 0}
+          }
+        ],
+        "ticket_types": [
+          {
+            "id": "passenger-adult",
+            "qty": 2,
+            "total": 5000,
+            "discount": 0,
+            "subtotal": 5000,
+            "unit_donation": 0,
+            "unit_price": 2500,
+            "pricing_rule_title": "",
+            "unit_price_supplement": 0,
+            "capacity_tier": {
+              "paid": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "consumed": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "requested": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"}
+            }
+          }
+        ]
+      },
+      "pricing_potential_best": {"combo_id": "route-standard-short", "promo_id": null, "total": 13000, "subtotal": 14000, "discount": 1000, "donation": 0},
+      "pricing_entire_selection": {"combo_id": null, "total": 14000, "subtotal": 14000, "discount": 0, "donation": 0},
+      "promos": [],
+      "combos": [
+        {
+          "id": "route-standard-short",
+          "combo_index": 0,
+          "entire_combo_pricing": null,
+          "pricing": {
+            "combo_id": null,
+            "promo_id": null,
+            "total": 13000,
+            "subtotal": 14000,
+            "discount": 1000,
+            "donation": 0,
+            "capacity_allocation": [
+              {
+                "instance_id": "00000000-0000-4000-8000-000000000103",
+                "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201"},
+                "qty": 1,
+                "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "vat": 0, "unit_price": 9000, "vat_rate": 0, "discount_qty": 1, "unit_price_supplement": 0}
+              }
+            ],
+            "ticket_types": [
+              {
+                "id": "passenger-adult",
+                "qty": 2,
+                "total": 4000,
+                "discount": 1000,
+                "subtotal": 5000,
+                "unit_donation": 0,
+                "unit_price": 2500,
+                "pricing_rule_title": "",
+                "unit_price_supplement": 0,
+                "capacity_tier": {
+                  "paid": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"},
+                  "consumed": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"},
+                  "requested": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"}
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "status": "available",
+      "status_reason": "option_available",
+      "capacities": {
+        "available": 1400,
+        "total": 1800,
+        "availableCapacityUnits": 1900,
+        "capacity_types": [
+          {"id": "passenger", "title": "Passenger", "capacity_units_available": 650, "capacity_units_max": 900},
+          {"id": "berth", "title": "Berth", "capacity_units_available": 850, "capacity_units_max": 1200}
+        ]
+      }
+    },
+    {
+      "type": "time",
+      "important_info": "",
+      "time_title": "Evening",
+      "start_date": "2030-01-15",
+      "start_time": "20:00:00",
+      "timezone": "Etc/GMT",
+      "duration": "PT12H45M",
+      "end_date": "2030-01-16",
+      "end_time": "08:45:00",
+      "product_id": "route-flexi",
+      "instance_id": "00000000-0000-4000-8000-000000000101",
+      "segment_entity_id": "00000000-0000-4000-8000-000000000102",
+      "venue": {"id": "1000001", "title": "Vessel One"},
+      "max_uses": 1,
+      "legs": [
+        {
+          "important_info": "",
+          "start": "2030-01-15T20:00:00Z",
+          "end": "2030-01-16T08:45:00Z",
+          "start_date": "2030-01-15",
+          "start_time": "20:00:00",
+          "end_date": "2030-01-16",
+          "end_time": "08:45:00",
+          "operator_type": "internal",
+          "duration": "PT12H45M",
+          "provisional": false,
+          "operator_confirmed": true,
+          "location": {"id": "XAAAA"},
+          "end_location": {"id": "XBBBB"},
+          "operator_reference": "REF123",
+          "stops": [
+            {"location": {"id": "XAAAA"}, "start_date": "2030-01-15", "start_time": "20:00:00", "end_date": "2030-01-16", "end_time": "08:45:00"},
+            {"location": {"id": "XBBBB"}, "start_date": "2030-01-16", "start_time": "08:45:00", "end_date": "2030-01-16", "end_time": "08:45:00"}
+          ]
+        }
+      ],
+      "initial_capacity_allocation": [
+        {
+          "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201", "entity_revision_id": "00000000-0000-4000-8000-000000000202", "always_show_in_cart": true, "skip_initial_allocation": false, "image": "Inside Cabin - 2 Bunks", "order": 1},
+          "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "unit_price": 9000, "vat_rate": 0, "vat": 0, "discount_qty": 1, "unit_price_supplement": 0},
+          "qty": 1,
+          "instance_id": "00000000-0000-4000-8000-000000000103"
+        }
+      ],
+      "pricing": {
+        "combo_id": null,
+        "promo_id": null,
+        "total": 15000,
+        "subtotal": 15000,
+        "discount": 0,
+        "donation": 0,
+        "capacity_allocation": [
+          {
+            "instance_id": "00000000-0000-4000-8000-000000000103",
+            "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201"},
+            "qty": 1,
+            "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "vat": 0, "unit_price": 9000, "vat_rate": 0, "discount_qty": 1, "unit_price_supplement": 0}
+          }
+        ],
+        "ticket_types": [
+          {
+            "id": "passenger-adult",
+            "qty": 2,
+            "total": 6000,
+            "discount": 0,
+            "subtotal": 6000,
+            "unit_donation": 0,
+            "unit_price": 3000,
+            "pricing_rule_title": "",
+            "unit_price_supplement": 0,
+            "capacity_tier": {
+              "paid": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "consumed": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "requested": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"}
+            }
+          }
+        ]
+      },
+      "pricing_potential_best": {"combo_id": "route-flexi-short", "promo_id": null, "total": 13800, "subtotal": 15000, "discount": 1200, "donation": 0},
+      "pricing_entire_selection": {"combo_id": null, "total": 15000, "subtotal": 15000, "discount": 0, "donation": 0},
+      "promos": [],
+      "combos": [
+        {
+          "id": "route-flexi-short",
+          "combo_index": 0,
+          "entire_combo_pricing": null,
+          "pricing": {
+            "combo_id": null,
+            "promo_id": null,
+            "total": 13800,
+            "subtotal": 15000,
+            "discount": 1200,
+            "donation": 0,
+            "capacity_allocation": [
+              {
+                "instance_id": "00000000-0000-4000-8000-000000000103",
+                "capacity_option": {"id": "CABIN2", "entity_id": "00000000-0000-4000-8000-000000000201"},
+                "qty": 1,
+                "pricing": {"subtotal": 9000, "discount": 0, "total": 9000, "vat": 0, "unit_price": 9000, "vat_rate": 0, "discount_qty": 1, "unit_price_supplement": 0}
+              }
+            ],
+            "ticket_types": [
+              {
+                "id": "passenger-adult",
+                "qty": 2,
+                "total": 4800,
+                "discount": 1200,
+                "subtotal": 6000,
+                "unit_donation": 0,
+                "unit_price": 3000,
+                "pricing_rule_title": "",
+                "unit_price_supplement": 0,
+                "capacity_tier": {
+                  "paid": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"},
+                  "consumed": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"},
+                  "requested": {"id": "tier-r", "entity_id": "00000000-0000-4000-8000-000000000302"}
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "status": "available",
+      "status_reason": "option_available",
+      "capacities": {
+        "available": 1400,
+        "total": 1800,
+        "availableCapacityUnits": 1900,
+        "capacity_types": [
+          {"id": "passenger", "title": "Passenger", "capacity_units_available": 650, "capacity_units_max": 900},
+          {"id": "berth", "title": "Berth", "capacity_units_available": 850, "capacity_units_max": 1200}
+        ]
+      }
+    },
+    {
+      "type": "time",
+      "important_info": "",
+      "time_title": null,
+      "start_date": "2030-01-16",
+      "start_time": "20:30:00",
+      "timezone": "Etc/GMT",
+      "duration": "PT12H30M",
+      "end_date": "2030-01-17",
+      "end_time": "09:00:00",
+      "product_id": "route-standard",
+      "instance_id": "00000000-0000-4000-8000-000000000111",
+      "segment_entity_id": "00000000-0000-4000-8000-000000000112",
+      "max_uses": 1,
+      "legs": [
+        {
+          "important_info": "",
+          "start": "2030-01-16T20:30:00Z",
+          "end": "2030-01-17T09:00:00Z",
+          "start_date": "2030-01-16",
+          "start_time": "20:30:00",
+          "end_date": "2030-01-17",
+          "end_time": "09:00:00",
+          "operator_type": "internal",
+          "duration": "PT12H30M",
+          "provisional": true,
+          "operator_confirmed": false,
+          "location": {"id": "XAAAA"},
+          "end_location": {"id": "XBBBB"},
+          "operator_reference": null,
+          "stops": [
+            {"location": {"id": "XAAAA"}, "start_date": "2030-01-16", "start_time": "20:30:00", "end_date": "2030-01-17", "end_time": "09:00:00"},
+            {"location": {"id": "XBBBB"}, "start_date": "2030-01-17", "start_time": "09:00:00", "end_date": "2030-01-17", "end_time": "09:00:00"}
+          ]
+        }
+      ],
+      "initial_capacity_allocation": [],
+      "pricing": {
+        "combo_id": null,
+        "promo_id": null,
+        "total": 14000,
+        "subtotal": 14000,
+        "discount": 0,
+        "donation": 0,
+        "capacity_allocation": [],
+        "ticket_types": [
+          {
+            "id": "passenger-adult",
+            "qty": 2,
+            "total": 5000,
+            "discount": 0,
+            "subtotal": 5000,
+            "unit_donation": 0,
+            "unit_price": 2500,
+            "pricing_rule_title": "",
+            "unit_price_supplement": 0,
+            "capacity_tier": {
+              "paid": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "consumed": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"},
+              "requested": {"id": "tier-n", "entity_id": "00000000-0000-4000-8000-000000000301"}
+            }
+          }
+        ]
+      },
+      "pricing_potential_best": null,
+      "pricing_entire_selection": {"combo_id": null, "total": 14000, "subtotal": 14000, "discount": 0, "donation": 0},
+      "promos": [],
+      "combos": [],
+      "status": "unavailable",
+      "status_reason": "option_sold_out",
+      "capacities": {
+        "available": null,
+        "total": 1800,
+        "availableCapacityUnits": null,
+        "capacity_types": [
+          {"id": "passenger", "title": "Passenger", "capacity_units_available": 0, "capacity_units_max": 900},
+          {"id": "berth", "title": "Berth", "capacity_units_available": null, "capacity_units_max": 1200}
+        ]
+      }
+    }
+  ],
+  "combos": [
+    {
+      "id": "route-standard-short",
+      "entity_id": "00000000-0000-4000-8000-000000000401",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000402",
+      "title": "Standard - Short Break",
+      "short_title": "",
+      "description": "",
+      "terms": "",
+      "terms_url": "",
+      "short_description": "",
+      "extensions": {},
+      "product_selection": [{"discount_description": "Short Break"}, {"discount_description": "Short Break"}]
+    },
+    {
+      "id": "route-flexi-short",
+      "entity_id": "00000000-0000-4000-8000-000000000403",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000404",
+      "title": "Flexi - Short Break",
+      "short_title": "",
+      "description": "",
+      "terms": "",
+      "terms_url": "",
+      "short_description": "",
+      "extensions": {},
+      "product_selection": [{"discount_description": "Short Break"}, {"discount_description": "Short Break"}]
+    }
+  ],
+  "promos": [],
+  "ticket_types": [
+    {"id": "passenger-adult", "qty": 2, "title": "Adult (16+)", "description": "", "short_title": "", "short_description": ""}
+  ],
+  "products": [
+    {
+      "id": "route-standard",
+      "entity_id": "00000000-0000-4000-8000-000000000501",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000502",
+      "image": null,
+      "multi_usage_rules": {"max_uses": 1, "active_period": {"period": "PT24H", "type": "period"}},
+      "type": "route",
+      "subtype": "route",
+      "extensions": {"gateway_fare_type": "Standard"},
+      "title": "Standard",
+      "short_title": "",
+      "description": "<p>Our best value ticket</p><p><br></p><p>Non-refundable</p>",
+      "important_information": "",
+      "whats_onboard": "",
+      "ticket_redemption_instructions": "",
+      "short_description": "",
+      "category": "",
+      "booking_unit": {
+        "type": "time",
+        "first_use_within": {"private_id": "00000000-0000-4000-8000-000000000503", "period": "PT24H", "type": "period"}
+      },
+      "donations_enabled": false,
+      "donations_refundable": false,
+      "donations_on_base_price": false,
+      "giftaid_enabled": false,
+      "giftaid_include_ticket_price": false,
+      "order": 200
+    },
+    {
+      "id": "route-flexi",
+      "entity_id": "00000000-0000-4000-8000-000000000511",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000512",
+      "image": null,
+      "multi_usage_rules": {"max_uses": 1, "active_period": {"period": "P1DT12H", "type": "period"}},
+      "type": "route",
+      "subtype": "route",
+      "extensions": {"gateway_fare_type": "StandardFlexi"},
+      "title": "Flexi",
+      "short_title": "",
+      "description": "<p>No amendment fee</p><p><br></p><p>Partially refundable</p>",
+      "important_information": "",
+      "whats_onboard": "",
+      "ticket_redemption_instructions": "",
+      "short_description": "",
+      "category": "Route One",
+      "booking_unit": {
+        "type": "time",
+        "first_use_within": {"private_id": "00000000-0000-4000-8000-000000000513", "period": "P1DT12H", "type": "period"}
+      },
+      "donations_enabled": false,
+      "donations_refundable": false,
+      "donations_on_base_price": false,
+      "giftaid_enabled": false,
+      "giftaid_include_ticket_price": false,
+      "order": 201
+    }
+  ],
+  "locations": [
+    {
+      "id": "XAAAA",
+      "entity_id": "00000000-0000-4000-8000-000000000601",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000602",
+      "title": "Port A",
+      "description": "",
+      "travel_instructions": "",
+      "country": "Country A",
+      "address": "",
+      "locode": "XAAAA",
+      "geo_position": {"latitude": 0, "longitude": 0},
+      "map_image": null,
+      "timezone": "Etc/GMT",
+      "order": 0,
+      "extensions": {}
+    },
+    {
+      "id": "XBBBB",
+      "entity_id": "00000000-0000-4000-8000-000000000611",
+      "entity_revision_id": "00000000-0000-4000-8000-000000000612",
+      "title": "Port B",
+      "description": "",
+      "travel_instructions": "",
+      "country": "Country B",
+      "address": "",
+      "locode": "XBBBC",
+      "geo_position": {"latitude": 0, "longitude": 0},
+      "map_image": null,
+      "timezone": "Etc/GMT-1",
+      "order": 0,
+      "extensions": {}
+    }
+  ],
+  "from": {"id": "XAAAA", "entity_id": "00000000-0000-4000-8000-000000000601", "entity_revision_id": "00000000-0000-4000-8000-000000000602"},
+  "to": {"id": "XBBBB", "entity_id": "00000000-0000-4000-8000-000000000611", "entity_revision_id": "00000000-0000-4000-8000-000000000612"}
+}

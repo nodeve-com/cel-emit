@@ -143,7 +143,7 @@ fn nested_values_read_and_keep_order() {
     let x = dec(r#"{"z":[1,2,{"k":"v"}],"a":true}"#).unwrap();
     assert_eq!(size(&x), Ok(2));
     let list = get(&x, "z").unwrap();
-    assert_eq!(size(&list), Ok(3));
+    assert_eq!(size(list), Ok(3));
     assert_eq!(round(r#"{"z":1,"a":2}"#).as_deref(), Ok(r#"{"z":1,"a":2}"#));
 }
 

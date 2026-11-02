@@ -1,6 +1,6 @@
 //! Dyn: where a value of no one kind meets a typed place. A dyn operand is read as the kind its
 //! place declares ([`Node::FromDyn`]) only for a string or bool, where CEL's own dispatch on the
-//! value's kind agrees; a number, arithmetic, ordering, and a loop over a dyn are refused. A
+//! value's kind agrees; a number, arithmetic, and ordering are refused. A loop reads a dyn as a list of dyn. A
 //! typed value entering a dyn place is [`Node::ToDyn`].
 
 use super::*;
@@ -186,10 +186,10 @@ impl<'a> Lower<'a> {
             ("flatten", 1) => "list_flatten_depth".to_string(),
             _ => format!("list_{name}"),
         };
-        let list = Typed::call(
-            "dyn_list",
-            vec![self.expr(receiver)?],
-            Type::list(Type::Dyn),
+        let to = Type::list(Type::Dyn);
+        let list = Typed::new(
+            to.clone(),
+            Node::FromDyn(Box::new(self.expr(receiver)?), to),
         );
         let mut operands = vec![list];
         for arg in args {

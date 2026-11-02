@@ -92,6 +92,9 @@ pub enum Node {
     /// `body` for each element of a list or map where `pred` holds (`filter`, `map` with a
     /// predicate), as [`Node::Map`] gives it.
     Keep(Box<Typed>, Box<Typed>, Box<Typed>),
+    /// The first element of a list where `pred` holds, read no further, as `filter(…)[0]` gives
+    /// it: with none, the error of an index outside the list. `pred` reads no index.
+    First(Box<Typed>, Box<Typed>),
     /// Whether `body` holds for every element (`true`: `all`) or some (`exists`), an element's
     /// error absorbed as `&&` and `||` absorb one.
     All(bool, Box<Typed>, Box<Typed>),

@@ -8,7 +8,7 @@ repository = "https://github.com/nodeve-com/cel-emit"
 include = ["src", "README.md", "MISSING.md", "LICENSE"]
 
 [workspace]
-members = ["cel-emit-runtime"]
+members = ["cel-emit-runtime", "cel-emit-cli", "examples/by_hand"]
 resolver = "2"
 
 [lints.clippy]

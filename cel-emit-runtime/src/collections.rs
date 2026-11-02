@@ -16,8 +16,27 @@ pub fn map_size<K, V>(m: &[(K, V)]) -> Result<i64> {
 
 /// `xs[i]`: outside the list, a function error, as cel-go has it.
 pub fn index_list<T: Clone>(xs: &[T], i: i64) -> Result<T> {
+    item(xs, i).cloned()
+}
+
+/// [`index_list`], no copy made.
+pub fn item<T>(xs: &[T], i: i64) -> Result<&T> {
     let i = usize::try_from(i).map_err(|_| Error::Function)?;
-    xs.get(i).cloned().ok_or(Error::Function)
+    xs.get(i).ok_or(Error::Function)
+}
+
+/// The first element `pred` holds for, what `filter(…)[0]` gives, read no further: with none,
+/// the error of an index outside a list.
+pub fn first<'a, T>(
+    items: impl IntoIterator<Item = &'a T>,
+    mut pred: impl FnMut(&'a T) -> Result<bool>,
+) -> Result<&'a T> {
+    for item in items {
+        if pred(item)? {
+            return Ok(item);
+        }
+    }
+    Err(Error::Function)
 }
 
 /// `m[key]`: a key it lacks is no such key.
@@ -163,6 +182,17 @@ mod tests {
         assert_eq!(index_list(&xs, 1), Ok(-2.0));
         assert_eq!(index_list(&xs, 2), Err(Error::Function));
         assert_eq!(index_list(&xs, -1), Err(Error::Function));
+    }
+
+    #[test]
+    fn the_first_match_reads_nothing_past_it() {
+        let reads = |x: &i64| {
+            let quotient = 4i64.checked_div(*x).ok_or(Error::Division)?;
+            Ok(quotient == 2)
+        };
+        assert_eq!(first(&[1, 2, 0], reads), Ok(&2));
+        assert_eq!(first(&[0], reads), Err(Error::Division));
+        assert_eq!(first(&[1], reads), Err(Error::Function));
     }
 
     #[test]

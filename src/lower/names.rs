@@ -77,6 +77,11 @@ impl<'a> Lower<'a> {
         let Some((field, rest)) = path.split_first() else {
             return Ok(message.node);
         };
+        if message.ty == Type::Dyn {
+            let key = Typed::string(field);
+            let read = Node::Call("dyn_get".into(), vec![message, key]);
+            return self.fields(Typed::new(Type::Dyn, read), rest);
+        }
         let fields = message.ty.fields();
         let i = fields
             .iter()

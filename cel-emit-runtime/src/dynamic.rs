@@ -59,7 +59,10 @@ pub fn from_map<T: Into<Dyn>>(m: Vec<(String, T)>) -> Result<Dyn> {
 
 /// A dynamic-keyed map as a dynamic one: a key of other than a string is [`Error::Cast`].
 pub fn from_keyed(m: Vec<(Dyn, Dyn)>) -> Result<Dyn> {
-    let entries = m.into_iter().map(|(k, v)| Ok((to_str(k)?, v)));
+    let entries = m.into_iter().map(|(k, v)| match k {
+        Dyn::Str(k) => Ok((k, v)),
+        _ => Err(Error::Cast),
+    });
     Ok(Dyn::Map(entries.collect::<Result<_>>()?))
 }
 
@@ -78,127 +81,131 @@ pub fn lift_map<K, T: Into<Dyn>>(m: Vec<(K, T)>) -> Result<Vec<(K, Dyn)>> {
     Ok(m.into_iter().map(|(k, v)| (k, v.into())).collect())
 }
 
-pub fn to_bool(x: Dyn) -> Result<bool> {
+pub fn to_bool(x: &Dyn) -> Result<bool> {
     match x {
-        Dyn::Bool(b) => Ok(b),
+        Dyn::Bool(b) => Ok(*b),
         _ => Err(Error::Cast),
     }
 }
 
-pub fn to_str(x: Dyn) -> Result<String> {
+/// `x`'s text, no copy made.
+pub fn str_of(x: &Dyn) -> Result<&str> {
     match x {
         Dyn::Str(s) => Ok(s),
         _ => Err(Error::Cast),
     }
 }
 
+pub fn to_str(x: &Dyn) -> Result<String> {
+    str_of(x).map(String::from)
+}
+
 /// A timestamp, or one from RFC 3339 text, as JSON carries it.
-pub fn to_timestamp(x: Dyn) -> Result<DateTime<Utc>> {
+pub fn to_timestamp(x: &Dyn) -> Result<DateTime<Utc>> {
     match x {
-        Dyn::Timestamp(t) => Ok(t),
-        x => crate::time::parse_timestamp(&to_str(x)?),
+        Dyn::Timestamp(t) => Ok(*t),
+        x => crate::time::parse_timestamp(str_of(x)?),
     }
 }
 
 /// A duration, or one from text, as JSON carries it: `1.5s`, or `humantime`'s other units.
-pub fn to_duration(x: Dyn) -> Result<TimeDelta> {
+pub fn to_duration(x: &Dyn) -> Result<TimeDelta> {
     match x {
-        Dyn::Duration(d) => Ok(d),
-        x => crate::time::parse_duration(&to_str(x)?),
+        Dyn::Duration(d) => Ok(*d),
+        x => crate::time::parse_duration(str_of(x)?),
     }
 }
 
 /// Bytes from base64 text, as JSON carries them.
-pub fn to_bytes(x: Dyn) -> Result<Vec<u8>> {
-    conversions::base64_decode(&to_str(x)?)
+pub fn to_bytes(x: &Dyn) -> Result<Vec<u8>> {
+    conversions::base64_decode(str_of(x)?)
 }
 
-pub fn to_list(x: Dyn) -> Result<Vec<Dyn>> {
+/// `x`'s elements, no copy made.
+pub fn list_of(x: &Dyn) -> Result<&Vec<Dyn>> {
     match x {
         Dyn::List(xs) => Ok(xs),
         _ => Err(Error::Cast),
     }
 }
 
-pub fn to_map(x: Dyn) -> Result<Vec<(String, Dyn)>> {
+pub fn to_list(x: &Dyn) -> Result<Vec<Dyn>> {
+    list_of(x).cloned()
+}
+
+/// `x`'s entries, no copy made.
+pub fn map_of(x: &Dyn) -> Result<&Vec<(String, Dyn)>> {
     match x {
         Dyn::Map(m) => Ok(m),
         _ => Err(Error::Cast),
     }
 }
 
+pub fn to_map(x: &Dyn) -> Result<Vec<(String, Dyn)>> {
+    map_of(x).cloned()
+}
+
 /// A double, as CEL fills a double place: an int or uint is [`Error::Cast`].
-pub fn to_double(x: Dyn) -> Result<f64> {
+pub fn to_double(x: &Dyn) -> Result<f64> {
     match x {
-        Dyn::Double(d) => Ok(d),
-        Dyn::Float32(f) => Ok(f64::from(f)),
+        Dyn::Double(d) => Ok(*d),
+        Dyn::Float32(f) => Ok(f64::from(*f)),
         _ => Err(Error::Cast),
     }
 }
 
 /// An int, as CEL fills an int place: any other kind is [`Error::Cast`].
-pub fn to_int(x: Dyn) -> Result<i64> {
+pub fn to_int(x: &Dyn) -> Result<i64> {
     match x {
-        Dyn::Int(i) => Ok(i),
+        Dyn::Int(i) => Ok(*i),
         _ => Err(Error::Cast),
     }
 }
 
 /// A uint, as CEL fills a uint place: any other kind is [`Error::Cast`].
-pub fn to_uint(x: Dyn) -> Result<u64> {
+pub fn to_uint(x: &Dyn) -> Result<u64> {
     match x {
-        Dyn::UInt(u) => Ok(u),
+        Dyn::UInt(u) => Ok(*u),
         _ => Err(Error::Cast),
     }
 }
 
 /// `x` read by `read`, where it is there: absent stays absent.
-pub fn optional<T>(x: Option<Dyn>, read: fn(Dyn) -> Result<T>) -> Result<Option<T>> {
+pub fn optional<T>(x: Option<&Dyn>, read: fn(&Dyn) -> Result<T>) -> Result<Option<T>> {
     x.map(read).transpose()
 }
 
 /// `x` read by `read`, unless it is absent or null, which are null.
-pub fn nullable<T>(x: Option<Dyn>, read: fn(Dyn) -> Result<T>) -> Result<Option<T>> {
+pub fn nullable<T>(x: Option<&Dyn>, read: fn(&Dyn) -> Result<T>) -> Result<Option<T>> {
     match x {
         None | Some(Dyn::Null) => Ok(None),
         Some(x) => read(x).map(Some),
     }
 }
 
-/// `x` as a map, as [`to_map`] reads it, by reference.
-fn map_of(x: &Dyn) -> Result<&[(String, Dyn)]> {
-    match x {
-        Dyn::Map(m) => Ok(m),
-        _ => Err(Error::Cast),
-    }
-}
-
-/// `m[key]` of a dynamic map: a key it lacks is [`Error::NoSuchKey`].
-pub fn get(x: &Dyn, key: &str) -> Result<Dyn> {
+/// `m[key]` of a dynamic map, no copy made: a key it lacks is [`Error::NoSuchKey`].
+pub fn get<'a>(x: &'a Dyn, key: &str) -> Result<&'a Dyn> {
     optional_get(x, key)?.ok_or(Error::NoSuchKey)
 }
 
-/// `m[i]` of a dynamic list: outside it is [`Error::Range`].
-pub fn at(x: &Dyn, i: i64) -> Result<Dyn> {
-    match x {
-        Dyn::List(xs) => collections::index_list(xs, i),
-        _ => Err(Error::Cast),
-    }
+/// `m[i]` of a dynamic list, no copy made: outside it, as [`collections::item`] has it.
+pub fn at(x: &Dyn, i: i64) -> Result<&Dyn> {
+    collections::item(list_of(x)?, i)
 }
 
 /// `has(m.key)` of a dynamic map.
 pub fn has(x: &Dyn, key: &str) -> Result<bool> {
-    Ok(map_of(x)?.iter().any(|(k, _)| k == key))
+    Ok(optional_get(x, key)?.is_some())
 }
 
-/// `m[?key]` of a dynamic map: absent where it lacks the key.
-pub fn optional_get(x: &Dyn, key: &str) -> Result<Option<Dyn>> {
+/// `m[?key]` of a dynamic map, no copy made: absent where it lacks the key.
+pub fn optional_get<'a>(x: &'a Dyn, key: &str) -> Result<Option<&'a Dyn>> {
     let found = map_of(x)?.iter().find(|(k, _)| k == key);
-    Ok(found.map(|(_, v)| v.clone()))
+    Ok(found.map(|(_, v)| v))
 }
 
 /// `o.?key`, `o` an optional dynamic map: absent where `o` is, or lacks the key.
-pub fn chain(o: &Option<Dyn>, key: &str) -> Result<Option<Dyn>> {
+pub fn chain<'a>(o: Option<&'a Dyn>, key: &str) -> Result<Option<&'a Dyn>> {
     match o {
         Some(x) => optional_get(x, key),
         None => Ok(None),

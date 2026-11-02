@@ -29,6 +29,7 @@ impl Emitter {
             Type::Timestamp => "to_timestamp",
             Type::Duration => "to_duration",
             Type::Bytes => "to_bytes",
+            Type::List(of) if **of == Type::Dyn => "to_list",
             other => {
                 return Err(Error::Unsupported(format!(
                     "a dyn read as {}",
@@ -36,10 +37,15 @@ impl Emitter {
                 )))
             }
         };
-        let x = self.expr(x, vars)?;
         Ok(match wrap {
-            Some(wrap) => format!("{STD}::dynamic::{wrap}({x}, {STD}::dynamic::{f})?"),
-            None => format!("{STD}::dynamic::{f}({x})?"),
+            Some(wrap) => {
+                let x = self.optional_reference(x, vars)?;
+                format!("{STD}::dynamic::{wrap}({x}, {STD}::dynamic::{f})?")
+            }
+            None => {
+                let x = self.reference(x, false, vars)?;
+                format!("{STD}::dynamic::{f}({x})?")
+            }
         })
     }
 
@@ -51,11 +57,11 @@ impl Emitter {
         rest: Option<&str>,
         vars: &dyn Vars,
     ) -> Result<String, Error> {
-        let text = self.place(text, vars)?;
+        let text = self.reference(text, false, vars)?;
         let mut slots = 1;
         let shape = shape(message, rest, &mut slots)?;
         Ok(format!(
-            "{{ const SHAPE: &{STD}::json::Shape = &{shape}; {STD}::json::decode_shaped(&{text}, SHAPE, {slots})? }}"
+            "{{ const SHAPE: &{STD}::json::Shape = &{shape}; {STD}::json::decode_shaped({text}, SHAPE, {slots})? }}"
         ))
     }
 
@@ -94,7 +100,7 @@ impl Emitter {
         vars: &dyn Vars,
     ) -> Result<String, Error> {
         let code = self.expr(x, vars)?;
-        self.dyn_of(&code, &x.ty, rest, 0)
+        self.dyn_of(&super::place::receiver(&code), &x.ty, rest, 0)
     }
 
     /// The Rust giving `x`, a value of `ty`, as a dyn, naming what it binds with depth `d`.

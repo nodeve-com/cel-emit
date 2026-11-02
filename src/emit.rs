@@ -5,8 +5,8 @@
 //! [`Messages`], as a CEL environment declares a message type. The embedder writes the crate around
 //! it: `use ::cel_emit_runtime as s;`, the variables, each struct [`Items::messages`] declares, and
 //! [`Items::code`]. A value is owned: what an expression reads, a variable, a
-//! local, a field, or an element, a call that only reads takes by reference, and any other use
-//! clones.
+//! local, a field, an element, or what a dyn holds, a call that only reads takes by reference, and
+//! any other use clones.
 
 mod comprehension;
 mod dynamic;
@@ -14,12 +14,13 @@ mod encode;
 mod messages;
 mod narrow;
 mod optional;
+mod place;
 mod tables;
 
 use crate::functions::{Function, Index, STD};
-use crate::tree::{Node, Part, Typed};
+use crate::tree::{Node, Typed};
 use crate::types::{Field, Type};
-use crate::Error;
+use crate::{walk, Error};
 
 pub use messages::{Declared, Items, Messages};
 
@@ -103,8 +104,8 @@ impl Emitter {
     pub fn expr(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
         let e = |x: &Typed, me: &mut Emitter| me.expr(x, vars);
         Ok(match &t.node {
-            Node::Int(v) => format!("({v}i64)"),
-            Node::Uint(v) => format!("({v}u64)"),
+            Node::Int(v) => format!("{v}i64"),
+            Node::Uint(v) => format!("{v}u64"),
             Node::Double(v) => format!("f64::from_bits({:#x})", v.to_bits()),
             Node::Bool(v) => v.to_string(),
             Node::Str(v) => format!("String::from({v:?})"),
@@ -121,8 +122,10 @@ impl Emitter {
             Node::MapOpt(entries) => self.map_opt(entries, vars)?,
             Node::Timestamp(s, n) => format!("{STD}::time::timestamp_at({s}i64, {n}u32)?"),
             Node::Duration(s, n) => format!("{STD}::time::duration_at({s}i64, {n}i32)?"),
-            Node::Var(_) | Node::Local(_) | Node::Item(..) | Node::Field(..) => {
-                format!("{}.clone()", self.place(t, vars)?)
+            // A field reads as a value, so one of a copied type needs no clone.
+            Node::Field(..) if t.ty.copied() => place::receiver(&self.place(t, vars)?),
+            Node::Var(_) | Node::Local(_) | Node::Item(..) | Node::Field(..) | Node::First(..) => {
+                format!("{}.clone()", place::receiver(&self.place(t, vars)?))
             }
             Node::Has(v) => vars.has(*v)?,
             Node::Call(id, args)
@@ -130,11 +133,13 @@ impl Emitter {
             {
                 self.stored_call(id, args, vars)?
             }
-            Node::Call(id, args) => {
-                let path = self.path(id, args)?;
-                let args = self.args(id, args, vars)?;
-                format!("{path}({})?", args.join(", "))
+            Node::Call(..) if place::by_reference(t) => {
+                format!("{}.clone()", self.place(t, vars)?)
             }
+            Node::Call(id, _) if place::lends_optional(id) => {
+                format!("{}.cloned()", self.optional_reference(t, vars)?)
+            }
+            Node::Call(id, args) => self.call(id, args, vars)?,
             Node::Matches(subject, table, source) => {
                 let n = match self.patterns.iter().position(|(_, p)| p == table) {
                     Some(n) => n,
@@ -144,8 +149,8 @@ impl Emitter {
                     }
                 };
                 format!(
-                    "{STD}::strings::matches_table(&P{n}, &{})?",
-                    self.place(subject, vars)?
+                    "{STD}::strings::matches_table(&P{n}, {})?",
+                    self.reference(subject, true, vars)?
                 )
             }
             Node::And(a, b) | Node::Or(a, b) => {
@@ -159,16 +164,18 @@ impl Emitter {
             }
             Node::Cond(c, a, b) => {
                 let (c, a, b) = (e(c, self)?, e(a, self)?, e(b, self)?);
-                format!("(if {c} {{ {a} }} else {{ {b} }})")
+                format!("if {c} {{ {a} }} else {{ {b} }}")
             }
             Node::Message(entries) => self.message(t, entries, vars)?,
             Node::Within(x, ty) => {
                 let x = e(x, self)?;
-                narrow::convert(&x, ty, narrow::To::Within, 0).map_or(x, |c| format!("{c}?"))
+                narrow::convert(&place::receiver(&x), ty, narrow::To::Within, 0)
+                    .map_or(x, |c| format!("{c}?"))
             }
             Node::Store(x) => {
                 let x = e(x, self)?;
-                narrow::convert(&x, &t.ty, narrow::To::Stored, 0).map_or(x, |c| format!("{c}?"))
+                narrow::convert(&place::receiver(&x), &t.ty, narrow::To::Stored, 0)
+                    .map_or(x, |c| format!("{c}?"))
             }
             Node::FromDyn(x, ty) => self.read_dyn(x, ty, vars)?,
             Node::Shaped(text, message, rest) => {
@@ -178,10 +185,10 @@ impl Emitter {
             Node::Written(x, rest) => self.written(x, rest.as_deref(), vars)?,
             Node::Widen(x) => {
                 let inner = e(x, self)?;
-                narrow::convert(&inner, &x.ty, narrow::To::Cel, 0)
+                narrow::convert(&place::receiver(&inner), &x.ty, narrow::To::Cel, 0)
                     .map_or(inner, |c| format!("{c}?"))
             }
-            Node::Position(n) => format!("(n{n} as i64)"),
+            Node::Position(n) => format!("n{n}"),
             Node::Map(..) | Node::Keep(..) => {
                 format!(
                     "{}.collect::<{STD}::Result<Vec<_>>>()?",
@@ -189,7 +196,7 @@ impl Emitter {
                 )
             }
             Node::All(every, list, body) => {
-                let (iter, bind) = self.over(list, vars)?;
+                let (iter, bind) = self.over(list, &[body], vars)?;
                 let body = self.inside(body, vars)?;
                 format!("{STD}::collections::all({iter}, {every}, |{bind}| {STD}::ok({body}))?")
             }
@@ -227,15 +234,29 @@ impl Emitter {
                 }
             }
             Node::Encode(object) => self.encode(object, vars)?,
-            Node::Let(n, value, body) => {
-                let (value, body) = (e(value, self)?, e(body, self)?);
-                format!("{{ let l{n} = &{value}; {body} }}")
+            Node::Let(..) => {
+                let mut rest = t;
+                let mut lets = String::new();
+                while let Node::Let(n, value, body) = &rest.node {
+                    let read = walk::any(body, |x| *x == Node::Local(*n));
+                    let name = if read { format!("l{n}") } else { "_".into() };
+                    lets.push_str(&format!("let {name} = {}; ", self.bound(value, vars)?));
+                    rest = body;
+                }
+                format!("{{ {lets}{} }}", e(rest, self)?)
             }
             Node::Fail(error) => {
                 let ty = self.rust(&t.ty)?;
                 format!("{STD}::fail::<{ty}>({STD}::Error::{error:?})?")
             }
         })
+    }
+
+    /// The call of overload `id`.
+    fn call(&mut self, id: &str, args: &[Typed], vars: &dyn Vars) -> Result<String, Error> {
+        let path = self.path(id, args)?;
+        let args = self.args(id, args, vars)?;
+        Ok(format!("{path}({})?", args.join(", ")))
     }
 
     /// The arguments of overload `id`, by reference where it reads them so.
@@ -252,35 +273,5 @@ impl Emitter {
                 false => self.expr(a, vars),
             })
             .collect()
-    }
-
-    /// `t` by reference, with no copy; where `plain`, text as `&str`, which a literal is already.
-    fn reference(&mut self, t: &Typed, plain: bool, vars: &dyn Vars) -> Result<String, Error> {
-        Ok(match (&t.node, &t.ty) {
-            (Node::Str(v), _) if plain => format!("{v:?}"),
-            (_, Type::String) if plain => format!("({}).as_str()", self.place(t, vars)?),
-            _ => format!("&{}", self.place(t, vars)?),
-        })
-    }
-
-    /// `t` as a Rust place to read it through, no copy made; what is no place, as its value.
-    fn place(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
-        Ok(match &t.node {
-            Node::Var(v) => vars.read(*v)?,
-            Node::Local(n) => format!("(*l{n})"),
-            Node::Item(n, part) => match part {
-                Part::Whole => format!("(*x{n})"),
-                Part::Value => format!("x{n}.1"),
-                Part::Key => format!("x{n}.0"),
-            },
-            Node::Field(x, i) => {
-                let names = self.declare.fields(x.ty.fields());
-                let name = names
-                    .get(*i)
-                    .ok_or_else(|| Error::Invalid("a field past its message".into()))?;
-                format!("({}).{name}", self.place(x, vars)?)
-            }
-            _ => self.expr(t, vars)?,
-        })
     }
 }

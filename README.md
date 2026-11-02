@@ -38,6 +38,7 @@ What it doesn't translate yet, largest gap first: [`missing`].
 
 - **cel-go settles** where cel-core departs from it; interop with cel-go isn't a goal. cel-core comes from a fork (the workspace `Cargo.toml`).
 - **A float32's text departs from CEL**, which has only doubles: `string()`, `format`'s `%s`, and `json.encode` write its own shortest digits, `9.3`, not `9.300000190734863`.
+- **`filter(…)[0]` departs from CEL** past its first match: it stops there, so a predicate that would fail on a later element fails nothing.
 - **The cel-spec suite** is cel-emit's own test, `cargo nextest run -p cel-emit --test conformance`. It builds each case natively and checks the expected value. No case may be wrong; the passing cases must match `tests/conformance/pass.txt`.
 
 ## Extras
@@ -59,6 +60,7 @@ Beyond CEL's standard library, expressions get CEL's math, strings, optional-val
 
 Translation takes two steps. First, [`lower`](mod@lower) rewrites the checked expression in cel-emit's own simpler form: a tree of small pieces, each marked with its type. Compilers call that step lowering. Next, [`emit`] writes the tree as Rust that uses cel-emit-runtime.
 
-cel-emit knows nothing about the program around it. [`decls::Decls`] tells it what an expression reads and calls, [`emit::Vars`] how to read each input, and your program writes the Rust around the translated code.
+cel-emit knows nothing about the program around it. [`decls::Decls`] tells it what an expression reads and calls, [`emit::Vars`] how to read each input, and your program writes the Rust around the translated code. 
+[`cel-emit-cli`](https://github.com/nodeve-com/cel-emit/tree/main/cel-emit-cli), in this repo, is the shortest way to see it work: a CEL expression over JSON in, a whole Rust program out, with no Rust of your own. [`examples/by_hand`](https://github.com/nodeve-com/cel-emit/tree/main/examples/by_hand) uses cel-emit as a library: one expression over a struct you write, translated in a `build.rs`.
 
 cel-emit-runtime's functions sit in [`stdlib`]'s tables; its README gives their conventions.

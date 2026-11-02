@@ -54,6 +54,13 @@ pub fn locals(t: &Typed) -> Vec<usize> {
     out
 }
 
+/// Whether `f` holds for `t` or a node under it.
+pub fn any(t: &Typed, f: impl Fn(&Node) -> bool) -> bool {
+    let mut found = false;
+    nodes(t, &mut |n| found = found || f(&n.node));
+    found
+}
+
 /// `f` on `t` and each node under it, parents first, in order.
 pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
     f(t);
@@ -96,6 +103,7 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
         | Node::Or(a, b)
         | Node::Map(a, b)
         | Node::All(_, a, b)
+        | Node::First(a, b)
         | Node::Let(_, a, b) => {
             nodes(a, f);
             nodes(b, f);

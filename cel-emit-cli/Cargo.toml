@@ -1,0 +1,24 @@
+[package]
+name = "cel-emit-cli"
+description = "A CEL expression over JSON in, a Rust program out."
+version = "0.0.0"
+edition = "2021"
+license = "MPL-2.0"
+readme = "README.md"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "cel-emit"
+path = "src/main.rs"
+
+[dependencies]
+cel-emit = { path = ".." }
+# Formats the Rust it writes.
+prettyplease = "0.2"
+syn = { version = "2", features = ["full", "parsing"] }
+
+[dev-dependencies]
+cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }

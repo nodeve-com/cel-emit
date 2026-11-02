@@ -11,6 +11,8 @@ use chrono::{DateTime, Datelike, NaiveDateTime, TimeDelta, Timelike, Utc};
 
 use crate::{Error, Result};
 
+#[cfg(feature = "civil")]
+pub mod civil;
 mod parse;
 
 pub use parse::{parse_duration, parse_timestamp};

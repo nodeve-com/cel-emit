@@ -30,6 +30,7 @@ mod pattern;
 mod scope;
 mod select;
 mod shaped;
+mod share;
 mod special;
 mod value;
 
@@ -76,6 +77,7 @@ pub fn lowered(source: &str, decls: &Decls) -> Result<Lowered, Error> {
         params,
     };
     let tree = lower.value(root)?;
+    let tree = lower.share(tree)?;
     let map = yields_map(root);
     Ok(Lowered { tree, map })
 }

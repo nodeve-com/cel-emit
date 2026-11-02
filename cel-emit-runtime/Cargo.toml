@@ -15,7 +15,13 @@ arithmetic_side_effects = "deny"
 struct_excessive_bools = "deny"
 fn_params_excessive_bools = "deny"
 
+[features]
+# Text naming a time in a zone read while running, and ISO 8601 durations (src/time/civil.rs).
+civil = ["dep:chrono-tz", "dep:jiff"]
+
 [dependencies]
+chrono-tz = { version = "0.10", optional = true }
+jiff = { version = "0.2", default-features = false, features = ["std"], optional = true }
 # RE2's syntax without Unicode tables: linear-time matching, small enough to link into each build.
 regex-lite = "0.1"
 # A constant `matches` pattern: the search over its table; building tables stays in cel-emit.

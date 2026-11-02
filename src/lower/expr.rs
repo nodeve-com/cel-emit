@@ -2,6 +2,7 @@
 //! list and map literals.
 
 use super::dynamic::{fits, retype};
+use super::special::first_match;
 use super::*;
 
 impl<'a> Lower<'a> {
@@ -150,7 +151,7 @@ impl<'a> Lower<'a> {
             },
             other => return unsupported(kind(other)),
         };
-        Ok(retype(Typed { ty, node }))
+        Ok(first_match(retype(Typed { ty, node }), self.loops.len()))
     }
 
     /// The call of the one overload the checker resolved `e` to, on its operands, if cel-emit

@@ -83,6 +83,10 @@ impl<'a> Lower<'a> {
                 // A stored list is looped over as stored, each element widened as it is read.
                 let list = match list.node {
                     Node::Widen(stored) => stored,
+                    _ if list.ty == Type::Dyn => {
+                        let to = Type::list(Type::Dyn);
+                        Box::new(Typed::new(to.clone(), Node::FromDyn(Box::new(list), to)))
+                    }
                     _ => Box::new(list),
                 };
                 let over = match &list.ty {
@@ -188,6 +192,27 @@ impl<'a> Lower<'a> {
             _ => (kind, self.sub(body)?, None),
         })
     }
+}
+
+/// `t`, where it is `list.filter(x, pred)[0]`, as the first match: `depth` comprehensions around it.
+/// A list that widens each element, or a `pred` reading the index, stays as it is.
+pub(crate) fn first_match(t: Typed, depth: usize) -> Typed {
+    let Node::Call(id, args) = &t.node else {
+        return t;
+    };
+    let ([list, index], "index_list") = (args.as_slice(), id.as_str()) else {
+        return t;
+    };
+    let Node::Keep(over, pred, body) = &list.node else {
+        return t;
+    };
+    let whole = body.node == Node::Item(depth, Part::Whole);
+    let indexed = crate::walk::any(pred, |n| *n == Node::Position(depth));
+    if index.node != Node::Int(0) || !whole || indexed {
+        return t;
+    }
+    let node = Node::First(over.clone(), pred.clone());
+    Typed { node, ..t }
 }
 
 /// What a comprehension folds to: a list of its bodies, kept where a predicate holds; whether

@@ -15,6 +15,7 @@ mod math;
 mod optional;
 mod optional_message;
 mod same_name;
+mod share;
 mod strings;
 mod time;
 mod widths;

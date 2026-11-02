@@ -1,37 +1,53 @@
 //! Comprehensions: each iterates its list or map at the depth naming its `x` and `n`, its body
 //! one deeper.
 
+use super::place::receiver;
 use super::{Emitter, Vars};
 use crate::functions::STD;
 use crate::tree::{Node, Typed};
 use crate::types::Type;
-use crate::Error;
+use crate::{walk, Error};
 
 impl Emitter {
     /// What a [`Node::Map`] or [`Node::Keep`] gives, as an iterator of each item's result.
     pub(super) fn mapped(&mut self, map: &Typed, vars: &dyn Vars) -> Result<String, Error> {
         match &map.node {
             Node::Map(list, body) => {
-                let (iter, bind) = self.over(list, vars)?;
+                let (iter, bind) = self.over(list, &[body], vars)?;
                 let body = self.inside(body, vars)?;
                 Ok(format!("{iter}.map(|{bind}| {STD}::ok({body}))"))
             }
             Node::Keep(list, pred, body) => {
-                let (iter, bind) = self.over(list, vars)?;
+                let (iter, bind) = self.over(list, &[pred, body], vars)?;
                 let (pred, body) = (self.inside(pred, vars)?, self.inside(body, vars)?);
                 Ok(format!(
-                    "{iter}.filter_map(|{bind}| (|| {STD}::ok(if {pred} {{ Some({body}) }} else {{ None }}))().transpose())"
+                    "{iter}.map(|{bind}| {STD}::ok(if {pred} {{ Some({body}) }} else {{ None }})).filter_map({STD}::Result::transpose)"
                 ))
             }
             _ => Err(Error::Invalid("a fold of other than a map".into())),
         }
     }
 
-    /// An iterator over `list`, a list's elements or a map's entries, each with its index, and
-    /// the pattern binding them at this depth.
+    /// A reference to the first element of `list` where `pred` holds, reading no further.
+    pub(super) fn first(
+        &mut self,
+        list: &Typed,
+        pred: &Typed,
+        vars: &dyn Vars,
+    ) -> Result<String, Error> {
+        let (iter, bind) = self.over(list, &[pred], vars)?;
+        let pred = self.inside(pred, vars)?;
+        Ok(format!(
+            "{STD}::collections::first({iter}, |{bind}| {STD}::ok({pred}))?"
+        ))
+    }
+
+    /// An iterator over `list`, a list's elements or a map's entries, and the pattern binding at
+    /// this depth what `bodies` read of each: the element, and its index.
     pub(super) fn over(
         &mut self,
         list: &Typed,
+        bodies: &[&Typed],
         vars: &dyn Vars,
     ) -> Result<(String, String), Error> {
         if !matches!(list.ty, Type::List(_) | Type::Map(..)) {
@@ -40,10 +56,18 @@ impl Emitter {
             ));
         }
         let d = self.depth;
-        Ok((
-            format!("({}).iter().enumerate()", self.place(list, vars)?),
-            format!("(n{d}, x{d})"),
-        ))
+        let read = |at: fn(&Node, usize) -> bool| bodies.iter().any(|b| walk::any(b, |n| at(n, d)));
+        let item = match read(|n, d| matches!(n, Node::Item(i, _) if *i == d)) {
+            true => format!("x{d}"),
+            false => "_".to_string(),
+        };
+        let each = format!("{}.iter()", receiver(&self.place(list, vars)?));
+        Ok(
+            match read(|n, d| matches!(n, Node::Position(i) if *i == d)) {
+                true => (format!("(0i64..).zip({each})"), format!("(n{d}, {item})")),
+                false => (each, item),
+            },
+        )
     }
 
     /// `body` one comprehension deeper.

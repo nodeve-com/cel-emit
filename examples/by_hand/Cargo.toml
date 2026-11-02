@@ -1,0 +1,13 @@
+[package]
+name = "by_hand"
+description = "One CEL expression over a struct written by hand, translated at build time."
+version = "0.0.0"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[dependencies]
+cel-emit-runtime = { path = "../../cel-emit-runtime" }
+
+[build-dependencies]
+cel-emit = { path = "../.." }
