@@ -166,7 +166,7 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
 /// `schema-emit` is pinned to here, so its decode matches what wrote it.
 const TYPED: &str = "serde_json = \"1\"\n\
     schema-emit-runtime = { git = \"https://github.com/nodeve-com/schema-emit\", \
-    rev = \"fe2f954de1875b996a58f547f9eefe63ca90b96c\", features = [\"decode\"] }\n";
+    rev = \"8b03dbe36b771d3200c3b622825b7fc16da89fc6\", features = [\"decode\"] }\n";
 
 /// A Cargo manifest for `program`, built against this repo's cel-emit-runtime, with the `civil`
 /// feature only if it calls those functions, and what a schema's types need only if it has them.
