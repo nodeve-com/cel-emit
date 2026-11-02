@@ -84,6 +84,17 @@ impl<'a> Lower<'a> {
                 right,
             } => Node::Or(self.sub_bool(left)?, self.sub_bool(right)?),
             Expr::Binary {
+                op: op @ (BinaryOp::Eq | BinaryOp::Ne),
+                left,
+                right,
+            } if matches!(right.node, Expr::Null) && self.holds_null(left)? => {
+                let has = Typed::call("optional_has_value", vec![self.expr(left)?], Type::Bool);
+                match op {
+                    BinaryOp::Ne => has.node,
+                    _ => Node::Call("logical_not".into(), vec![has]),
+                }
+            }
+            Expr::Binary {
                 op: BinaryOp::In,
                 left,
                 right,
@@ -98,7 +109,17 @@ impl<'a> Lower<'a> {
                 else_expr,
             } => {
                 let (then, other) = self.pair_as(then_expr, else_expr)?;
-                Node::Cond(self.sub_bool(cond)?, Box::new(then), Box::new(other))
+                let branch = |t: Typed| match t.node {
+                    Node::Null if matches!(ty, Type::Nullable(_)) => {
+                        Typed::new(ty.clone(), Node::None)
+                    }
+                    _ => super::message::held(t, &ty),
+                };
+                Node::Cond(
+                    self.sub_bool(cond)?,
+                    Box::new(branch(then)),
+                    Box::new(branch(other)),
+                )
             }
             Expr::Call { expr, args } => self.call(e, expr, args)?,
             Expr::Comprehension(c) => self.comprehension(c)?,
@@ -262,6 +283,13 @@ impl<'a> Lower<'a> {
             },
             _ => None,
         }
+    }
+}
+
+impl Lower<'_> {
+    /// Whether `e` is a value that may be null: a nullable one, read as an `Option`.
+    fn holds_null(&self, e: &SpannedExpr) -> Result<bool, Error> {
+        Ok(matches!(self.ty(e)?, Type::Nullable(_)))
     }
 }
 

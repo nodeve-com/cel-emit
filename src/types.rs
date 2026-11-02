@@ -149,6 +149,7 @@ impl Type {
             | Type::Duration
             | Type::Null => true,
             Type::Dyn => true,
+            Type::Nullable(t) => t.dyn_into(&Type::Dyn),
             Type::List(t) => **t == Type::Dyn,
             Type::Map(k, v) => **k == Type::String && **v == Type::Dyn,
             _ => false,

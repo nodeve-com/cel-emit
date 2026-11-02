@@ -56,7 +56,9 @@ impl<'a> Lower<'a> {
         if let Expr::Member { expr, field, .. } = &e.node {
             let base = self.expr(expr)?;
             match &base.ty {
-                Type::Message(_) => return self.fields(base, &[field.as_str()]),
+                Type::Message(_) | Type::Nullable(_) => {
+                    return self.fields(base, &[field.as_str()]);
+                }
                 // A string-keyed map's field is its entry: a key it lacks is no such key.
                 Type::Map(k, _) if matches!(**k, Type::String | Type::Dyn) => {
                     let key = super::dynamic::field_key(k, field)?;
@@ -82,6 +84,13 @@ impl<'a> Lower<'a> {
             let read = Node::Call("dyn_get".into(), vec![message, key]);
             return self.fields(Typed::new(Type::Dyn, read), rest);
         }
+        // A message that may lack a value has no field to read where it does: the read fails.
+        let message = match message.ty.clone() {
+            Type::Optional(held) | Type::Nullable(held) => {
+                Typed::call("optional_held", vec![message], *held)
+            }
+            _ => message,
+        };
         let fields = message.ty.fields();
         let i = fields
             .iter()

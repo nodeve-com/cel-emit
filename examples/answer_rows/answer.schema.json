@@ -1,0 +1,201 @@
+{
+  "$defs": {
+    "Place": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "required": [
+    "currency",
+    "options",
+    "products",
+    "locations"
+  ],
+  "properties": {
+    "currency": {
+      "type": "string"
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "start_date",
+          "start_time",
+          "end_date",
+          "end_time",
+          "timezone",
+          "product_id",
+          "legs",
+          "pricing",
+          "pricing_potential_best",
+          "capacities",
+          "status"
+        ],
+        "properties": {
+          "start_date": {
+            "type": "string"
+          },
+          "start_time": {
+            "type": "string"
+          },
+          "end_date": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "product_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "venue": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "location",
+                "end_location"
+              ],
+              "properties": {
+                "location": {
+                  "$ref": "#/$defs/Place"
+                },
+                "end_location": {
+                  "$ref": "#/$defs/Place"
+                }
+              }
+            }
+          },
+          "pricing": {
+            "type": "object",
+            "required": [
+              "total"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "pricing_potential_best": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "total"
+            ],
+            "properties": {
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "capacities": {
+            "type": "object",
+            "required": [
+              "available"
+            ],
+            "properties": {
+              "available": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "multi_usage_rules"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "multi_usage_rules": {
+            "type": "object",
+            "required": [
+              "active_period"
+            ],
+            "properties": {
+              "active_period": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "period"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string"
+                  },
+                  "period": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "locode",
+          "timezone"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "locode": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

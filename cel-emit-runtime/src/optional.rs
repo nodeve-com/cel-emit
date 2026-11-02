@@ -41,6 +41,11 @@ pub fn value<T>(x: Option<T>) -> Result<T> {
     x.ok_or(Error::Absent)
 }
 
+/// What `x` holds, no copy made.
+pub fn held<T>(x: &Option<T>) -> Result<&T> {
+    x.as_ref().ok_or(Error::Absent)
+}
+
 /// `x.orValue(default)`.
 pub fn or_value<T>(x: Option<T>, default: T) -> Result<T> {
     Ok(x.unwrap_or(default))
@@ -82,6 +87,12 @@ pub fn index_map<K: Equal, V: Clone>(m: &[(K, V)], key: impl Borrow<K>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn held_lends_what_it_holds() {
+        assert_eq!(held(&Some(4i64)), Ok(&4));
+        assert_eq!(held(&None::<i64>), Err(Error::Absent));
+    }
 
     #[test]
     fn first_and_last_are_absent_over_no_elements() {

@@ -58,7 +58,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 [[package]]
 name = "cel-core"
 version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#2fc96206f57f89eaf7972b0b12e0e0f6a2402cf5"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -69,7 +69,7 @@ dependencies = [
 [[package]]
 name = "cel-core-conformance"
 version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#2fc96206f57f89eaf7972b0b12e0e0f6a2402cf5"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
 dependencies = [
  "cel-core",
  "cel-core-proto",
@@ -80,7 +80,7 @@ dependencies = [
 [[package]]
 name = "cel-core-proto"
 version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#2fc96206f57f89eaf7972b0b12e0e0f6a2402cf5"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
 dependencies = [
  "cel-core",
  "prost",
@@ -113,6 +113,9 @@ dependencies = [
  "cel-emit",
  "cel-emit-runtime",
  "prettyplease",
+ "schema-emit",
+ "schema-emit-runtime",
+ "serde_json",
  "syn 2.0.119",
 ]
 
@@ -227,6 +230,15 @@ checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown",
+]
+
+[[package]]
+name = "iri-string"
+version = "0.7.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1663ee7d8cf2900cc1414b1e1eec9f348d6eaa3bcab07579f4726a4b8499f447"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -390,6 +402,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "percent-encoding"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
 name = "phf"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -527,6 +545,29 @@ name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
+name = "schema-emit"
+version = "0.6.2"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=fe2f954de1875b996a58f547f9eefe63ca90b96c#fe2f954de1875b996a58f547f9eefe63ca90b96c"
+dependencies = [
+ "iri-string",
+ "pattern-emit",
+ "percent-encoding",
+ "serde_json",
+]
+
+[[package]]
+name = "schema-emit-runtime"
+version = "0.6.2"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=fe2f954de1875b996a58f547f9eefe63ca90b96c#fe2f954de1875b996a58f547f9eefe63ca90b96c"
+dependencies = [
+ "base64",
+ "chrono",
+ "humantime",
+ "pattern-emit",
+ "serde_json",
+]
 
 [[package]]
 name = "serde"

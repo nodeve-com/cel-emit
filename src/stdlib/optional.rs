@@ -16,6 +16,7 @@ pub(super) const FUNCTIONS: &[Std] = &[
     },
     Std::reads("optional_has_value", "optional::has_value"),
     Std::any("optional_value", "optional::value"),
+    Std::reads("optional_held", "optional::held"),
     Std::any("optional_or_value", "optional::or_value"),
     Std::any("optional_or_optional", "optional::or"),
     Std::reads("list_first", "optional::first"),

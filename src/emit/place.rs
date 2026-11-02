@@ -9,7 +9,7 @@ use crate::Error;
 
 /// Whether overload `id` gives a reference into its first argument.
 fn lends(id: &str) -> bool {
-    matches!(id, "dyn_get" | "dyn_at")
+    matches!(id, "dyn_get" | "dyn_at" | "optional_held")
 }
 
 /// Whether overload `id` gives an optional reference into its first argument.

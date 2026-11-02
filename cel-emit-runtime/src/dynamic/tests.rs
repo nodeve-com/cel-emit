@@ -62,6 +62,8 @@ fn typed_values_lift_to_dyn() {
     let m = vec![(String::from("a"), 1.5_f64)];
     assert!(matches!(get(&from_map(m).unwrap(), "a"), Ok(Dyn::Double(d)) if *d == 1.5));
     assert!(matches!(Dyn::from(Null), Dyn::Null));
+    assert!(matches!(Dyn::from(Some(1i64)), Dyn::Int(1)));
+    assert!(matches!(Dyn::from(None::<i64>), Dyn::Null));
 }
 
 #[test]

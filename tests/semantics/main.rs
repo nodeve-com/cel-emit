@@ -12,6 +12,7 @@ mod common;
 mod lists;
 mod lists_ext;
 mod math;
+mod nullable_message;
 mod optional;
 mod optional_message;
 mod same_name;

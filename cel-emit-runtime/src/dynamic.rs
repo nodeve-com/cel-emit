@@ -41,6 +41,13 @@ macro_rules! from {
 from!(bool => Bool, i64 => Int, u64 => UInt, f64 => Double, f32 => Float32, String => Str,
     DateTime<Utc> => Timestamp, TimeDelta => Duration, Vec<Dyn> => List, Vec<(String, Dyn)> => Map);
 
+/// A nullable value: what it holds, or null.
+impl<T: Into<Dyn>> From<Option<T>> for Dyn {
+    fn from(x: Option<T>) -> Dyn {
+        x.map_or(Dyn::Null, Into::into)
+    }
+}
+
 impl From<Null> for Dyn {
     fn from(_: Null) -> Dyn {
         Dyn::Null
