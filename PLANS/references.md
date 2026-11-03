@@ -36,7 +36,7 @@ Wall-clock time is no measure here: load and frequency move it between runs. Ins
 
 Measured by phase, allocation calls:
 
-- **The decode's `serde_json::Value`** makes most of the generated program's allocations and nearly all its peak memory. The schema decode after it allocates about what the reference's whole parse does. A decode straight from text, as serde's derive reads, ends the pass. That decode is schema-emit's.
+- **The decode** reads the input text through schema-emit, allocating about what the reference's serde derive does.
 - **The expression** allocates about what the reference's rows do. What stays costs instructions, not allocations, each unconfirmed until callgrind on Linux shows it:
   - Work that doesn't change inside a `filter` or `first` closure runs per element: the closure indexes `row.legs[0]` for every location tried.
   - String `==`, `+`, and `&&` over known types each return a `Result`. Why is unread; the reason, if any, goes here before they change.
