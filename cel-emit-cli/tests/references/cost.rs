@@ -95,6 +95,14 @@ fn counted(cost: &Cost, phase: &str, count: usize) -> Option<usize> {
     found.map(|(_, c)| c[count])
 }
 
+/// `cost`'s allocation calls for a record: decode and expression.
+pub(super) fn record_calls(cost: &Cost) -> usize {
+    ["decode", "expression"]
+        .iter()
+        .filter_map(|p| counted(cost, p, 0))
+        .sum()
+}
+
 /// Every measure: the program's whole, then each count by phase and, where phases sum, a record's
 /// total.
 fn measures() -> Vec<Measure> {

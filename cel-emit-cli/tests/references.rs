@@ -1,6 +1,7 @@
 //! Each example holding a reference, `<name>.rs` beside its `<name>.cel`, built beside its
 //! generated program and cel-core's interpreter running its `.cel`: each must give the example's
-//! `expect.json`, and a table per example prints what each costs. `programs.tsv` in the scratch
+//! `expect.json`, and a table per example prints what each costs. Only allocation calls gate, at
+//! [`ALLOCATIONS`]; every other measure only shows. `programs.tsv` in the scratch
 //! directory lists each executable, its phase, and its input.
 
 use std::fmt::Write as _;
@@ -25,6 +26,11 @@ const INTERPRETER: &str = include_str!("references/interpreter.rs");
 
 /// A generated program's and a reference's `main`.
 const COMPILED: &str = include_str!("references/compiled.rs");
+
+/// How far a generated program's allocation calls for a record, decode and expression, may run
+/// past its reference's, as numerator and denominator: a goal, never a measured figure, and only
+/// ever lowered.
+const ALLOCATIONS: [usize; 2] = [5, 4];
 
 /// The executable's `main`: `program`'s `decode` and `expression` functions, by the names given,
 /// counted apart.
@@ -222,7 +228,7 @@ fn examples() -> Vec<Example> {
 
 #[test]
 fn each_reference_its_generated_program_and_the_interpreter_give_the_example_output() {
-    let (mut tables, mut listed) = (String::new(), String::new());
+    let (mut tables, mut listed, mut over) = (String::new(), String::new(), Vec::new());
     for example in &examples() {
         let program = cel_emit_cli::program(&example.cel, example.schema.as_deref()).unwrap();
         let name = format!("{}_generated", example.name);
@@ -241,8 +247,26 @@ fn each_reference_its_generated_program_and_the_interpreter_give_the_example_out
             .map(|p| (p.kind, measured(example, p, &mut listed)))
             .collect();
         tables.push_str(&table(&example.name, &costs));
+        over.extend(past(&example.name, &costs));
     }
     let list = Path::new(env!("CARGO_TARGET_TMPDIR")).join("programs/programs.tsv");
     std::fs::write(list, listed).unwrap();
     println!("{tables}");
+    assert!(
+        over.is_empty(),
+        "allocations past the reference's: {over:?}"
+    );
+}
+
+/// `name`, if its generated program's allocation calls for a record run past its reference's by
+/// more than [`ALLOCATIONS`].
+fn past(name: &str, costs: &[(&str, Cost)]) -> Option<String> {
+    let record = |kind: &str| {
+        let cost = &costs.iter().find(|(k, _)| *k == kind).unwrap().1;
+        cost::record_calls(cost)
+    };
+    let (generated, reference) = (record("generated"), record("reference"));
+    let [above, below] = ALLOCATIONS;
+    let over = generated * below > reference * above;
+    over.then(|| format!("{name}: {generated} against {reference}"))
 }
