@@ -17,8 +17,9 @@ mod lists;
 pub use json::decoded as json_value;
 
 /// A function an embedder adds: its CEL declaration, and each overload's Rust, by its id: the
-/// path of a function taking the overload's arguments in order, a method's receiver first, and
-/// returning `cel_emit_runtime::Result` of its result, as cel-emit-runtime's do.
+/// path of a function taking the overload's arguments in order, a method's receiver first, those
+/// not `Copy` by reference (`&str` for text), and returning `cel_emit_runtime::Result` of its
+/// result, as cel-emit-runtime's do.
 #[derive(Clone, Debug)]
 pub struct Function {
     pub decl: Decl,
@@ -123,7 +124,7 @@ impl Index {
     pub(crate) fn borrows(&self, id: &str, args: &[Type]) -> bool {
         self.0.get(id).is_some_and(|entries| {
             entries.iter().any(|e| match e {
-                Entry::Own(_) => false,
+                Entry::Own(_) => true,
                 Entry::Std(s) => s.borrows && (s.takes)(args),
             })
         })

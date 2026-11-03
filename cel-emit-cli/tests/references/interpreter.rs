@@ -31,15 +31,17 @@ fn civil_time() -> [FunctionDecl; 2] {
         vec![CelType::String, CelType::String],
         CelType::Timestamp,
     )
-    .with_impl(|args| match texts(args).map(|(l, z)| civil::to_utc(l, z)) {
-        Some(Ok(t)) => Value::Timestamp(Timestamp::from_datetime(&t)),
-        Some(Err(e)) => Value::error(format!("{e:?}")),
-        None => Value::error("to_utc takes two strings"),
-    });
+    .with_impl(
+        |args| match texts(args).map(|(l, z)| civil::to_utc(&l, &z)) {
+            Some(Ok(t)) => Value::Timestamp(Timestamp::from_datetime(&t)),
+            Some(Err(e)) => Value::error(format!("{e:?}")),
+            None => Value::error("to_utc takes two strings"),
+        },
+    );
     let iso_duration =
         OverloadDecl::function("iso_duration", vec![CelType::String], CelType::Duration).with_impl(
             |args| match args {
-                [Value::String(text)] => match civil::iso_duration(text.to_string()) {
+                [Value::String(text)] => match civil::iso_duration(text) {
                     Ok(d) => Value::Duration(cel_core::Duration::from_chrono(d)),
                     Err(e) => Value::error(format!("{e:?}")),
                 },

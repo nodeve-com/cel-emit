@@ -134,9 +134,10 @@ impl Emitter {
             .iter()
             .any(|a| matches!(a.ty, Type::List(_) | Type::Map(..)));
         args.iter()
-            .map(|a| match borrows && !a.ty.copied() {
-                true => self.reference(a, plain, vars),
-                false => self.expr(a, vars),
+            .map(|a| match (borrows, a.ty.copied(), place::by_reference(a)) {
+                (_, true, true) => Ok(format!("*{}", self.place(a, vars)?)),
+                (true, false, _) => self.reference(a, plain, vars),
+                _ => self.expr(a, vars),
             })
             .collect()
     }
