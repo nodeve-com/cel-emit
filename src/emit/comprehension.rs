@@ -28,6 +28,35 @@ impl Emitter {
         }
     }
 
+    /// The block writing the elements of `list`, where `pred` holds, each as the object `body`
+    /// encodes, into one array.
+    pub(super) fn encode_each(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
+        let Node::EncodeEach(list, pred, body) = &t.node else {
+            return Err(Error::Invalid("an array that is no encoded items".into()));
+        };
+        let pred = pred.as_deref();
+        let Node::Encode(object) = &body.node else {
+            return Err(Error::Invalid(
+                "an array of items that are no objects".into(),
+            ));
+        };
+        let reads: Vec<&Typed> = pred.into_iter().chain([&**body]).collect();
+        let (iter, bind) = self.over(list, &reads, vars)?;
+        self.depth = self.depth.saturating_add(1);
+        let pred = pred.map(|p| self.expr(p, vars)).transpose();
+        let write = self.write_object(object, vars);
+        self.depth = self.depth.saturating_sub(1);
+        let write = format!("json.item(); {}", write?);
+        let write = match pred? {
+            Some(pred) => format!("if {pred} {{ {write}}} "),
+            None => write,
+        };
+        Ok(format!(
+            "match {iter} {{ it => {{ let mut json = {STD}::json::Text::with_capacity(it.size_hint().0.saturating_mul({}).saturating_add(2)); json.open_list(); for {bind} in it {{ {write}}} json.close_list(); json.done() }} }}",
+            super::encode_parts::room(object)
+        ))
+    }
+
     /// A reference to the first element of `list` where `pred` holds, reading no further.
     pub(super) fn first(
         &mut self,

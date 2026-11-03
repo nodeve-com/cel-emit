@@ -83,6 +83,7 @@ macro_rules! converting {
             | Node::ToDyn(_)
             | Node::Written(..)
             | Node::Encode(_)
+            | Node::EncodeEach(..)
     };
 }
 pub(crate) use converting;
@@ -196,6 +197,11 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
         Node::Message(entries) => entries.iter().for_each(|(_, v, _)| nodes(v, f)),
         Node::MapOf(entries) => entries.iter().for_each(|(k, v)| each([k, v], f)),
         Node::Encode(object) => members(object, f),
+        Node::EncodeEach(list, pred, body) => {
+            nodes(list, f);
+            pred.iter().for_each(|p| nodes(p, f));
+            nodes(body, f);
+        }
     }
 }
 

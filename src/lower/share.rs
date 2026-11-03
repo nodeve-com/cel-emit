@@ -91,17 +91,7 @@ fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
         }
         // A fold's comprehension stays under it: only its parts can leave.
         Node::Extreme(_, x) | Node::Sum(x) | Node::Count(x) => parts(x),
-        Node::Call(id, args) => {
-            // CEL reads an optional's fallback only where it holds nothing.
-            let fallback = matches!(id.as_str(), "optional_or_value" | "optional_or_optional");
-            let runs = if fallback {
-                args.len().min(1)
-            } else {
-                args.len()
-            };
-            let (runs, regions) = args.split_at_mut(runs);
-            (runs.iter_mut().collect(), regions.iter_mut().collect())
-        }
+        Node::Call(id, args) => call_parts(id, args),
         Node::List(items) => (items.iter_mut().collect(), Vec::new()),
         Node::ListOpt(items) => (items.iter_mut().map(|(x, _)| x).collect(), Vec::new()),
         Node::Message(entries) => (entries.iter_mut().map(|(_, x, _)| x).collect(), Vec::new()),
@@ -115,12 +105,32 @@ fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
         ),
         Node::And(a, b) | Node::Or(a, b) => (Vec::new(), vec![&mut **a, &mut **b]),
         Node::Cond(c, a, b) | Node::Keep(c, a, b) => (vec![&mut **c], vec![&mut **a, &mut **b]),
+        Node::EncodeEach(list, pred, body) => (
+            vec![&mut **list],
+            pred.iter_mut()
+                .map(|p| &mut **p)
+                .chain([&mut **body])
+                .collect(),
+        ),
         Node::Map(x, body)
         | Node::All(_, x, body)
         | Node::First(x, body)
         | Node::Let(_, x, body) => (vec![&mut **x], vec![&mut **body]),
         _ => (Vec::new(), Vec::new()),
     }
+}
+
+/// A call's arguments: those that run whenever it does, and the regions. CEL reads an optional's
+/// fallback only where it holds nothing.
+fn call_parts<'t>(id: &str, args: &'t mut [Typed]) -> (Vec<&'t mut Typed>, Vec<&'t mut Typed>) {
+    let fallback = matches!(id, "optional_or_value" | "optional_or_optional");
+    let runs = if fallback {
+        args.len().min(1)
+    } else {
+        args.len()
+    };
+    let (runs, regions) = args.split_at_mut(runs);
+    (runs.iter_mut().collect(), regions.iter_mut().collect())
 }
 
 /// Whether `t` costs no more to read again than a local does.

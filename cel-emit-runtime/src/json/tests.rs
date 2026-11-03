@@ -219,6 +219,35 @@ fn text_cuts_a_failed_member_and_an_empty_nested_object_back_out() {
 }
 
 #[test]
+fn text_writes_items_and_scalars_in_place() {
+    let mut t = Text::default();
+    t.open_list();
+    for i in 0..2 {
+        t.item();
+        let mark = t.mark();
+        t.open();
+        assert!(t.bare(mark));
+        t.key("\"s\":");
+        t.str("a\"b").unwrap();
+        t.key("\"n\":");
+        t.int(-i).unwrap();
+        t.key("\"u\":");
+        t.uint(7).unwrap();
+        t.key("\"d\":");
+        t.double(1.5).unwrap();
+        t.key("\"b\":");
+        t.bool(true).unwrap();
+        assert!(!t.bare(mark));
+        t.close();
+    }
+    assert_eq!(t.double(f64::NAN), Err(Error::Range));
+    t.close_list();
+    let one = r#"{"s":"a\"b","n":0,"u":7,"d":1.5,"b":true}"#;
+    let two = one.replace(r#""n":0"#, r#""n":-1"#);
+    assert_eq!(t.done(), format!("[{one},{two}]"));
+}
+
+#[test]
 fn text_rest_alone_opens_without_a_comma_and_keeps_a_key_left_unwritten() {
     let mut t = Text::default();
     t.open();

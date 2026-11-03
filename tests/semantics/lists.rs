@@ -111,3 +111,32 @@ fn a_field_of_a_call_in_a_comprehension_is_that_field() {
         );
     });
 }
+
+/// A `map` whose body is a map literal of constant string keys encodes as an array of objects,
+/// in key order, a filter leaving items out and a failing field failing the whole expression.
+#[test]
+fn a_map_of_literal_objects_encodes_as_an_array() {
+    check(|cases| {
+        let xs = list(vec![I(1), I(2), I(3)]);
+        let inputs = [("xs", xs)];
+        for (source, want) in [
+            (
+                "json.encode(xs.map(x, {'b': x, 'a': 'k', 'c': x > 1}))",
+                r#"[{"b":1,"a":"k","c":false},{"b":2,"a":"k","c":true},{"b":3,"a":"k","c":true}]"#,
+            ),
+            (
+                "json.encode(xs.filter(x, x != 2).map(i, {'v': i * 2}))",
+                r#"[{"v":2},{"v":6}]"#,
+            ),
+            ("json.encode(xs.map(x, {}))", "[{},{},{}]"),
+            ("json.encode([].map(x, {'a': x}))", "[]"),
+        ] {
+            cases.gives(source, &inputs, Got::Value(s(want)));
+        }
+        cases.gives(
+            "json.encode(xs.map(x, {'a': 1 / (x - 2)}))",
+            &inputs,
+            Got::Error,
+        );
+    });
+}

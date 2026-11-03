@@ -6,23 +6,35 @@
 
 use std::fmt::Write as _;
 
+use super::encode_parts::{kept_member, reads, room, skips};
 use super::{Emitter, Vars};
 use crate::functions::STD;
-use crate::tree::{Member, Object, Out, Typed};
+use crate::tree::{Member, Node, Object, Out, Typed};
 use crate::types::Type;
-use crate::{walk, Error};
+use crate::Error;
 
 impl Emitter {
     /// `object`'s text, as a string.
     pub(super) fn encode(&mut self, object: &Object, vars: &dyn Vars) -> Result<String, Error> {
-        let mut body = format!(
-            "{{ let mut json = {STD}::json::Text::with_capacity({}); json.open(); ",
+        let members = self.write_object(object, vars)?;
+        Ok(format!(
+            "{{ let mut json = {STD}::json::Text::with_capacity({}); {members}json.done() }}",
             room(object)
-        );
+        ))
+    }
+
+    /// The statements writing `object` onto the `json` in scope.
+    pub(super) fn write_object(
+        &mut self,
+        object: &Object,
+        vars: &dyn Vars,
+    ) -> Result<String, Error> {
+        let mut body = String::new();
         let skips = skips(object);
         if skips {
-            body.push_str("let mut jf = None; ");
+            body.push_str("let jb = json.mark(); let mut jf = None; ");
         }
+        body.push_str("json.open(); ");
         let mut block = Block {
             emitter: self,
             vars,
@@ -33,10 +45,10 @@ impl Emitter {
         if skips {
             let _ = write!(
                 body,
-                "if let (1, Some(e)) = (json.mark(), jf) {{ {STD}::fail::<()>(e)?; }} "
+                "if let (true, Some(e)) = (json.bare(jb), jf) {{ {STD}::fail::<()>(e)?; }} "
             );
         }
-        body.push_str("json.close(); json.done() }");
+        body.push_str("json.close(); ");
         Ok(body)
     }
 }
@@ -69,11 +81,36 @@ impl Block<'_> {
         self.emitter.expr(x, self.vars)
     }
 
-    /// Writes `object`'s members, at nesting `d`, into the block.
-    fn members(&mut self, object: &Object, d: usize, held: &[usize]) -> Result<(), Error> {
+    /// The statement writing the dyn `x`: a scalar entering as a dyn is written as it is.
+    fn write(&mut self, x: &Typed) -> Result<String, Error> {
+        if let Node::ToDyn(inner) = &x.node {
+            let f = match inner.ty {
+                Type::String => Some("str"),
+                Type::Int => Some("int"),
+                Type::Uint => Some("uint"),
+                Type::Double => Some("double"),
+                Type::Bool => Some("bool"),
+                _ => None,
+            };
+            if let Some(f) = f {
+                let value = match inner.ty {
+                    Type::String => self.emitter.reference(inner, true, self.vars)?,
+                    _ => self.expr(inner)?,
+                };
+                return Ok(format!("json.{f}({value})?; "));
+            }
+        }
+        Ok(format!("json.value({})?; ", self.expr(x)?))
+    }
+
+    /// Computes `object`'s lets, each holding its result; `held` and the lets.
+    fn lets(&mut self, object: &Object, held: &[usize]) -> Result<Vec<usize>, Error> {
         let mut held = held.to_vec();
         for (n, value) in &object.lets {
-            let code = self.expr(value)?;
+            let code = match super::place::rooted(value) {
+                true => self.emitter.reference(value, false, self.vars)?,
+                false => self.expr(value)?,
+            };
             let scope = reads(value, &held);
             let _ = write!(
                 self.body,
@@ -81,6 +118,12 @@ impl Block<'_> {
             );
             held.push(*n);
         }
+        Ok(held)
+    }
+
+    /// Writes `object`'s members, at nesting `d`, into the block.
+    fn members(&mut self, object: &Object, d: usize, held: &[usize]) -> Result<(), Error> {
+        let held = self.lets(object, held)?;
         // Which members were written, where a rest's entries must leave their keys out.
         let rest = object
             .members
@@ -136,26 +179,7 @@ impl Block<'_> {
         let held = &level.held;
         let key = &slot.key;
         match out {
-            Out::Value(x, kept) => {
-                let scope = reads(x, held);
-                let x = self.expr(x)?;
-                let write = format!("json.key({key}); json.value({x})?; ");
-                let code = format!("{scope}{write}{STD}::ok(true)");
-                member(&mut self.body, &code, *kept, slot.written.as_deref());
-            }
-            Out::Optional {
-                optional,
-                local,
-                value,
-                kept,
-            } => {
-                let scope = reads(optional, held);
-                let (optional, value) = (self.expr(optional)?, self.expr(value)?);
-                let code = format!(
-                    "{scope}if let Some(l{local}) = &{optional} {{ json.key({key}); json.value({value})?; return {STD}::ok(true); }} {STD}::ok(false)"
-                );
-                member(&mut self.body, &code, *kept, slot.written.as_deref());
-            }
+            Out::Value(..) | Out::Optional { .. } => self.scalar(out, slot, held)?,
             Out::Rest(x, kept) => self.rest(x, *kept, level)?,
             Out::Object(o) => {
                 let _ = write!(self.body, "{{ let jm = json.key({key}); json.open(); ");
@@ -165,6 +189,57 @@ impl Block<'_> {
                     None => write!(self.body, "json.close_or_cut(jm); }} "),
                 };
             }
+        }
+        Ok(())
+    }
+
+    /// Writes a member whose `inner` statements run where `guard`, if any, holds. Where `kept`, a
+    /// closure holds a failure; else the block raises it with `?`.
+    fn plain(
+        &mut self,
+        (scope, guard, inner): (&str, Option<&str>, &str),
+        kept: bool,
+        slot: &Slot,
+    ) {
+        if kept {
+            let code = match guard {
+                Some(g) => {
+                    format!("{scope}{g} {{ {inner}return {STD}::ok(true); }} {STD}::ok(false)")
+                }
+                None => format!("{scope}{inner}{STD}::ok(true)"),
+            };
+            return kept_member(&mut self.body, &code, slot.written.as_deref());
+        }
+        let flag = (slot.written.as_ref()).map_or(String::new(), |w| format!("{w} = true; "));
+        let _ = match guard {
+            Some(g) => write!(self.body, "{{ {scope}{g} {{ {inner}{flag}}} }} "),
+            None => write!(self.body, "{{ {scope}{inner}{flag}}} "),
+        };
+    }
+
+    /// Writes a member of a value or an optional.
+    fn scalar(&mut self, out: &Out, slot: &Slot, held: &[usize]) -> Result<(), Error> {
+        let key = &slot.key;
+        match out {
+            Out::Value(x, kept) => {
+                let inner = format!("json.key({key}); {}", self.write(x)?);
+                let scope = reads(x, held);
+                self.plain((&scope, None, &inner), *kept, slot);
+            }
+            Out::Optional {
+                optional,
+                local,
+                value,
+                kept,
+            } => {
+                let (opt, value) = (self.expr(optional)?, self.write(value)?);
+                let guard = format!("if let Some(l{local}) = &{opt}");
+                let inner = format!("json.key({key}); {value}");
+                let scope = reads(optional, held);
+                let guard = Some(guard.as_str());
+                self.plain((&scope, guard, &inner), *kept, slot);
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -188,51 +263,4 @@ impl Block<'_> {
         }
         .map_err(|e| Error::Invalid(e.to_string()))
     }
-}
-
-/// Writes a member: `code` is a closure's body giving whether it wrote one. Where `kept`, a
-/// failure is cut back out and kept in `jf`; `written` takes the answer.
-fn member(body: &mut String, code: &str, kept: bool, written: Option<&str>) {
-    let to = written.map_or("let _ = ".to_string(), |w| format!("{w} = "));
-    let call = format!("(|| -> {STD}::Result<bool> {{ {code} }})()");
-    let _ = match kept {
-        true => write!(
-            body,
-            "let jm = json.mark(); {to}match {call} {{ Ok(b) => b, Err(e) => {{ jf.get_or_insert(e); json.cut(jm); false }} }}; "
-        ),
-        false => write!(body, "{to}{call}?; "),
-    };
-}
-
-/// Whether a member of `object` can be left out for failing.
-fn skips(object: &Object) -> bool {
-    object.members.iter().any(|m| match &m.out {
-        Out::Value(_, kept) | Out::Rest(_, kept) | Out::Optional { kept, .. } => *kept,
-        Out::Object(o) => skips(o),
-    })
-}
-
-/// The statements binding each of `held` that `t` reads, raising its error where it failed.
-fn reads(t: &Typed, held: &[usize]) -> String {
-    let mut read = walk::locals(t);
-    read.retain(|n| held.contains(n));
-    read.sort_unstable();
-    read.dedup();
-    read.iter().fold(String::new(), |mut out, n| {
-        let _ = write!(out, "let l{n} = jl{n}.as_ref().map_err(|e| *e)?; ");
-        out
-    })
-}
-
-/// Bytes enough for `object`'s text where each value is short: its keys, and room for each value.
-fn room(object: &Object) -> usize {
-    object.members.iter().fold(2, |n, m| {
-        let value = match &m.out {
-            Out::Object(o) => room(o),
-            _ => 16,
-        };
-        n.saturating_add(m.key.len())
-            .saturating_add(4)
-            .saturating_add(value)
-    })
 }

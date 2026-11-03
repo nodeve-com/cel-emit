@@ -122,6 +122,9 @@ pub enum Node {
     /// JSON object text, each member written as it computes: what `json.encode` of a message's
     /// fields is.
     Encode(Object),
+    /// JSON array text: for each element of a list (`list`), where `pred` holds, the
+    /// [`Node::Encode`] `body` written as one item, as [`Node::Keep`] lays out its items.
+    EncodeEach(Box<Typed>, Option<Box<Typed>>, Box<Typed>),
     /// `value` bound as local `n` in `body`.
     Let(usize, Box<Typed>, Box<Typed>),
     Local(usize),

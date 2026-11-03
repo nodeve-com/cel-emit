@@ -7,6 +7,11 @@ impl<'a> Lower<'a> {
     /// The comprehension `c`. A map's binds its key first, then its value; a map of messages'
     /// loops over its loop column.
     pub(crate) fn comprehension(&mut self, c: &'a ComprehensionData) -> Result<Node, Error> {
+        self.fold(c, false)
+    }
+
+    /// The comprehension `c`; with `valued`, a map's body is lowered as what it fills.
+    pub(super) fn fold(&mut self, c: &'a ComprehensionData, valued: bool) -> Result<Node, Error> {
         let (list, over) = self.loop_range(c)?;
         let (kind, body) = fold_of(c)?;
         let second = (!c.iter_var2.is_empty()).then(|| c.iter_var2.clone());
@@ -15,7 +20,7 @@ impl<'a> Lower<'a> {
             (_, second) => (Some(c.iter_var.clone()), second),
         };
         self.loops.push(Loop { index, item, over });
-        let lowered = self.folded(kind, body);
+        let lowered = self.folded(kind, body, valued);
         self.loops.pop();
         fold_node(list, lowered?)
     }
@@ -46,13 +51,22 @@ impl<'a> Lower<'a> {
 
     /// A comprehension's body, and its predicate, lowered inside it: exists_one's body only
     /// counts.
-    fn folded(&mut self, kind: Fold<'a>, body: &'a SpannedExpr) -> Result<Lowered<'a>, Error> {
+    fn folded(
+        &mut self,
+        kind: Fold<'a>,
+        body: &'a SpannedExpr,
+        valued: bool,
+    ) -> Result<Lowered<'a>, Error> {
+        let element = |s: &mut Self| match valued {
+            true => s.value(body).map(Box::new),
+            false => s.sub(body),
+        };
         Ok(match kind {
             Fold::Map(Some(pred)) => {
                 let pred = self.sub(pred)?;
                 Lowered {
                     kind,
-                    body: self.sub(body)?,
+                    body: element(self)?,
                     pred: Some(pred),
                 }
             }
@@ -63,7 +77,7 @@ impl<'a> Lower<'a> {
             },
             _ => Lowered {
                 kind,
-                body: self.sub(body)?,
+                body: element(self)?,
                 pred: None,
             },
         })
@@ -96,7 +110,7 @@ fn fold_node(list: Box<Typed>, lowered: Lowered) -> Result<Node, Error> {
 }
 
 /// How the macro `c` folds, and the expression it folds each element with.
-fn fold_of(c: &ComprehensionData) -> Result<(Fold<'_>, &SpannedExpr), Error> {
+pub(super) fn fold_of(c: &ComprehensionData) -> Result<(Fold<'_>, &SpannedExpr), Error> {
     let accu = |x: &SpannedExpr| matches!(&x.node, Expr::Ident(n) if *n == c.accu_var);
     let (kind, body) = match (&c.accu_init.node, &c.loop_step.node) {
         (Expr::List(init), _) if init.is_empty() && added(&c.loop_step, accu).is_some() => {

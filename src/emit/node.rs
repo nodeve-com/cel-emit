@@ -22,6 +22,7 @@ impl Emitter {
                     self.reference(subject, true, vars)?
                 )
             }
+            _ if t.ty.copied() && place::by_reference(t) => format!("*{}", self.place(t, vars)?),
             _ => format!("{}.clone()", place::receiver(&self.place(t, vars)?)),
         })
     }
@@ -109,6 +110,7 @@ impl Emitter {
             Node::ToDyn(x) => self.enter_dyn(x, &t.ty, vars)?,
             Node::Written(x, rest) => self.written(x, rest.as_deref(), vars)?,
             Node::Encode(object) => self.encode(object, vars)?,
+            Node::EncodeEach(..) => self.encode_each(t, vars)?,
             _ => return not_a("conversion", t),
         })
     }

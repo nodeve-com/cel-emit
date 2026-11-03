@@ -32,7 +32,7 @@ fn dyn_list(ty: &Type) -> bool {
 }
 
 /// Whether a reference to `t` outlives the statement reading it: what it reads is no temporary.
-fn rooted(t: &Typed) -> bool {
+pub(super) fn rooted(t: &Typed) -> bool {
     match &t.node {
         Node::Var(_) | Node::Local(_) | Node::Item(..) => true,
         Node::Field(x, _) | Node::First(x, _) => rooted(x),

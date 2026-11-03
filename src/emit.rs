@@ -11,6 +11,7 @@
 mod comprehension;
 mod dynamic;
 mod encode;
+mod encode_parts;
 mod messages;
 mod narrow;
 mod node;

@@ -1,11 +1,13 @@
 //! `json.encode(x)`: `x` written as JSON in the module. A message's fields, a message name's, a
 //! literal's, or a map literal's, are written as an object member by member as each computes
-//! ([`Node::Encode`]); a field whose variables hold no value is left out, and so is a nested
+//! ([`Node::Encode`]), and so is each item of a `map` whose body is such a literal
+//! ([`Node::EncodeEach`]); a field whose variables hold no value is left out, and so is a nested
 //! object left with none. With [`Decls::skip_failed`], so is a field whose value errors or holds a
 //! NaN or an infinity, which JSON can't hold. Any other value is written whole
 //! ([`Node::Written`]).
 
 use super::dynamic::fits;
+use super::fold::{fold_of, Fold};
 use super::parts::{held_by_field, is_fields};
 use super::scope::wrap;
 use super::*;
@@ -15,11 +17,36 @@ use crate::walk;
 impl<'a> Lower<'a> {
     /// `json.encode(arg)`: an object written as it computes, or the call on `arg` as a dyn.
     pub(crate) fn encoded(&mut self, arg: &'a SpannedExpr) -> Result<Node, Error> {
+        if let Some(each) = self.encode_each(arg)? {
+            return Ok(each);
+        }
         let v = self.value(arg)?;
         if is_object(&v) {
             return Ok(Node::Encode(self.object(v)?));
         }
         Ok(Node::Call("json_encode".into(), vec![self.written(v)?]))
+    }
+
+    /// `arg`, a `map` or filtered `map` whose body is a map literal of constant string keys, as
+    /// an array of objects written as they compute; none for any other expression.
+    fn encode_each(&mut self, arg: &'a SpannedExpr) -> Result<Option<Node>, Error> {
+        let Expr::Comprehension(c) = &arg.node else {
+            return Ok(None);
+        };
+        let Ok((Fold::Map(_), body)) = fold_of(c) else {
+            return Ok(None);
+        };
+        if self.empty_loop(arg) || !constant_keys(body) {
+            return Ok(None);
+        }
+        let (list, pred, body) = match self.fold(c, true)? {
+            Node::Map(list, body) => (list, None, body),
+            Node::Keep(list, pred, body) => (list, Some(pred), body),
+            _ => return invalid("a map that is no map"),
+        };
+        let body = self.share(*body)?;
+        let object = Typed::new(Type::String, Node::Encode(self.object(body)?));
+        Ok(Some(Node::EncodeEach(list, pred, Box::new(object))))
     }
 
     /// `v`, which [`is_object`], as the object its fields write.
@@ -92,6 +119,16 @@ impl<'a> Lower<'a> {
             Type::Dyn,
             Node::Written(Box::new(t), self.decls.rest.clone()),
         ))
+    }
+}
+
+/// Whether `e` is a map literal whose keys are all strings, none optional.
+fn constant_keys(e: &SpannedExpr) -> bool {
+    match &e.node {
+        Expr::Map(entries) => entries
+            .iter()
+            .all(|m| !m.optional && matches!(m.key.node, Expr::String(_))),
+        _ => false,
     }
 }
 

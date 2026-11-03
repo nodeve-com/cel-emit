@@ -26,6 +26,28 @@ impl Text {
         self.0.truncate(mark);
     }
 
+    /// Whether nothing past an object opened at `mark` is written.
+    pub fn bare(&self, mark: usize) -> bool {
+        self.0.len() == mark.saturating_add(1)
+    }
+
+    /// Starts an array.
+    pub fn open_list(&mut self) {
+        self.0.push(b'[');
+    }
+
+    /// Ends an array.
+    pub fn close_list(&mut self) {
+        self.0.push(b']');
+    }
+
+    /// Starts an array's next item.
+    pub fn item(&mut self) {
+        if self.0.last() != Some(&b'[') {
+            self.0.push(b',');
+        }
+    }
+
     /// Starts an object.
     pub fn open(&mut self) {
         self.0.push(b'{');
@@ -60,6 +82,31 @@ impl Text {
     /// Writes `x`, or `Error::Range` where it holds a NaN or an infinity.
     pub fn value(&mut self, x: Dyn) -> Result<()> {
         write::value(&mut self.0, &x)
+    }
+
+    /// Writes the string `x`.
+    pub fn str(&mut self, x: &str) -> Result<()> {
+        write::string(&mut self.0, x)
+    }
+
+    /// Writes the int `x`.
+    pub fn int(&mut self, x: i64) -> Result<()> {
+        write::value(&mut self.0, &Dyn::Int(x))
+    }
+
+    /// Writes the uint `x`.
+    pub fn uint(&mut self, x: u64) -> Result<()> {
+        write::value(&mut self.0, &Dyn::UInt(x))
+    }
+
+    /// Writes the double `x`, or `Error::Range` where it is NaN or infinite.
+    pub fn double(&mut self, x: f64) -> Result<()> {
+        write::value(&mut self.0, &Dyn::Double(x))
+    }
+
+    /// Writes the bool `x`.
+    pub fn bool(&mut self, x: bool) -> Result<()> {
+        write::value(&mut self.0, &Dyn::Bool(x))
     }
 
     /// Writes the entries of `text`, JSON object text, each value as the text has it: a key of
