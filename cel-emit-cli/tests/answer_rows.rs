@@ -1,112 +1,26 @@
-//! The example expression's program, built by rustc against the cel-emit-runtime this test links,
-//! and run on the example answer.
+//! The example expression's program, built as its own package against this repository's
+//! cel-emit-runtime, and run on the example answer.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+
+mod programs;
 
 const EXPRESSION: &str = include_str!("../../examples/answer_rows/rows.cel");
 const ANSWER: &str = include_str!("../../examples/answer_rows/answer.json");
 const EXPECT: &str = include_str!("../../examples/answer_rows/expect.json");
 const SCHEMA: &str = include_str!("../../examples/answer_rows/answer.schema.json");
 
-/// Each `name` rlib beside this test, newest first.
-fn rlibs(deps: &Path, name: &str) -> Vec<PathBuf> {
-    let prefix = format!("lib{name}-");
-    let mut found: Vec<PathBuf> = std::fs::read_dir(deps)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| {
-            let name = p.file_name().unwrap().to_string_lossy();
-            name.starts_with(&prefix) && name.ends_with(".rlib")
-        })
-        .collect();
-    found.sort_by_key(|p| std::cmp::Reverse(p.metadata().unwrap().modified().unwrap()));
-    found
-}
-
-/// The program, built once as `name`: other builds leave rlibs without the `civil` feature, and
-/// a `serde_json` other than the decode's, which fail.
+/// The program, as its own package `name`, built.
 fn built(name: &str, schema: Option<&str>) -> PathBuf {
     let program = cel_emit_cli::program(EXPRESSION, schema).unwrap();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
-    std::fs::create_dir_all(&dir).unwrap();
-    let (source, exe) = (dir.join("main.rs"), dir.join("main"));
-    std::fs::write(&source, program).unwrap();
-    let deps = std::env::current_exe().unwrap();
-    let deps = deps.parent().unwrap();
-    let schema_runtime = rlibs(deps, "schema_emit_runtime").remove(0);
-    let mut errors = String::new();
-    for runtime in rlibs(deps, "cel_emit_runtime") {
-        for json in rlibs(deps, "serde_json") {
-            let linked = [
-                ("cel_emit_runtime", &runtime),
-                ("schema_emit_runtime", &schema_runtime),
-                ("serde_json", &json),
-            ];
-            match compile(deps, &linked, &source, &exe) {
-                Ok(()) => return exe,
-                Err(stderr) => errors.push_str(&stderr),
-            }
-        }
-    }
-    panic!("no runtime built it: {errors}");
-}
-
-/// `source` built as `exe` against the `linked` crates, or rustc's errors.
-fn compile(
-    deps: &Path,
-    linked: &[(&str, &PathBuf)],
-    source: &Path,
-    exe: &Path,
-) -> Result<(), String> {
-    let mut rustc = Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()));
-    rustc.args(["--edition", "2021", "-Cdebuginfo=0", "-Dwarnings"]);
-    for (name, rlib) in linked {
-        rustc
-            .arg("--extern")
-            .arg(format!("{name}={}", rlib.display()));
-    }
-    let out = rustc
-        .arg("-L")
-        .arg(format!("dependency={}", deps.display()))
-        .arg("-o")
-        .arg(exe)
-        .arg(source)
-        .output()
-        .unwrap();
-    match out.status.success() {
-        true => Ok(()),
-        false => Err(String::from_utf8_lossy(&out.stderr).into_owned()),
-    }
+    let manifest = cel_emit_cli::manifest(name, &program);
+    programs::build(name, &manifest, &[("main.rs", &program)], &["-Dwarnings"])
 }
 
 /// What the program prints for `answer`, and whether it succeeded.
 fn run(exe: &Path, answer: &str) -> (String, bool) {
-    let (out, _, ok) = ran(exe, answer);
+    let (out, _, ok) = programs::run(exe, answer);
     (out, ok)
-}
-
-/// What the program prints for `answer`, what it says on failing, and whether it succeeded.
-fn ran(exe: &Path, answer: &str) -> (String, String, bool) {
-    let mut child = Command::new(exe)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(answer.as_bytes())
-        .unwrap();
-    let out = child.wait_with_output().unwrap();
-    (
-        String::from_utf8(out.stdout).unwrap(),
-        String::from_utf8(out.stderr).unwrap(),
-        out.status.success(),
-    )
 }
 
 #[test]
@@ -153,7 +67,7 @@ fn a_program_over_a_schema_names_no_dyn_read() {
 fn an_answer_breaking_the_schema_fails_by_name() {
     let exe = built("answer_rows_broken", Some(SCHEMA));
     let broken = ANSWER.replace("\"total\": 13000", "\"total\": \"none\"");
-    let (rows, said, ok) = ran(&exe, &broken);
+    let (rows, said, ok) = programs::run(&exe, &broken);
     assert!(!ok && rows.is_empty(), "{rows}");
     let place = "options[0].pricing_potential_best.total";
     assert!(said.contains(place), "{said}");

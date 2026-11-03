@@ -101,41 +101,43 @@ fn emitted(
     Ok((output, items.code))
 }
 
-/// How a program's `main` hands stdin, `text`, to `output`: `output`'s parameter, the statements
-/// making its argument from `text`, and the argument.
+/// How a program's `output` reads its text: the statements binding `input` from `text`, and
+/// `expression`'s parameter.
 struct Entry<'a> {
-    param: &'a str,
     decode: &'a str,
-    arg: &'a str,
+    param: &'a str,
 }
 
-/// The whole program: `prelude`, `items`, `output` as a function, and a `main` calling it.
-fn source(prelude: &str, items: &str, output: &str, entry: Entry) -> Result<String, String> {
-    let Entry { param, decode, arg } = entry;
+/// The whole program: `prelude`, `items`, the CEL as `expression`, `output` from input text to
+/// output text, and a `main` reading stdin.
+fn source(prelude: &str, items: &str, expression: &str, entry: Entry) -> Result<String, String> {
+    let Entry { decode, param } = entry;
     formatted(&format!(
         "use ::cel_emit_runtime as s;
         {prelude}
         {items}
-        fn output({param}) -> s::Result<String> {{
-            Ok({output})
+        fn expression({param}) -> s::Result<String> {{
+            Ok({expression})
+        }}
+        pub fn output(text: &str) -> Result<String, String> {{
+            {decode}
+            expression(input).map_err(|e| format!(\"{{e:?}}\"))
         }}
         fn main() -> Result<(), String> {{
             let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;
-            {decode}
-            println!(\"{{}}\", output({arg}).map_err(|e| format!(\"{{e:?}}\"))?);
+            println!(\"{{}}\", output(&text)?);
             Ok(())
         }}",
     ))
 }
 
 fn dynamic(expression: &str) -> Result<String, String> {
-    let whole = format!("cel.bind(input, json.decode(text), json.encode({expression}\n))");
-    let decls = declarations("text", Type::String);
-    let (output, items) = emitted(&whole, &decls, "text", Box::new(NoMessages))?;
+    let whole = format!("json.encode({expression}\n)");
+    let decls = declarations("input", Type::Dyn);
+    let (output, items) = emitted(&whole, &decls, "input", Box::new(NoMessages))?;
     let entry = Entry {
-        param: "text: String",
-        decode: "",
-        arg: "text",
+        decode: "let input = &s::json::decode(text).map_err(|e| format!(\"{e:?}\"))?;",
+        param: "input: &s::dynamic::Dyn",
     };
     source("", &items, &output, entry)
 }
@@ -170,20 +172,22 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as s; {types} }}");
     let entry = Entry {
-        param: &format!("input: &types::{root}"),
         decode:
-            "let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-            let input = types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))?;",
-        arg: "&input",
+            "let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+            let input = &types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))?;",
+        param: &format!("input: &types::{root}"),
     };
     source(&prelude, &items, &output, entry)
 }
 
 /// What a program over a schema's types links beside the runtime: schema-emit-runtime at the rev
 /// `schema-emit` is pinned to here, so its decode matches what wrote it.
-const TYPED: &str = "serde_json = \"1\"\n\
-    schema-emit-runtime = { git = \"https://github.com/nodeve-com/schema-emit\", \
-    rev = \"8b03dbe36b771d3200c3b622825b7fc16da89fc6\", features = [\"decode\"] }\n";
+const TYPED: &str = concat!(
+    "serde_json = \"1\"\n",
+    "schema-emit-runtime = { git = \"https://github.com/nodeve-com/schema-emit\", rev = \"",
+    env!("SCHEMA_EMIT_REV"),
+    "\", features = [\"decode\"] }\n",
+);
 
 /// A Cargo manifest for `program`, built against this repo's cel-emit-runtime, with the `civil`
 /// feature only if it calls those functions, and what a schema's types need only if it has them.

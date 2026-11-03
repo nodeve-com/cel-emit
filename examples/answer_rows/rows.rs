@@ -1,10 +1,10 @@
 //! `rows.cel` written by hand: one flat row per option in an answer.
 //!
-//! Needs `serde` (with `derive`), `serde_json`, and `jiff`.
+//! Needs `serde` (with `derive`), `serde_json`, `chrono`, `chrono-tz`, and `jiff`.
 
-use jiff::civil::DateTime;
-use jiff::tz::TimeZone;
-use jiff::{SpanRelativeTo, Timestamp};
+use chrono::{DateTime, NaiveDateTime, SecondsFormat, TimeZone, Utc};
+use chrono_tz::Tz;
+use jiff::SpanRelativeTo;
 use serde::{Deserialize, Serialize};
 
 type Error = Box<dyn std::error::Error>;
@@ -47,8 +47,8 @@ pub fn rows(answer: &str) -> Result<String, Error> {
         rows.push(Row {
             origin: from.locode.clone(),
             dest: to.locode.clone(),
-            depart_utc: depart_utc.to_string(),
-            arrive_utc: arrive_utc.to_string(),
+            depart_utc: depart_utc.to_rfc3339_opts(SecondsFormat::AutoSi, true),
+            arrive_utc: arrive_utc.to_rfc3339_opts(SecondsFormat::AutoSi, true),
             depart_local,
             arrive_local,
             fare: product.title.clone(),
@@ -56,7 +56,7 @@ pub fn rows(answer: &str) -> Result<String, Error> {
             currency: answer.currency.clone(),
             total_minor: option.pricing.total,
             best_total_minor: option.pricing_potential_best.as_ref().map(|b| b.total),
-            duration_min: arrive_utc.duration_since(depart_utc).as_secs() / 60,
+            duration_min: (arrive_utc - depart_utc).num_minutes(),
             active_period_min: minutes(&period.multi_usage_rules.active_period.period)?,
             seats_available: option.capacities.available,
             bookable: option.status == "available",
@@ -68,12 +68,11 @@ pub fn rows(answer: &str) -> Result<String, Error> {
 
 /// A local time such as `2030-01-15T20:00:00` in an IANA zone. A time the clocks skip or repeat
 /// is an error.
-fn to_utc(local: &str, zone: &str) -> Result<Timestamp, Error> {
-    let local: DateTime = local.parse()?;
-    let zoned = TimeZone::get(zone)?
-        .to_ambiguous_zoned(local)
-        .unambiguous()?;
-    Ok(zoned.timestamp())
+fn to_utc(local: &str, zone: &str) -> Result<DateTime<Utc>, Error> {
+    let local: NaiveDateTime = local.parse()?;
+    let zone: Tz = zone.parse()?;
+    let zoned = zone.from_local_datetime(&local).single();
+    Ok(zoned.ok_or("a skipped or repeated local time")?.to_utc())
 }
 
 /// An ISO 8601 duration such as `P1DT12H` in whole minutes, a day being 24 hours.

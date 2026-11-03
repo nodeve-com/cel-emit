@@ -25,20 +25,21 @@ Wall-clock time is no measure here: load and frequency move it between runs. Ins
 
 ## Steps
 
-1. **The harness.** `cel-emit-cli/tests/references.rs` builds each reference and its generated program (with the schema when the example has one) the way `answer_rows.rs` builds the program. It fails when either output differs from `expect.json`, and prints the measures as a table. From step 5, allocation calls gate: each pair fails when the generated program's count runs past the reference's by more than the pair's ratio, set at the goal, never at a measured figure. The table only shows every other measure: source lines gain nothing from a ceiling, and IR moves with each rustc.
-2. **Instructions.** `scripts/instructions.sh` builds the same pairs and runs each under callgrind, printing totals and the costliest functions. It runs on any Linux host with valgrind; nothing runs it automatically.
-3. **`answer_rows` as the first pair.** `examples/answer_rows/rows.rs` exists; it joins the harness with step 1.
-4. **A finding per gap.** Each measure where the generated program runs far past its reference gets a cause, then a fix in the generator or a reason it stays. An allocation gap that stays has its reason in research/, and its pair's ratio widens by what that reason accounts for.
-5. **The allocation gate on.** Once step 4 has fixed or explained every allocation gap, the harness enforces the ratios.
-6. **The interpreter beside them.** The harness and `scripts/instructions.sh` save each example's `CheckedExpr`, build the interpreter program for it, and add its column. Its output must match `expect.json` too; it never gates cost.
-7. **Why from the harness.** README's Why states the interpreter's cost against cel-emit's from these figures, approximately, and names the command that prints them. The board benchmark and the CEL-to-wasm comparison leave README: nothing in this repo reruns them.
+`cel-emit-cli/tests/references.rs` builds each pair and prints the table (`--no-capture`); `scripts/instructions.sh` runs the pairs under callgrind. `answer_rows` is the first pair.
 
-## Gaps already seen in `answer_rows`
+1. **A finding per gap.** Each measure where the generated program runs far past its reference gets a cause, then a fix in the generator or a reason it stays. An allocation gap that stays has its reason in research/, and its pair's ratio widens by what that reason accounts for.
+2. **The allocation gate on.** Once step 1 has fixed or explained every allocation gap, allocation calls gate: each pair fails when the generated program's count runs past the reference's by more than the pair's ratio, set at the goal, never at a measured figure. Every other measure only shows: source lines gain nothing from a ceiling, and IR moves with each rustc.
+3. **The interpreter beside them.** The harness and `scripts/instructions.sh` save each example's `CheckedExpr`, build the interpreter program for it, and add its column. Its output must match `expect.json` too; it never gates cost.
+4. **Why from the harness.** README's Why states the interpreter's cost against cel-emit's from these figures, approximately, and names the command that prints them. The board benchmark and the CEL-to-wasm comparison leave README: nothing in this repo reruns them.
+5. **Instructions run once.** `scripts/instructions.sh` has never run: no Linux host with valgrind was at hand. Its first run checks it.
 
-Read from the generated `output`, unmeasured:
+## Gaps in `answer_rows`
 
-- An output map with constant keys becomes a dynamic map per row, each key a new `String`, encoded afterwards; a struct with `Serialize` writes it directly.
-- Work that doesn't change inside a `filter` or `first` closure runs per element: the closure indexes `row.legs[0]` for every location tried.
-- Runtime functions take `String` by value, so callers clone; `to_utc` and `iso_duration` among them.
-- String `==`, `+`, and `&&` over known types each return a `Result`. Why is unread; the reason, if any, goes here before they change.
-- The schema's decode reads text into a `serde_json::Value`, then into structs: two passes. That decode is schema-emit's.
+Measured by phase, allocation calls:
+
+- **The decode's `serde_json::Value`** makes most of the generated program's allocations and nearly all its peak memory. The schema decode after it allocates about what the reference's whole parse does. A decode straight from text, as serde's derive reads, ends the pass. That decode is schema-emit's.
+- **The expression** allocates far more than the reference's rows do. Causes read from the generated `expression`, each unconfirmed until its fix moves the count:
+  - An output map with constant keys becomes a dynamic map per row, each key a new `String`, encoded afterwards; a struct with `Serialize` writes it directly.
+  - Work that doesn't change inside a `filter` or `first` closure runs per element: the closure indexes `row.legs[0]` for every location tried.
+  - Runtime functions take `String` by value, so callers clone; `to_utc` and `iso_duration` among them.
+  - String `==`, `+`, and `&&` over known types each return a `Result`. Why is unread; the reason, if any, goes here before they change.
