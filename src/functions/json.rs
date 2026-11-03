@@ -1,7 +1,7 @@
 //! `json.decode` and `json.encode` as the interpreter runs them, for the differential harness to
 //! compare with cel-emit-runtime's: numbers decode as integer text to int (uint past int64), other
-//! numbers to double, a repeated object key keeping its last value; malformed text or a value
-//! JSON can't hold is an error. The shaped `json.decode(text, Message)` is declared without a body:
+//! numbers to double, a repeated object key keeping its last value; a timestamp and a duration
+//! encode as their text; malformed text or a value JSON can't hold is an error. The shaped `json.decode(text, Message)` is declared without a body:
 //! the interpreter has no message values to build.
 
 use std::fmt;
@@ -20,10 +20,7 @@ pub(super) fn declarations() -> [FunctionDecl; 2] {
     .with_type_params(vec!["T".to_string()]);
     let decode = OverloadDecl::function("json_decode", vec![CelType::String], CelType::Dyn)
         .with_impl(|args| match args {
-            [Value::String(text)] => match serde_json::from_str::<Parsed>(text) {
-                Ok(Parsed(v)) => v,
-                Err(e) => Value::error(format!("json.decode: {e}")),
-            },
+            [Value::String(text)] => decoded(text),
             _ => Value::error("json.decode takes a string"),
         });
     let encode = OverloadDecl::function("json_encode", vec![CelType::Dyn], CelType::String)
@@ -40,6 +37,14 @@ pub(super) fn declarations() -> [FunctionDecl; 2] {
     ]
 }
 
+/// JSON `text` as the value `json.decode` gives, or its error.
+pub fn decoded(text: &str) -> Value {
+    match serde_json::from_str::<Parsed>(text) {
+        Ok(Parsed(v)) => v,
+        Err(e) => Value::error(format!("json.decode: {e}")),
+    }
+}
+
 /// `v` as JSON, if JSON holds it.
 fn written(v: &Value) -> Option<serde_json::Value> {
     use serde_json::Value as J;
@@ -50,6 +55,10 @@ fn written(v: &Value) -> Option<serde_json::Value> {
         Value::UInt(u) => J::from(*u),
         Value::Double(d) => J::Number(serde_json::Number::from_f64(*d)?),
         Value::String(s) => J::String(s.to_string()),
+        Value::Timestamp(t) => {
+            J::String(cel_emit_runtime::time::timestamp_text(t.to_datetime_utc()?))
+        }
+        Value::Duration(d) => J::String(cel_emit_runtime::time::duration_text(d.to_chrono())),
         Value::List(items) => J::Array(items.iter().map(written).collect::<Option<_>>()?),
         Value::Map(m) => J::Object(
             m.iter()

@@ -1,48 +1,37 @@
 //! Each example holding a reference, `<name>.rs` beside its `<name>.cel`, built beside its
-//! generated program: both must give the example's `expect.json`, and a table prints what each
-//! costs. `programs.tsv` in the scratch directory lists each executable and its input.
+//! generated program and cel-core's interpreter running its `.cel`: each must give the example's
+//! `expect.json`, and a table per example prints what each costs. `programs.tsv` in the scratch
+//! directory lists each executable, its phase, and its input.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use prost::Message as _;
+
+#[path = "references/cost.rs"]
+mod cost;
 mod programs;
 
+use cost::{ir, llvm_ir, table, Cost, Counts};
+
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
+const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 
 /// Each measured program's allocator, counting.
 const COUNT: &str = include_str!("references/count.rs");
 
-/// The executable's `main`: `program::{function}` once on stdin, counted, its allocations on
-/// stderr's first line.
-fn main_rs(function: &str) -> String {
+/// The interpreter program's `main`.
+const INTERPRETER: &str = include_str!("references/interpreter.rs");
+
+/// A generated program's and a reference's `main`.
+const COMPILED: &str = include_str!("references/compiled.rs");
+
+/// The executable's `main`: `program`'s `decode` and `expression` functions, by the names given,
+/// counted apart.
+fn main_rs([decode, expression]: [&str; 2]) -> String {
     format!(
-        r#"mod count;
-#[allow(dead_code)]
-mod program;
-
-#[global_allocator]
-static COUNTING: count::Counting = count::Counting;
-
-#[inline(never)]
-fn measured(text: &str) -> Result<String, String> {{
-    program::{function}(text).map_err(|e| format!("{{e:?}}"))
-}}
-
-fn main() {{
-    let text = std::io::read_to_string(std::io::stdin()).unwrap();
-    count::start();
-    let out = measured(&text);
-    let (calls, bytes, peak) = count::stop();
-    eprintln!("{{calls}} {{bytes}} {{peak}}");
-    match out {{
-        Ok(out) => println!("{{out}}"),
-        Err(e) => {{
-            eprintln!("{{e}}");
-            std::process::exit(1);
-        }}
-    }}
-}}
-"#
+        "{COMPILED}\n#[allow(dead_code)]\nmod program;\n\
+        use program::{{{decode} as decode, {expression} as expression}};\n"
     )
 }
 
@@ -50,9 +39,9 @@ fn main() {{
 const REFERENCE: &str = "\n[dependencies]\n\
     serde = { version = \"1\", features = [\"derive\"] }\n\
     serde_json = \"1\"\n\
-    chrono = \"0.4\"\n\
+    chrono = { version = \"0.4\", default-features = false, features = [\"std\"] }\n\
     chrono-tz = \"0.10\"\n\
-    jiff = \"0.2\"\n";
+    jiff = { version = \"0.2\", default-features = false, features = [\"std\"] }\n";
 
 /// An example holding a reference.
 struct Example {
@@ -96,136 +85,129 @@ fn example(dir: &Path) -> Option<Example> {
     })
 }
 
-/// The one public function of a reference.
-fn public(reference: &str) -> &str {
-    let after = reference
-        .split("pub fn ")
-        .nth(1)
-        .expect("no public function");
-    after.split('(').next().unwrap()
+/// A reference's two public functions, in order: its decode and its expression.
+fn public(reference: &str) -> [&str; 2] {
+    let mut names = reference.split("pub fn ").skip(1);
+    let mut next = || names.next().expect("a reference has two public functions");
+    let mut name = || next().split('(').next().unwrap();
+    [name(), name()]
 }
 
-/// What one program costs.
-struct Cost {
-    lines: usize,
-    bytes: usize,
-    ir: Ir,
-    binary: u64,
-    calls: usize,
-    allocated: usize,
-    peak: usize,
+/// What the interpreter program links: cel-core and its protobuf form, cel-emit's functions as
+/// the interpreter runs them, and cel-emit-runtime's civil time for the embedder's.
+fn interpreter_manifest(name: &str) -> String {
+    let core = "{ git = \"https://github.com/nodeve-com/cel-core\", branch = \"loom\" }";
+    format!(
+        "[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n\n\
+         [dependencies]\ncel-core = {core}\ncel-core-proto = {core}\nprost = \"0.14\"\n\
+         cel-emit = {{ path = {ROOT:?} }}\n\
+         cel-emit-runtime = {{ path = \"{ROOT}/cel-emit-runtime\", features = [\"civil\"] }}\n"
+    )
 }
 
-/// LLVM IR lines and defined functions, for the crate and for its own: `measured`, where the
-/// expression inlines, and the `program` module.
-#[derive(Default)]
-struct Ir {
-    lines: usize,
-    defines: usize,
-    own_lines: usize,
-    own_defines: usize,
+/// `example`'s expression, as its generated program computes it, parsed and checked against the
+/// same declarations, as a `CheckedExpr` protobuf.
+fn checked(example: &Example) -> Vec<u8> {
+    let decls = cel_emit_cli::declared(example.schema.as_deref()).unwrap();
+    let env = cel_emit::env::environment(&decls);
+    let source = cel_emit_cli::encoded(&example.cel);
+    let ast = cel_emit::macros::compile(&env, &source).unwrap();
+    let info = ast.type_info().unwrap();
+    cel_core_proto::to_checked_expr_from_ast(info, ast.expr(), ast.source()).encode_to_vec()
 }
 
-fn ir(text: &str) -> Ir {
-    let mut ir = Ir::default();
-    let mut own = false;
-    for line in text.lines() {
-        ir.lines += 1;
-        if line.starts_with("define ") {
-            ir.defines += 1;
-            own = line.contains("program") || line.contains("measured");
-            ir.own_defines += usize::from(own);
-        }
-        ir.own_lines += usize::from(own);
-        own &= line != "}";
-    }
-    ir
-}
-
-/// The LLVM IR the build of `exe` wrote beside it, asked for by `--emit=llvm-ir,link`.
-fn llvm_ir(exe: &Path) -> String {
-    let deps = exe.parent().unwrap().join("deps");
-    let prefix = format!("{}-", exe.file_name().unwrap().to_string_lossy());
-    let newest = std::fs::read_dir(deps)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| {
-            let file = p.file_name().unwrap().to_string_lossy();
-            file.starts_with(&prefix) && file.ends_with(".ll")
-        })
-        .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
-        .unwrap();
-    std::fs::read_to_string(newest).unwrap()
-}
-
-/// One of an example's programs: its kind, its manifest, and the public function of its source.
+/// One of an example's programs: its kind, its manifest, its files under `src/`, and its own
+/// source, if measured.
 struct Program<'a> {
     kind: &'static str,
     manifest: String,
-    function: &'a str,
-    source: &'a str,
+    files: Vec<(&'static str, Vec<u8>)>,
+    source: Option<&'a str>,
 }
 
-/// What a program's output and stderr's first line, its allocations, give.
-fn checked(example: &Example, package: &str, exe: &Path) -> [usize; 3] {
+/// A generated program or a reference: `source`, its decode and expression `functions` called by
+/// `main_rs`.
+fn compiled<'a>(
+    kind: &'static str,
+    manifest: String,
+    source: &'a str,
+    functions: [&str; 2],
+) -> Program<'a> {
+    let files = vec![
+        ("main.rs", main_rs(functions).into_bytes()),
+        ("program.rs", source.as_bytes().to_vec()),
+        ("count.rs", COUNT.as_bytes().to_vec()),
+    ];
+    Program {
+        kind,
+        manifest,
+        files,
+        source: Some(source),
+    }
+}
+
+/// cel-core's interpreter running `example`'s checked expression.
+fn interpreted(example: &Example) -> Program<'static> {
+    let files = vec![
+        ("main.rs", INTERPRETER.as_bytes().to_vec()),
+        ("checked.pb", checked(example)),
+        ("count.rs", COUNT.as_bytes().to_vec()),
+    ];
+    Program {
+        kind: "interpreter",
+        manifest: interpreter_manifest(&format!("{}_interpreter", example.name)),
+        files,
+        source: None,
+    }
+}
+
+/// What a program's output gives, checked against `example`'s expectation, and its stderr: a line
+/// per phase, its name and counts.
+fn phases(example: &Example, package: &str, exe: &Path) -> Vec<(String, Counts)> {
     let (out, said, ok) = programs::run(exe, &example.input);
     assert!(ok, "{package}: {said}");
     let json = |t: &str| serde_json::from_str::<serde_json::Value>(t).unwrap();
     assert_eq!(json(&out), json(&example.expect), "{package}");
-    let first = said.lines().next().unwrap_or_default();
-    let counts: Vec<usize> = first.split(' ').map(|n| n.parse().unwrap()).collect();
-    [counts[0], counts[1], counts[2]]
+    let phase = |line: &str| {
+        let mut words = line.split(' ');
+        let name = words.next().unwrap().to_string();
+        let counts: Vec<usize> = words.map(|n| n.parse().unwrap()).collect();
+        (name, [counts[0], counts[1], counts[2]])
+    };
+    said.lines().map(phase).collect()
 }
 
 /// `program`, as the package `<example>_<kind>`, built, run on `example`'s input, checked against
-/// its expectation, measured into `table`, and listed with its input in `listed`.
-fn measured(example: &Example, program: &Program, table: &mut String, listed: &mut String) {
+/// its expectation, and measured; each phase listed with its input in `listed`.
+fn measured(example: &Example, program: &Program, listed: &mut String) -> Cost {
     let package = format!("{}_{}", example.name, program.kind);
-    let main = main_rs(program.function);
-    let files = [
-        ("main.rs", main.as_str()),
-        ("program.rs", program.source),
-        ("count.rs", COUNT),
-    ];
-    let exe = programs::build(
-        &package,
-        &program.manifest,
-        &files,
-        &["--emit=llvm-ir,link"],
-    );
-    let [calls, allocated, peak] = checked(example, &package, &exe);
-    let cost = Cost {
-        lines: program.source.lines().count(),
-        bytes: program.source.len(),
-        ir: ir(&llvm_ir(&exe)),
-        binary: exe.metadata().unwrap().len(),
-        calls,
-        allocated,
-        peak,
+    let files: Vec<(&str, &[u8])> = program
+        .files
+        .iter()
+        .map(|(f, b)| (*f, b.as_slice()))
+        .collect();
+    let rustc: &[&str] = match program.source {
+        Some(_) => &["--emit=llvm-ir,link"],
+        None => &[],
     };
-    row(table, &package, &cost);
-    let (exe, input) = (exe.display(), example.input_path.display());
-    writeln!(listed, "{}\t{}\t{exe}\t{input}", example.name, program.kind).unwrap();
+    let exe = programs::build(&package, &program.manifest, &files, rustc);
+    let phases = phases(example, &package, &exe);
+    let (exe_path, input) = (exe.display(), example.input_path.display());
+    for (phase, _) in &phases {
+        writeln!(
+            listed,
+            "{}\t{}\t{phase}\t{exe_path}\t{input}",
+            example.name, program.kind
+        )
+        .unwrap();
+    }
+    Cost {
+        source: program.source.map(|s| [s.lines().count(), s.len()]),
+        ir: program.source.map(|_| ir(&llvm_ir(&exe))),
+        binary: usize::try_from(exe.metadata().unwrap().len()).unwrap(),
+        phases,
+    }
 }
-
-fn row(table: &mut String, program: &str, c: &Cost) {
-    let Ir {
-        lines,
-        defines,
-        own_lines,
-        own_defines,
-    } = c.ir;
-    writeln!(
-        table,
-        "| {program} | {} | {} | {lines} | {defines} | {own_lines} | {own_defines} | {} | {} | {} | {} |",
-        c.lines, c.bytes, c.binary, c.calls, c.allocated, c.peak
-    )
-    .unwrap();
-}
-
-const HEAD: &str = "| Program | Lines | Bytes | IR lines | IR functions | Own IR lines \
-    | Own IR functions | Binary | Allocations | Bytes allocated | Peak bytes |\n\
-    | - | - | - | - | - | - | - | - | - | - | - |\n";
 
 /// Every example holding a reference, by name.
 fn examples() -> Vec<Example> {
@@ -239,28 +221,28 @@ fn examples() -> Vec<Example> {
 }
 
 #[test]
-fn each_reference_and_its_generated_program_give_the_example_output() {
-    let (mut table, mut listed) = (String::from(HEAD), String::new());
+fn each_reference_its_generated_program_and_the_interpreter_give_the_example_output() {
+    let (mut tables, mut listed) = (String::new(), String::new());
     for example in &examples() {
         let program = cel_emit_cli::program(&example.cel, example.schema.as_deref()).unwrap();
-        let generated = Program {
-            kind: "generated",
-            manifest: cel_emit_cli::manifest(&format!("{}_generated", example.name), &program),
-            function: "output",
-            source: &program,
-        };
+        let name = format!("{}_generated", example.name);
+        let manifest = cel_emit_cli::manifest(&name, &program);
+        let generated = compiled("generated", manifest, &program, ["decode", "expression"]);
         let name = format!("{}_reference", example.name);
-        let reference = Program {
-            kind: "reference",
-            manifest: format!("[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n{REFERENCE}"),
-            function: public(&example.reference),
-            source: &example.reference,
-        };
-        for program in [generated, reference] {
-            measured(example, &program, &mut table, &mut listed);
-        }
+        let manifest = format!("[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n{REFERENCE}");
+        let reference = compiled(
+            "reference",
+            manifest,
+            &example.reference,
+            public(&example.reference),
+        );
+        let costs: Vec<(&str, Cost)> = [generated, reference, interpreted(example)]
+            .iter()
+            .map(|p| (p.kind, measured(example, p, &mut listed)))
+            .collect();
+        tables.push_str(&table(&example.name, &costs));
     }
     let list = Path::new(env!("CARGO_TARGET_TMPDIR")).join("programs/programs.tsv");
     std::fs::write(list, listed).unwrap();
-    println!("{table}");
+    println!("{tables}");
 }

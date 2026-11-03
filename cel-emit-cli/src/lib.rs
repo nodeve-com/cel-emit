@@ -101,27 +101,30 @@ fn emitted(
     Ok((output, items.code))
 }
 
-/// How a program's `output` reads its text: the statements binding `input` from `text`, and
-/// `expression`'s parameter.
+/// How a program reads its text: `decode`'s body, from `text` to a `Result` of the input, and
+/// the input's type.
 struct Entry<'a> {
     decode: &'a str,
-    param: &'a str,
+    input: &'a str,
 }
 
-/// The whole program: `prelude`, `items`, the CEL as `expression`, `output` from input text to
-/// output text, and a `main` reading stdin.
+/// The whole program: `prelude`, `items`, `decode` from input text to the input, the CEL as
+/// `expression` from the input to output text, `output` calling the two, and a `main` reading
+/// stdin.
 fn source(prelude: &str, items: &str, expression: &str, entry: Entry) -> Result<String, String> {
-    let Entry { decode, param } = entry;
+    let Entry { decode, input } = entry;
     formatted(&format!(
         "use ::cel_emit_runtime as s;
         {prelude}
         {items}
-        fn expression({param}) -> s::Result<String> {{
+        pub fn decode(text: &str) -> Result<{input}, String> {{
+            {decode}
+        }}
+        pub fn expression(input: &{input}) -> s::Result<String> {{
             Ok({expression})
         }}
         pub fn output(text: &str) -> Result<String, String> {{
-            {decode}
-            expression(input).map_err(|e| format!(\"{{e:?}}\"))
+            expression(&decode(text)?).map_err(|e| format!(\"{{e:?}}\"))
         }}
         fn main() -> Result<(), String> {{
             let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;
@@ -131,13 +134,30 @@ fn source(prelude: &str, items: &str, expression: &str, entry: Entry) -> Result<
     ))
 }
 
+/// `expression` as a program computes it: its value as JSON text.
+pub fn encoded(expression: &str) -> String {
+    format!("json.encode({expression}\n)")
+}
+
+/// What a program's expression checks against: the functions, and `input`, dynamic JSON or with
+/// `schema` the type it describes.
+pub fn declared(schema: Option<&str>) -> Result<Decls, String> {
+    let ty = match schema {
+        Some(schema) => {
+            let (ir, root) = lowered(schema)?;
+            schema_types::record(&ir, root).map_err(|e| e.to_string())?
+        }
+        None => Type::Dyn,
+    };
+    Ok(declarations("input", ty))
+}
+
 fn dynamic(expression: &str) -> Result<String, String> {
-    let whole = format!("json.encode({expression}\n)");
-    let decls = declarations("input", Type::Dyn);
-    let (output, items) = emitted(&whole, &decls, "input", Box::new(NoMessages))?;
+    let decls = declared(None)?;
+    let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(NoMessages))?;
     let entry = Entry {
-        decode: "let input = &s::json::decode(text).map_err(|e| format!(\"{e:?}\"))?;",
-        param: "input: &s::dynamic::Dyn",
+        decode: "s::json::decode(text).map_err(|e| format!(\"{e:?}\"))",
+        input: "s::dynamic::Dyn",
     };
     source("", &items, &output, entry)
 }
@@ -152,11 +172,15 @@ fn records(schema: &Schema, named: &[String]) -> Vec<(Vec<Field>, String)> {
     found.collect()
 }
 
-fn typed(expression: &str, schema: &str) -> Result<String, String> {
+/// `schema`, a JSON Schema document, as schema-emit's models, and the root's index.
+fn lowered(schema: &str) -> Result<(Schema, usize), String> {
     let document: serde_json::Value = serde_json::from_str(schema).map_err(|e| e.to_string())?;
     let shared = serde_json::Map::new();
-    let (ir, root) = schema_emit::json_schema::lower("Input", &document, &shared, &[])
-        .map_err(|e| e.to_string())?;
+    schema_emit::json_schema::lower("Input", &document, &shared, &[]).map_err(|e| e.to_string())
+}
+
+fn typed(expression: &str, schema: &str) -> Result<String, String> {
+    let (ir, root) = lowered(schema)?;
     let ty = schema_types::record(&ir, root).map_err(|e| e.to_string())?;
     let decls = declarations("input", ty);
     let named = names(&ir);
@@ -167,15 +191,14 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
     let messages = Models {
         records: records(&ir, &named),
     };
-    let whole = format!("json.encode({expression}\n)");
-    let (output, items) = emitted(&whole, &decls, "input", Box::new(messages))?;
+    let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(messages))?;
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as s; {types} }}");
     let entry = Entry {
         decode:
             "let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-            let input = &types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))?;",
-        param: &format!("input: &types::{root}"),
+            types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))",
+        input: &format!("types::{root}"),
     };
     source(&prelude, &items, &output, entry)
 }

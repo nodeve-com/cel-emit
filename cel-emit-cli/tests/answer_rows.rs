@@ -14,7 +14,12 @@ const SCHEMA: &str = include_str!("../../examples/answer_rows/answer.schema.json
 fn built(name: &str, schema: Option<&str>) -> PathBuf {
     let program = cel_emit_cli::program(EXPRESSION, schema).unwrap();
     let manifest = cel_emit_cli::manifest(name, &program);
-    programs::build(name, &manifest, &[("main.rs", &program)], &["-Dwarnings"])
+    programs::build(
+        name,
+        &manifest,
+        &[("main.rs", program.as_bytes())],
+        &["-Dwarnings"],
+    )
 }
 
 /// What the program prints for `answer`, and whether it succeeded.

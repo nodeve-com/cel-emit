@@ -26,6 +26,11 @@ syn = { version = "2", features = ["full", "parsing"] }
 [dev-dependencies]
 cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
 schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "22051deb5ac14fa7236a4141c22cff6a23367c2f", features = ["decode"] }
+# An expression checked ahead of time and saved as a `CheckedExpr`, for the interpreter program
+# (tests/references.rs).
+cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+cel-core-proto = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+prost = "0.14"
 
 [lints.clippy]
 too_many_lines = "warn"

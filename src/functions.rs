@@ -14,6 +14,8 @@ use crate::types::Type;
 mod json;
 mod lists;
 
+pub use json::decoded as json_value;
+
 /// A function an embedder adds: its CEL declaration, and each overload's Rust, by its id: the
 /// path of a function taking the overload's arguments in order, a method's receiver first, and
 /// returning `cel_emit_runtime::Result` of its result, as cel-emit-runtime's do.

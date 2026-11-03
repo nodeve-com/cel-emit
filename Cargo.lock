@@ -110,9 +110,12 @@ dependencies = [
 name = "cel-emit-cli"
 version = "0.0.0"
 dependencies = [
+ "cel-core",
+ "cel-core-proto",
  "cel-emit",
  "cel-emit-runtime",
  "prettyplease",
+ "prost",
  "schema-emit",
  "schema-emit-runtime",
  "serde_json",

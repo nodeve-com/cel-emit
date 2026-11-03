@@ -9,10 +9,13 @@ use serde::{Deserialize, Serialize};
 
 type Error = Box<dyn std::error::Error>;
 
-/// Reads an answer as JSON and returns its rows as JSON.
-pub fn rows(answer: &str) -> Result<String, Error> {
-    let answer: Answer = serde_json::from_str(answer)?;
+/// Reads an answer from JSON.
+pub fn answer(text: &str) -> Result<Answer, Error> {
+    Ok(serde_json::from_str(text)?)
+}
 
+/// An answer's rows, as JSON.
+pub fn rows(answer: &Answer) -> Result<String, Error> {
     let location = |id: &str| {
         answer
             .locations
@@ -102,7 +105,7 @@ struct Row {
 }
 
 #[derive(Deserialize)]
-struct Answer {
+pub struct Answer {
     currency: String,
     options: Vec<TravelOption>,
     products: Vec<Product>,

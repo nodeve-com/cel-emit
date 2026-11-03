@@ -17,7 +17,7 @@ const PROFILE: &str = "\n[profile.release]\ncodegen-units = 1\nstrip = true\n";
 
 /// The package `name`, `manifest` with each of `files` under `src/`, built; its executable.
 /// `rustc` passes those arguments to the package's own compile.
-pub fn build(name: &str, manifest: &str, files: &[(&str, &str)], rustc: &[&str]) -> PathBuf {
+pub fn build(name: &str, manifest: &str, files: &[(&str, &[u8])], rustc: &[&str]) -> PathBuf {
     let (dir, target) = dirs(name);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("Cargo.toml"), format!("{manifest}{PROFILE}")).unwrap();
