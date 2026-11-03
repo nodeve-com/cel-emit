@@ -34,10 +34,7 @@ Wall-clock time is no measure here: load and frequency move it between runs. Ins
 
 ## Gaps in `answer_rows`
 
-Measured by phase, allocation calls:
+Measured by phase:
 
-- **The decode** reads the input text through schema-emit, allocating about what the reference's serde derive does.
-- **The expression** allocates about what the reference's rows do. What stays costs instructions, not allocations, each unconfirmed until callgrind on Linux shows it:
-  - Work that doesn't change inside a `filter` or `first` closure runs per element: the closure indexes `row.legs[0]` for every location tried.
-  - String `==`, `+`, and `&&` over known types each return a `Result`. Why is unread; the reason, if any, goes here before they change.
-  - Each output member writes through its own let and typed JSON call, more own IR than one dynamic map encoded once.
+- **The decode** allocates about what the reference's serde derive does, but executes far more instructions, past the interpreter's decode. Each nesting level reads its value's text again: a record collects its fields' slices, then each field reads its slice. One pass over the text, as derive reads, ends it. That decode is schema-emit's.
+- **The expression** allocates and executes about what the reference's rows do.
