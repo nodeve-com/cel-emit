@@ -4,6 +4,43 @@ use crate::tree::{Node, Object, Out, Typed};
 use crate::types::Type;
 use crate::Error;
 
+/// A pattern for the nodes with no child.
+macro_rules! leaf {
+    () => {
+        Node::Int(_)
+            | Node::Uint(_)
+            | Node::Double(_)
+            | Node::Bool(_)
+            | Node::Str(_)
+            | Node::Bytes(_)
+            | Node::Null
+            | Node::None
+            | Node::Timestamp(..)
+            | Node::Duration(..)
+            | Node::Var(_)
+            | Node::Has(_)
+            | Node::Item(..)
+            | Node::Position(_)
+            | Node::Local(_)
+            | Node::Fail(_)
+    };
+}
+pub(crate) use leaf;
+
+/// A pattern for the nodes over one child, `$x`, that cost nothing past reading it.
+macro_rules! thin {
+    ($x:ident) => {
+        Node::Field($x, _)
+            | Node::Within($x, _)
+            | Node::Store($x)
+            | Node::Widen($x)
+            | Node::FromDyn($x, _)
+            | Node::ToDyn($x)
+            | Node::Some($x)
+    };
+}
+pub(crate) use thin;
+
 /// A node of type `to` from `x`, as a declared type casts a result: an int to a double, a value
 /// to the stored type of its CEL type; any other change is a mistake in the declarations.
 pub fn cast(x: Typed, to: &Type) -> Result<Typed, Error> {
@@ -65,35 +102,14 @@ pub fn any(t: &Typed, f: impl Fn(&Node) -> bool) -> bool {
 pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
     f(t);
     match &t.node {
-        Node::Int(_)
-        | Node::Uint(_)
-        | Node::Double(_)
-        | Node::Bool(_)
-        | Node::Str(_)
-        | Node::Bytes(_)
-        | Node::Null
-        | Node::None
-        | Node::Timestamp(..)
-        | Node::Duration(..)
-        | Node::Var(_)
-        | Node::Has(_)
-        | Node::Item(..)
-        | Node::Position(_)
-        | Node::Local(_)
-        | Node::Fail(_) => {}
-        Node::Field(x, _)
-        | Node::Within(x, _)
-        | Node::Store(x)
-        | Node::Widen(x)
-        | Node::FromDyn(x, _)
+        leaf!() => {}
+        thin!(x)
         | Node::Shaped(x, ..)
-        | Node::ToDyn(x)
         | Node::Written(x, _)
         | Node::Matches(x, ..)
         | Node::Extreme(_, x)
         | Node::Sum(x)
-        | Node::Count(x)
-        | Node::Some(x) => nodes(x, f),
+        | Node::Count(x) => nodes(x, f),
         Node::ListOpt(items) => items.iter().for_each(|(a, _)| nodes(a, f)),
         Node::MapOpt(entries) => entries.iter().for_each(|(k, v, _)| {
             nodes(k, f);

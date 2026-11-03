@@ -85,28 +85,59 @@ pub fn program(expression: &str, schema: Option<&str>) -> Result<String, String>
     }
 }
 
-fn dynamic(expression: &str) -> Result<String, String> {
-    let decls = declarations("text", Type::String);
-    let whole = format!("cel.bind(input, json.decode(text), json.encode({expression}\n))");
-    let tree = lower(&whole, &decls).map_err(|e| e.to_string())?;
-    let mut emitter = Emitter::new(&decls.functions, Box::new(NoMessages));
+/// `source`, CEL reading the one input `input`, as Rust: its expression and the items it uses.
+fn emitted(
+    source: &str,
+    decls: &Decls,
+    input: &'static str,
+    messages: Box<dyn Messages>,
+) -> Result<(String, String), String> {
+    let tree = lower(source, decls).map_err(|e| e.to_string())?;
+    let mut emitter = Emitter::new(&decls.functions, messages);
     let output = emitter
-        .expr(&tree, &Input("text"))
+        .expr(&tree, &Input(input))
         .map_err(|e| e.to_string())?;
     let items = emitter.items().map_err(|e| e.to_string())?;
+    Ok((output, items.code))
+}
+
+/// How a program's `main` hands stdin, `text`, to `output`: `output`'s parameter, the statements
+/// making its argument from `text`, and the argument.
+struct Entry<'a> {
+    param: &'a str,
+    decode: &'a str,
+    arg: &'a str,
+}
+
+/// The whole program: `prelude`, `items`, `output` as a function, and a `main` calling it.
+fn source(prelude: &str, items: &str, output: &str, entry: Entry) -> Result<String, String> {
+    let Entry { param, decode, arg } = entry;
     formatted(&format!(
         "use ::cel_emit_runtime as s;
+        {prelude}
         {items}
-        fn output(text: String) -> s::Result<String> {{
+        fn output({param}) -> s::Result<String> {{
             Ok({output})
         }}
         fn main() -> Result<(), String> {{
             let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;
-            println!(\"{{}}\", output(text).map_err(|e| format!(\"{{e:?}}\"))?);
+            {decode}
+            println!(\"{{}}\", output({arg}).map_err(|e| format!(\"{{e:?}}\"))?);
             Ok(())
         }}",
-        items = items.code,
     ))
+}
+
+fn dynamic(expression: &str) -> Result<String, String> {
+    let whole = format!("cel.bind(input, json.decode(text), json.encode({expression}\n))");
+    let decls = declarations("text", Type::String);
+    let (output, items) = emitted(&whole, &decls, "text", Box::new(NoMessages))?;
+    let entry = Entry {
+        param: "text: String",
+        decode: "",
+        arg: "text",
+    };
+    source("", &items, &output, entry)
 }
 
 /// Each model of `schema` a record names, as its fields and struct.
@@ -126,7 +157,6 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())?;
     let ty = schema_types::record(&ir, root).map_err(|e| e.to_string())?;
     let decls = declarations("input", ty);
-    let tree = lower(&format!("json.encode({expression}\n)"), &decls).map_err(|e| e.to_string())?;
     let named = names(&ir);
     let name = |i: usize| named.get(i).cloned().unwrap_or_default();
     let types = StdForm::new(&ir, &name)
@@ -135,31 +165,18 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
     let messages = Models {
         records: records(&ir, &named),
     };
-    let mut emitter = Emitter::new(&decls.functions, Box::new(messages));
-    let output = emitter
-        .expr(&tree, &Input("input"))
-        .map_err(|e| e.to_string())?;
-    let items = emitter.items().map_err(|e| e.to_string())?;
+    let whole = format!("json.encode({expression}\n)");
+    let (output, items) = emitted(&whole, &decls, "input", Box::new(messages))?;
     let root = name(root);
-    formatted(&format!(
-        "use ::cel_emit_runtime as s;
-        mod types {{
-            use ::schema_emit_runtime as s;
-            {types}
-        }}
-        {items}
-        fn output(input: &types::{root}) -> s::Result<String> {{
-            Ok({output})
-        }}
-        fn main() -> Result<(), String> {{
-            let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;
-            let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-            let input = types::decode_input(&value).map_err(|e| format!(\"{{e:?}}\"))?;
-            println!(\"{{}}\", output(&input).map_err(|e| format!(\"{{e:?}}\"))?);
-            Ok(())
-        }}",
-        items = items.code,
-    ))
+    let prelude = format!("mod types {{ use ::schema_emit_runtime as s; {types} }}");
+    let entry = Entry {
+        param: &format!("input: &types::{root}"),
+        decode:
+            "let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+            let input = types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))?;",
+        arg: "&input",
+    };
+    source(&prelude, &items, &output, entry)
 }
 
 /// What a program over a schema's types links beside the runtime: schema-emit-runtime at the rev

@@ -11,6 +11,7 @@ use std::cmp::Reverse;
 
 use super::scope::wrap;
 use super::*;
+use crate::walk::{leaf, thin};
 
 impl Lower<'_> {
     /// `t`, a region, with each repeated subtree in a local, and so each region under it.
@@ -89,16 +90,9 @@ fn always(t: &mut Typed, f: &mut impl FnMut(&mut Typed)) {
 /// as written.
 fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
     match &mut t.node {
-        Node::Field(x, _)
-        | Node::Within(x, _)
-        | Node::Store(x)
-        | Node::Widen(x)
-        | Node::FromDyn(x, _)
-        | Node::Shaped(x, ..)
-        | Node::ToDyn(x)
-        | Node::Written(x, _)
-        | Node::Matches(x, ..)
-        | Node::Some(x) => (vec![&mut **x], Vec::new()),
+        thin!(x) | Node::Shaped(x, ..) | Node::Written(x, _) | Node::Matches(x, ..) => {
+            (vec![&mut **x], Vec::new())
+        }
         // A fold's comprehension stays under it: only its parts can leave.
         Node::Extreme(_, x) | Node::Sum(x) | Node::Count(x) => parts(x),
         Node::Call(id, args) => {
@@ -136,29 +130,8 @@ fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
 /// Whether `t` costs no more to read again than a local does.
 fn trivial(t: &Typed) -> bool {
     match &t.node {
-        Node::Field(x, _)
-        | Node::Within(x, _)
-        | Node::Store(x)
-        | Node::Widen(x)
-        | Node::FromDyn(x, _)
-        | Node::ToDyn(x)
-        | Node::Some(x) => trivial(x),
-        Node::Int(_)
-        | Node::Uint(_)
-        | Node::Double(_)
-        | Node::Bool(_)
-        | Node::Str(_)
-        | Node::Bytes(_)
-        | Node::Null
-        | Node::None
-        | Node::Timestamp(..)
-        | Node::Duration(..)
-        | Node::Var(_)
-        | Node::Has(_)
-        | Node::Item(..)
-        | Node::Position(_)
-        | Node::Local(_)
-        | Node::Fail(_) => true,
+        thin!(x) => trivial(x),
+        leaf!() => true,
         _ => false,
     }
 }
