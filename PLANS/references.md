@@ -28,13 +28,12 @@ Wall-clock time is no measure here: load and frequency move it between runs. Ins
 
 `cel-emit-cli/tests/references.rs` builds each pair and prints the table (`--no-capture`); `scripts/instructions.sh` runs the pairs under callgrind, on Linux; `scripts/linux.sh` runs it on the ssh host `CEL_EMIT_LINUX_HOST` names, from the environment or `.env`. `answer_rows` is the first pair.
 
-1. **A finding per gap.** Each measure where the generated program runs far past its reference gets a cause, then a fix in the generator or a reason it stays. An allocation gap that stays has its reason in research/, and its pair's ratio widens by what that reason accounts for.
-2. **The allocation gate on.** Once step 1 has fixed or explained every allocation gap, allocation calls gate: each pair fails when the generated program's count runs past the reference's by more than the pair's ratio, set at the goal, never at a measured figure. Every other measure only shows: source lines gain nothing from a ceiling, and IR moves with each rustc.
-3. **Why from the harness.** README's Why states the interpreter's cost against cel-emit's from these figures, approximately, and names the command that prints them. The board benchmark and the CEL-to-wasm comparison leave README: nothing in this repo reruns them.
+1. **A finding per gap.** Each measure where the generated program runs far past its reference gets a cause, then a fix in the generator or a reason it stays in research/.
+2. **Why from the harness.** README's Why states the interpreter's cost against cel-emit's from these figures, approximately, and names the command that prints them. The board benchmark and the CEL-to-wasm comparison leave README: nothing in this repo reruns them.
 
 ## Gaps in `answer_rows`
 
 Measured by phase:
 
-- **The decode** allocates about what the reference's serde derive does, but executes far more instructions, past the interpreter's decode. Each nesting level reads its value's text again: a record collects its fields' slices, then each field reads its slice. One pass over the text, as derive reads, ends it. That decode is schema-emit's.
+- **The decode** allocates what the reference's serde derive does and executes about half again its instructions, under the interpreter's decode. The rest sits in schema-emit-runtime's own reader: a serde_json deserializer per token, and a hand-written skip over unknown keys where derive skips through serde_json.
 - **The expression** allocates and executes about what the reference's rows do.
