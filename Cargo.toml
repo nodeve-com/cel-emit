@@ -5,7 +5,7 @@ version = "0.6.2"
 edition = "2021"
 license = "MPL-2.0"
 repository = "https://github.com/nodeve-com/cel-emit"
-include = ["src", "README.md", "MISSING.md", "LICENSE"]
+include = ["/src", "/README.md", "/docs", "/LICENSE"]
 
 [workspace]
 members = ["cel-emit-runtime", "cel-emit-cli", "examples/by_hand"]

@@ -32,35 +32,12 @@ A benchmark timed Rust written by hand the way cel-emit writes it, on a 1 GHz si
 - **Same answer everywhere.** The program never reads the clock: an expression that needs the current time takes it as an input. It never reads the machine's time zones either. A zone written in the expression, such as `"America/New_York"`, becomes that zone's UTC offsets from 1970 to 2100, daylight saving included; `"+05:30"` becomes one offset. All math goes through one library, `libm`, so every machine agrees to the last digit.
 - **Add your own functions.** A new function is its CEL signature plus the Rust that runs it ([`functions::Function`]).
 
-What it doesn't translate yet, largest gap first: [`missing`].
-
-## Conformance
-
-- **cel-go settles** where cel-core departs from it; interop with cel-go isn't a goal. cel-core comes from a fork (the workspace `Cargo.toml`).
-- **A float32's text departs from CEL**, which has only doubles: `string()`, `format`'s `%s`, and `json.encode` write its own shortest digits, `9.3`, not `9.300000190734863`.
-- **`filter(…)[0]` departs from CEL** past its first match: it stops there, so a predicate that would fail on a later element fails nothing.
-- **The cel-spec suite** is cel-emit's own test, `cargo nextest run -p cel-emit --test conformance`. It builds each case natively and checks the expected value. No case may be wrong; the passing cases must match `tests/conformance/pass.txt`.
-
-## Extras
-
-An embedder also adds expansions, which rewrite a call as it lowers from an argument's name or literal text, as a CEL macro does.
-
-Beyond CEL's standard library, expressions get CEL's math, strings, optional-value, and lists extensions, plus:
-
-- `duration('7d')`: as [`humantime`](https://docs.rs/humantime) reads it, signed: CEL's units plus `d`, `w`, `M` (30.44 days), and `y` (365.25 days).
-- `json.decode(text)`: JSON text as a dynamic value: a whole number an int, others a double; a repeated key its last value; malformed text an error. A dynamic value fills a typed field only of its own kind.
-- `json.decode(text, Message)`: JSON text as a `Message`, reading only its declared fields and skipping the rest unread, or keeping them as one JSON object text, as they arrived, in the field `Decls.rest` names; an integral number such as `2.0` fills an int field. `Decls.fill` says how a field takes a dynamic value.
-- `json.encode(value)`: a value as JSON text; NaN or infinity an error. With `Decls.skip_failed`, it leaves out a failing field, unless none remains.
-- `list.first()` and `list.last()`: a list's first or last item, if it has one.
-- `math.pow(x, y)`: `x` to the power `y`.
-- `math.sum(list)`: a list of numbers added up; an empty list sums to zero.
-- The lists extension is cel-go's, `sortBy` included, but `sort()` of a list of dyn orders one kind only and `flatten(depth)` takes a list of dyn.
+What it doesn't translate yet, largest gap first: [`missing`]. Functions beyond CEL's standard library: [`extras`]. Where it departs from CEL, and its conformance test: [`conformance`].
 
 ## Use
 
 Translation takes two steps. First, [`lower`](mod@lower) rewrites the checked expression in cel-emit's own simpler form: a tree of small pieces, each marked with its type. Compilers call that step lowering. Next, [`emit`] writes the tree as Rust that uses cel-emit-runtime.
 
-cel-emit knows nothing about the program around it. [`decls::Decls`] tells it what an expression reads and calls, [`emit::Vars`] how to read each input, and your program writes the Rust around the translated code. 
-[`cel-emit-cli`](https://github.com/nodeve-com/cel-emit/tree/main/cel-emit-cli), in this repo, is the shortest way to see it work: a CEL expression over JSON in, with a JSON Schema if you have one, a whole Rust program out, with no Rust of your own. [`examples/by_hand`](https://github.com/nodeve-com/cel-emit/tree/main/examples/by_hand) uses cel-emit as a library: one expression over a struct you write, translated in a `build.rs`.
+cel-emit knows nothing about the program around it. [`decls::Decls`] tells it what an expression reads and calls, [`emit::Vars`] how to read each input, and your program writes the Rust around the translated code. [`cel-emit-cli`](https://github.com/nodeve-com/cel-emit/tree/main/cel-emit-cli), in this repo, is the shortest way to see it work. It takes a CEL expression over JSON, with a JSON Schema if you have one, and writes a whole Rust program, with no Rust of your own. [`examples/by_hand`](https://github.com/nodeve-com/cel-emit/tree/main/examples/by_hand) uses cel-emit as a library: one expression over a struct you write, translated in a `build.rs`.
 
 cel-emit-runtime's functions sit in [`stdlib`]'s tables; its README gives their conventions.

@@ -21,7 +21,7 @@ Each program, generated, by hand, and interpreted, built with the same rustc and
 | Peak memory | most bytes live at once, from the same allocator | every test run |
 | Instructions | executed, total and per function, by callgrind with collection on only inside the expression's function, or the interpreter's load and run | on Linux, by script |
 
-Wall-clock time is no measure here. Instruction counts compare only within one machine and one toolchain.
+Wall-clock time is no measure here: load and frequency move it between runs. Instruction counts repeat run to run, and compare only within one CPU feature set, libc, and toolchain.
 
 ## Steps
 

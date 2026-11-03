@@ -46,7 +46,7 @@ It prints one line of JSON, shown here across two:
  {"id":2,"customer":"Lin","total_minor":900,"placed_utc":"2030-07-01T16:30:00Z","note":null}]
 ```
 
-`target/orders/src/main.rs` is the generated Rust, if you want to read it. [`examples/answer_rows`](../examples/answer_rows) is a larger expression over a deeply nested answer.
+`target/orders/src/main.rs` holds the generated Rust. [`examples/answer_rows`](../examples/answer_rows) is a larger expression over a deeply nested answer.
 
 ## Expressions
 
@@ -54,7 +54,7 @@ The file holds one CEL expression of any shape: a list, a map, or a single value
 
 ## Functions
 
-Expressions get everything [cel-emit](../README.md#extras) gives them, plus:
+Expressions get everything [cel-emit](../docs/extras.md) gives them, plus:
 
 - `to_utc(local, zone)`: a local time such as `2030-07-01T12:00:00` in an IANA zone, as a timestamp. A time the zone's clocks skip or repeat is an error.
 - `iso_duration(text)`: an ISO 8601 duration such as `P1DT12H` as a duration, a day being 24 hours. A month or year is an error, having no fixed length.
@@ -73,16 +73,16 @@ The same expression gives the same output. The program gains a struct for each o
 
 - **Reads are plain Rust.** `row.pricing.total` is a field read, not a map search and a cast. Arithmetic needs no `int()`.
 - **A bad answer fails where it's wrong.** The error names the field, as `Input.options[0].pricing.total`, before the expression runs.
-- **Write only what you read.** Keys the schema doesn't name are skipped unread, unless it closes the object with `additionalProperties: false`.
+- **Write only what you read.** The program skips, unread, keys the schema doesn't name, unless it closes the object with `additionalProperties: false`.
 
 [`examples/answer_rows`](../examples/answer_rows) runs both ways: `answer.schema.json` names what `rows.cel` reads.
 
 ## Limits
 
-- **Without a schema, JSON values have no declared types**, so CEL can't know a value from the JSON is a number. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which is refused when translating.
+- **Without a schema, JSON values have no declared types**, so CEL can't tell which JSON values hold numbers. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which translation refuses.
 - **One failure stops the run.** An expression fails whole, so a lookup that finds nothing ends the program with a non-zero exit and prints nothing. That error names its kind, not its place.
-- **The whole input is read into memory.**
+- **The program reads the whole input into memory.**
 - **The program builds inside this repo.** Its `Cargo.toml` points at this checkout's cel-emit-runtime by path.
-- **A schema's models must each hold a type CEL can read.** One naming a key no field holds, as `additionalProperties` with a schema does, or a mixed-kind tuple, is refused.
+- **A schema's models must each hold a type CEL can read.** cel-emit refuses one naming a key no field holds, as `additionalProperties` with a schema does, or a mixed-kind tuple.
 
-What cel-emit itself can't translate yet: [`MISSING.md`](../MISSING.md).
+What cel-emit itself can't translate yet: [`docs/missing.md`](../docs/missing.md).

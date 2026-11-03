@@ -8,7 +8,11 @@ pub mod functions;
 pub mod lower;
 #[doc(hidden)]
 pub mod macros;
-#[doc = include_str!("../MISSING.md")]
+#[doc = include_str!("../docs/conformance.md")]
+pub mod conformance {}
+#[doc = include_str!("../docs/extras.md")]
+pub mod extras {}
+#[doc = include_str!("../docs/missing.md")]
 pub mod missing {}
 pub mod stdlib;
 pub mod tree;
