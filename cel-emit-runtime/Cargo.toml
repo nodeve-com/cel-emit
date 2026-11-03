@@ -26,7 +26,7 @@ jiff = { version = "0.2", default-features = false, features = ["std"], optional
 # RE2's syntax without Unicode tables: linear-time matching, small enough to link into each build.
 regex-lite = "0.1"
 # A constant `matches` pattern: the search over its table; building tables stays in cel-emit.
-pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "787bf8ce5c92ebc0b84ae91f028f1861d8744252", version = "0.6.2" }
+pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "1acab6a86e146143e8ab2ba5bde2dada963df88c", version = "0.6.2" }
 # `math.pow` on every target, so builds agree to the bit.
 libm = "0.2"
 # Timestamps and durations, and civil time from an instant and an offset; no clock, no zone

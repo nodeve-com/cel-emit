@@ -17,7 +17,7 @@ path = "src/main.rs"
 [dependencies]
 cel-emit = { path = ".." }
 # A schema's types and their decode.
-schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "8b03dbe36b771d3200c3b622825b7fc16da89fc6" }
+schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "22051deb5ac14fa7236a4141c22cff6a23367c2f" }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 # Formats the Rust it writes.
 prettyplease = "0.2"
@@ -25,7 +25,7 @@ syn = { version = "2", features = ["full", "parsing"] }
 
 [dev-dependencies]
 cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
-schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "8b03dbe36b771d3200c3b622825b7fc16da89fc6", features = ["decode"] }
+schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "22051deb5ac14fa7236a4141c22cff6a23367c2f", features = ["decode"] }
 
 [lints.clippy]
 too_many_lines = "warn"

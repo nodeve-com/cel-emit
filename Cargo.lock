@@ -394,7 +394,7 @@ dependencies = [
 [[package]]
 name = "pattern-emit"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/pattern-emit?rev=787bf8ce5c92ebc0b84ae91f028f1861d8744252#787bf8ce5c92ebc0b84ae91f028f1861d8744252"
+source = "git+https://github.com/nodeve-com/pattern-emit?rev=1acab6a86e146143e8ab2ba5bde2dada963df88c#1acab6a86e146143e8ab2ba5bde2dada963df88c"
 dependencies = [
  "regex-automata",
  "regex-syntax",
@@ -549,7 +549,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "schema-emit"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=8b03dbe36b771d3200c3b622825b7fc16da89fc6#8b03dbe36b771d3200c3b622825b7fc16da89fc6"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=22051deb5ac14fa7236a4141c22cff6a23367c2f#22051deb5ac14fa7236a4141c22cff6a23367c2f"
 dependencies = [
  "iri-string",
  "pattern-emit",
@@ -560,7 +560,7 @@ dependencies = [
 [[package]]
 name = "schema-emit-runtime"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=8b03dbe36b771d3200c3b622825b7fc16da89fc6#8b03dbe36b771d3200c3b622825b7fc16da89fc6"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=22051deb5ac14fa7236a4141c22cff6a23367c2f#22051deb5ac14fa7236a4141c22cff6a23367c2f"
 dependencies = [
  "base64",
  "chrono",

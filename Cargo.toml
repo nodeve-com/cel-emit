@@ -28,7 +28,7 @@ cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
 # What the Rust it writes links: here for its time constants and zone tables.
 cel-emit-runtime = { path = "cel-emit-runtime", version = "0.6.2" }
 # A constant `matches` pattern as a search table, built while translating.
-pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "787bf8ce5c92ebc0b84ae91f028f1861d8744252", version = "0.6.2", features = ["build"] }
+pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "1acab6a86e146143e8ab2ba5bde2dada963df88c", version = "0.6.2", features = ["build"] }
 # `math.pow`'s reference, as cel-emit-runtime computes it. One pure-Rust libm on every target, so
 # builds give identical results on every target.
 libm = "0.2"
