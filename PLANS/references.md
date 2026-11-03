@@ -37,8 +37,7 @@ Wall-clock time is no measure here: load and frequency move it between runs. Ins
 Measured by phase, allocation calls:
 
 - **The decode's `serde_json::Value`** makes most of the generated program's allocations and nearly all its peak memory. The schema decode after it allocates about what the reference's whole parse does. A decode straight from text, as serde's derive reads, ends the pass. That decode is schema-emit's.
-- **The expression** allocates far more than the reference's rows do. Causes read from the generated `expression`, each unconfirmed until its fix moves the count:
-  - An output map with constant keys becomes a dynamic map per row, each key a new `String`, encoded afterwards; a struct with `Serialize` writes it directly.
+- **The expression** allocates about what the reference's rows do. What stays costs instructions, not allocations, each unconfirmed until callgrind on Linux shows it:
   - Work that doesn't change inside a `filter` or `first` closure runs per element: the closure indexes `row.legs[0]` for every location tried.
-  - Runtime functions take `String` by value, so callers clone; `to_utc` and `iso_duration` among them.
   - String `==`, `+`, and `&&` over known types each return a `Result`. Why is unread; the reason, if any, goes here before they change.
+  - Each output member writes through its own let and typed JSON call, more own IR than one dynamic map encoded once.
