@@ -195,9 +195,7 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as s; {types} }}");
     let entry = Entry {
-        decode:
-            "let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
-            types::decode_input(&value).map_err(|e| format!(\"{e:?}\"))",
+        decode: "types::decode_input(text).map_err(|e| format!(\"{e:?}\"))",
         input: &format!("types::{root}"),
     };
     source(&prelude, &items, &output, entry)
