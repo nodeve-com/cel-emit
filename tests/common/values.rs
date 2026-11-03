@@ -1,9 +1,9 @@
 //! A value as the Rust that supplies it, and as a native program writes its own results, so a
 //! CEL value and a run's answer compare as text.
 
-use cel_core::{MapKey, Value};
+use cel_core::{MapKey, Value, ValueMap};
 use cel_emit::emit::Emitter;
-use cel_emit::{Type, Width};
+use cel_emit::{Field, Type, Width};
 
 /// Whether a binding or a result of `ty` can be supplied or shown: scalars, bytes, times, and
 /// lists and string-keyed maps of them. A stored width is shown as CEL reads it.
@@ -122,8 +122,17 @@ fn key_value(key: &MapKey) -> Value {
 
 /// `v`, a value of `ty` that [`fits`], as a Rust expression of the type cel-emit writes for it.
 pub fn rust(v: &Value, ty: &Type, em: &mut Emitter) -> String {
-    let of = |t: &Type, em: &mut Emitter| em.rust(t).unwrap();
     match (ty, v) {
+        (Type::List(t), Value::List(items)) => list(items, t, em),
+        (Type::Map(..), Value::Map(m)) => map(m, ty, em),
+        (Type::Message(fields), Value::Map(m)) => message(m, fields, ty, em),
+        _ => scalar(v, ty).unwrap_or_else(|| unreachable!("{v:?} as {ty:?}")),
+    }
+}
+
+/// `v`, a scalar of `ty`, as Rust; `None` for any other pair.
+fn scalar(v: &Value, ty: &Type) -> Option<String> {
+    Some(match (ty, v) {
         (Type::Int, Value::Int(i)) => format!("({i}i64)"),
         (Type::Uint, Value::UInt(u)) => format!("({u}u64)"),
         (Type::Double, Value::Double(d)) => format!("f64::from_bits({:#x})", d.to_bits()),
@@ -143,45 +152,59 @@ pub fn rust(v: &Value, ty: &Type, em: &mut Emitter) -> String {
             let (s, n) = span(v).unwrap();
             format!("s::time::duration_at({s}i64, {n}i32)?")
         }
-        (Type::List(t), Value::List(items)) if items.is_empty() => {
-            format!("Vec::<{}>::new()", of(t, em))
-        }
-        (Type::List(t), Value::List(items)) => {
-            let items: Vec<String> = items.iter().map(|i| rust(i, t, em)).collect();
-            format!("Vec::from([{}])", items.join(", "))
-        }
-        (Type::Map(k, t), Value::Map(m)) if m.is_empty() => {
-            format!("Vec::<({}, {})>::new()", of(k, em), of(t, em))
-        }
-        (Type::Map(k, t), Value::Map(m)) => {
-            let entries: Vec<String> = m
-                .iter()
-                .map(|(key, v)| {
-                    let (key, value) = (rust(&key_value(key), k, em), rust(v, t, em));
-                    format!("({key}, {value})")
-                })
-                .collect();
-            format!("Vec::from([{}])", entries.join(", "))
-        }
-        (Type::Message(fields), Value::Map(m)) => {
-            let mut body = format!("let mut rec = {}::default(); ", of(ty, em));
-            for (n, f) in fields.iter().enumerate() {
-                let set = m
-                    .iter()
-                    .find(|(k, _)| matches!(k, MapKey::String(k) if **k == *f.name));
-                if let Some((_, v)) = set {
-                    let value = rust(v, inner(&f.ty), em);
-                    let value = match f.ty {
-                        Type::Optional(_) | Type::Nullable(_) => format!("Some({value})"),
-                        _ => value,
-                    };
-                    body.push_str(&format!("rec.f{n} = {value}; "));
-                }
-            }
-            format!("{{ {body}rec }}")
-        }
-        _ => unreachable!("{v:?} as {ty:?}"),
+        _ => return None,
+    })
+}
+
+/// The Rust type of `t`.
+fn of(t: &Type, em: &mut Emitter) -> String {
+    em.rust(t).unwrap()
+}
+
+/// A list `items` of `t`, as Rust.
+fn list(items: &[Value], t: &Type, em: &mut Emitter) -> String {
+    if items.is_empty() {
+        return format!("Vec::<{}>::new()", of(t, em));
     }
+    let items: Vec<String> = items.iter().map(|i| rust(i, t, em)).collect();
+    format!("Vec::from([{}])", items.join(", "))
+}
+
+/// A map `m` of the map type `ty`, as Rust.
+fn map(m: &ValueMap, ty: &Type, em: &mut Emitter) -> String {
+    let Type::Map(k, t) = ty else {
+        unreachable!("{ty:?} is no map")
+    };
+    if m.is_empty() {
+        return format!("Vec::<({}, {})>::new()", of(k, em), of(t, em));
+    }
+    let entries: Vec<String> = m
+        .iter()
+        .map(|(key, v)| {
+            let (key, value) = (rust(&key_value(key), k, em), rust(v, t, em));
+            format!("({key}, {value})")
+        })
+        .collect();
+    format!("Vec::from([{}])", entries.join(", "))
+}
+
+/// A message `ty` of `fields`, set from the map `m`, as Rust.
+fn message(m: &ValueMap, fields: &[Field], ty: &Type, em: &mut Emitter) -> String {
+    let mut body = format!("let mut rec = {}::default(); ", of(ty, em));
+    for (n, f) in fields.iter().enumerate() {
+        let set = m
+            .iter()
+            .find(|(k, _)| matches!(k, MapKey::String(k) if **k == *f.name));
+        if let Some((_, v)) = set {
+            let value = rust(v, inner(&f.ty), em);
+            let value = match f.ty {
+                Type::Optional(_) | Type::Nullable(_) => format!("Some({value})"),
+                _ => value,
+            };
+            body.push_str(&format!("rec.f{n} = {value}; "));
+        }
+    }
+    format!("{{ {body}rec }}")
 }
 
 /// How a double is written: `0.0` for either zero.

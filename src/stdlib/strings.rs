@@ -1,6 +1,6 @@
 //! Strings: cel-emit-runtime's `strings`.
 
-use crate::functions::Std;
+use crate::functions::{Pass, Std};
 use crate::types::{Type, Width};
 
 pub(super) const FUNCTIONS: &[Std] = &[
@@ -37,6 +37,7 @@ pub(super) const FUNCTIONS: &[Std] = &[
         path: "strings::format",
         takes: |args| matches!(args.get(1), Some(Type::List(t)) if formattable(t)),
         borrows: true,
+        pass: Pass::Each,
     },
     Std::reads("strings_quote_string", "strings::quote"),
 ];

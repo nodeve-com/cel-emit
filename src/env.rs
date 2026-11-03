@@ -12,67 +12,78 @@ use crate::types::Type;
 /// extensions, cel-emit's functions and the embedder's, each name, and each message. A dotted
 /// name's prefixes are messages: `prev.?Smooth.watts` selects through them.
 pub fn environment(decls: &Decls) -> Env {
-    let mut messages = Messages {
-        enums: decls.enums.keys().cloned().collect(),
-        ..Messages::default()
+    let mut scope = Scope {
+        decls,
+        messages: Messages {
+            enums: decls.enums.keys().cloned().collect(),
+            ..Messages::default()
+        },
+        roots: BTreeMap::new(),
     };
     let mut declared = crate::functions::declarations();
     let embedder = decls.functions.iter().map(|f| &f.decl);
     let embedder = embedder.chain(decls.expansions.iter().map(|x| &x.decl));
-    declared.extend(embedder.map(|d| declared_as(d, &mut messages)));
+    declared.extend(embedder.map(|d| declared_as(d, &mut scope.messages)));
     let mut env = Env::with_standard_library().with_extension(declared);
     for (name, ty) in &decls.messages {
         let held = message_name(ty);
-        messages.declare(&held, ty);
-        messages.names.insert(name.clone(), held);
+        scope.messages.declare(&held, ty);
+        scope.messages.names.insert(name.clone(), held);
     }
-    let mut roots = BTreeMap::new();
     for (name, n) in &decls.names {
-        let Some((root, rest)) = name.split_once('.') else {
-            roots.insert(name.clone(), cel_type(&n.ty, &mut messages));
-            continue;
-        };
-        let mut message =
-            (messages.names.get(root).cloned()).unwrap_or_else(|| format!("{MESSAGE}{root}"));
-        // A map of messages: each field's map is the message's field.
-        let leaf = match (&n.ty, decls.columns.contains_key(root)) {
-            (Type::Map(_, ty), true) => {
-                let held = CelType::message(&message);
-                roots.insert(root.to_string(), CelType::map(CelType::String, held));
-                cel_type(ty, &mut messages)
-            }
-            (ty, _) => {
-                roots.insert(root.to_string(), CelType::message(&message));
-                cel_type(ty, &mut messages)
-            }
-        };
-        let mut segments = rest.split('.').peekable();
-        while let Some(segment) = segments.next() {
-            if segments.peek().is_none() {
-                messages.field(message.clone(), segment, leaf.clone());
-            } else {
-                // A declared message's field is a message already.
-                let inner = match messages.fields.get(&message).and_then(|f| f.get(segment)) {
-                    Some(CelType::Message(held)) => held.to_string(),
-                    _ => format!("{message}.{segment}"),
-                };
-                messages.field(message, segment, CelType::message(&inner));
-                message = inner;
-            }
-        }
+        scope.add(name, &n.ty);
     }
+    let Scope {
+        messages,
+        mut roots,
+        ..
+    } = scope;
     // A message's name is also a type value, `json.decode(text, Message)`'s second argument, unless
     // a name in scope already takes it.
     for (name, held) in &messages.names {
-        if !roots.contains_key(name) {
-            let message = CelType::message(held);
-            roots.insert(name.clone(), CelType::type_of(message));
-        }
+        roots
+            .entry(name.clone())
+            .or_insert_with(|| CelType::type_of(CelType::message(held)));
     }
     for (root, ty) in roots {
         env.add_variable(root, ty);
     }
     env.with_proto_registry(std::sync::Arc::new(messages))
+}
+
+/// What the declared names make: their messages, and the variables the environment holds.
+struct Scope<'a> {
+    decls: &'a Decls,
+    messages: Messages,
+    roots: BTreeMap<String, CelType>,
+}
+
+impl Scope<'_> {
+    /// Declares the name `name` of type `ty`. A dotted name's first part is a variable holding a
+    /// message, and each part before the last a message field of the one before.
+    fn add(&mut self, name: &str, ty: &Type) {
+        let Some((root, rest)) = name.split_once('.') else {
+            let held = cel_type(ty, &mut self.messages);
+            self.roots.insert(name.into(), held);
+            return;
+        };
+        let message =
+            (self.messages.names.get(root).cloned()).unwrap_or_else(|| format!("{MESSAGE}{root}"));
+        // A map of messages: each field's map is the message's field.
+        let leaf = match (ty, self.decls.columns.contains_key(root)) {
+            (Type::Map(_, ty), true) => {
+                let held = CelType::message(&message);
+                self.roots
+                    .insert(root.into(), CelType::map(CelType::String, held));
+                cel_type(ty, &mut self.messages)
+            }
+            (ty, _) => {
+                self.roots.insert(root.into(), CelType::message(&message));
+                cel_type(ty, &mut self.messages)
+            }
+        };
+        self.messages.path(message, rest, leaf);
+    }
 }
 
 /// Each message type's name starts so.
@@ -94,6 +105,24 @@ impl Messages {
             .entry(message)
             .or_default()
             .insert(field.into(), ty);
+    }
+
+    /// The dotted fields `path` of `message`, the last of type `leaf`, each other a message.
+    fn path(&mut self, mut message: String, path: &str, leaf: CelType) {
+        let mut segments = path.split('.').peekable();
+        while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                self.field(message.clone(), segment, leaf.clone());
+                continue;
+            }
+            // A declared message's field is a message already.
+            let inner = match self.fields.get(&message).and_then(|f| f.get(segment)) {
+                Some(CelType::Message(held)) => held.to_string(),
+                _ => format!("{message}.{segment}"),
+            };
+            self.field(message, segment, CelType::message(&inner));
+            message = inner;
+        }
     }
 
     /// A message's fields under the CEL name `name`.

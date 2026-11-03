@@ -1,7 +1,7 @@
 //! Optionals: cel-emit-runtime's `optional`, each the overload an optionals call resolves to, or a
 //! call cel-emit makes for `.?` and `[?]`.
 
-use crate::functions::Std;
+use crate::functions::{Pass, Std};
 use crate::types::Type;
 
 use super::cmp::equal;
@@ -13,6 +13,7 @@ pub(super) const FUNCTIONS: &[Std] = &[
         path: "optional::of_non_zero_value",
         takes: |args| args.first().is_some_and(zeroable),
         borrows: false,
+        pass: Pass::Each,
     },
     Std::reads("optional_has_value", "optional::has_value"),
     Std::any("optional_value", "optional::value"),
@@ -27,6 +28,7 @@ pub(super) const FUNCTIONS: &[Std] = &[
         path: "optional::index_map",
         takes: |args| args.get(1).is_some_and(equal),
         borrows: true,
+        pass: Pass::Each,
     },
 ];
 

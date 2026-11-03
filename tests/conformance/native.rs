@@ -77,11 +77,34 @@ pub fn build(scratch: &Path, chunk: &[Prepared]) -> Vec<Answer> {
                 .collect()
         }
     };
-    let run =
-        |tag: &str, fns: &[(usize, String)], done: &mut [Option<Answer>]| match common::build_run(
-            &scratch.join(tag),
-            &common::program(fns, PRELUDE, &items),
-        ) {
+    let builds = Builds {
+        scratch,
+        items: &items,
+    };
+    builds.run("all", &fns, &mut done);
+    // A build that failed, or a run that stopped early, is found out a case at a time.
+    for f in fns {
+        if done[f.0].is_none() {
+            builds.run(&f.0.to_string(), std::slice::from_ref(&f), &mut done);
+        }
+    }
+    done.into_iter()
+        .map(|d| d.unwrap_or_else(|| Err(Verdict::Wrong("the program stopped".into()))))
+        .collect()
+}
+
+/// Where programs build, and the items each holds.
+struct Builds<'a> {
+    scratch: &'a Path,
+    items: &'a str,
+}
+
+impl Builds<'_> {
+    /// Builds and runs the cases `fns` as program `tag`, setting the answer of each in `done`; a
+    /// lone case that fails to build is wrong.
+    fn run(&self, tag: &str, fns: &[(usize, String)], done: &mut [Option<Answer>]) {
+        let program = common::program(fns, PRELUDE, self.items);
+        match common::build_run(&self.scratch.join(tag), &program) {
             Ok(lines) => {
                 for (n, a) in answers(lines) {
                     done[n] = Some(Ok(a));
@@ -92,15 +115,6 @@ pub fn build(scratch: &Path, chunk: &[Prepared]) -> Vec<Answer> {
                 done[fns[0].0] = Some(Err(Verdict::Wrong(format!("rustc: {why}"))));
             }
             Err(_) => {}
-        };
-    run("all", &fns, &mut done);
-    // A build that failed, or a run that stopped early, is found out a case at a time.
-    for f in fns {
-        if done[f.0].is_none() {
-            run(&f.0.to_string(), std::slice::from_ref(&f), &mut done);
         }
     }
-    done.into_iter()
-        .map(|d| d.unwrap_or_else(|| Err(Verdict::Wrong("the program stopped".into()))))
-        .collect()
 }

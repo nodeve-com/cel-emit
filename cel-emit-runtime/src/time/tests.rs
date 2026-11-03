@@ -60,17 +60,11 @@ fn past_cels_range_overflows() {
     );
 }
 
-/// Values chrono holds and CEL does not: year 0000, and spans out to chrono's own ends.
+/// Year 0000, a value chrono holds and CEL does not.
 #[test]
-fn values_past_cels_range_give_a_value_or_an_error() {
+fn a_year_before_cels_range_gives_a_value_or_an_error() {
     use crate::cmp::{Equal, Order};
     let year_zero = DateTime::from_timestamp(MIN_SECONDS - 86_400, 0).unwrap();
-    let spans = [
-        TimeDelta::MAX,
-        TimeDelta::MIN,
-        TimeDelta::seconds(MAX_DURATION_SECONDS + 1),
-        TimeDelta::seconds(-MAX_DURATION_SECONDS - 1),
-    ];
     let inside = at();
     assert_eq!(year_zero.order(&inside), Ok(Some(std::cmp::Ordering::Less)));
     assert_eq!(year_zero.equal(&year_zero), Ok(true));
@@ -85,6 +79,20 @@ fn values_past_cels_range_give_a_value_or_an_error() {
     assert_eq!(hours_in(year_zero, &table), Err(Error::Function));
     assert!(add(year_zero, TimeDelta::seconds(1)).is_err());
     assert!(subtract(year_zero, TimeDelta::seconds(1)).is_err());
+}
+
+/// Spans out to chrono's own ends, which CEL does not hold.
+#[test]
+fn spans_past_cels_range_give_a_value_or_an_error() {
+    use crate::cmp::{Equal, Order};
+    let year_zero = DateTime::from_timestamp(MIN_SECONDS - 86_400, 0).unwrap();
+    let inside = at();
+    let spans = [
+        TimeDelta::MAX,
+        TimeDelta::MIN,
+        TimeDelta::seconds(MAX_DURATION_SECONDS + 1),
+        TimeDelta::seconds(-MAX_DURATION_SECONDS - 1),
+    ];
     for span in spans {
         assert!(span.order(&TimeDelta::zero()).is_ok());
         assert_eq!(span.equal(&span), Ok(true));

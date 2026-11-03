@@ -1,7 +1,7 @@
 //! Lists and maps: cel-emit-runtime's `collections`. A comprehension is a node of its own
 //! ([`crate::tree::Node::Map`] and the rest), emitted over the functions there.
 
-use crate::functions::Std;
+use crate::functions::{Pass, Std};
 use crate::types::Type;
 
 use super::cmp::equal;
@@ -21,18 +21,21 @@ pub(super) const FUNCTIONS: &[Std] = &[
         path: "collections::index_map",
         takes: |args| args.get(1).is_some_and(equal),
         borrows: true,
+        pass: Pass::Each,
     },
     Std {
         id: "in_list",
         path: "collections::in_list",
         takes: |args| args.first().is_some_and(equal),
         borrows: true,
+        pass: Pass::Each,
     },
     Std {
         id: "in_map",
         path: "collections::in_map",
         takes: |args| args.first().is_some_and(equal),
         borrows: true,
+        pass: Pass::Each,
     },
 ];
 

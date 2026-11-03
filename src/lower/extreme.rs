@@ -11,57 +11,70 @@ impl<'a> Lower<'a> {
         let Some((greatest, args)) = self.extreme_of(e) else {
             return invalid("a math extreme that isn't one");
         };
-        let name = if greatest { "greatest" } else { "least" };
-        let (items, is_list) = match args {
-            [arg] => match &arg.node {
-                Expr::List(xs) if xs.iter().any(|x| x.optional) => {
-                    return self.extreme_opt(e, xs);
-                }
-                Expr::List(xs) => {
-                    let mut items = Vec::with_capacity(xs.len());
-                    for x in xs {
-                        items.push(self.number(&x.expr)?);
-                    }
-                    (items, true)
-                }
-                // A comprehension folds as it goes: over none, absent.
-                Expr::Comprehension(_) => match self.mapped(arg)? {
-                    Some(list) => return self.over_fold(greatest, list),
-                    None => return unsupported("a math extreme of this comprehension"),
-                },
-                _ => {
-                    let x = self.number(arg)?;
-                    let elem = match &x.ty {
-                        Type::List(t) => Some((**t).clone()),
-                        _ => None,
-                    };
-                    // A list value, not a literal: its typed overload takes it whole, and an empty
-                    // one fails when it runs.
-                    if let Some(elem) = elem {
-                        return self.typed(e, vec![x], elem);
-                    }
-                    (vec![x], false)
-                }
+        match self.operands_of(e, greatest, args)? {
+            Operands::Done(t) => Ok(t),
+            Operands::Over(numbers) => self.pick(e, greatest, numbers),
+        }
+    }
+
+    /// The numbers `args` give to a `dyn` extreme `e`, or its whole value where they settle it.
+    fn operands_of(
+        &mut self,
+        e: &'a SpannedExpr,
+        greatest: bool,
+        args: &'a [SpannedExpr],
+    ) -> Result<Operands, Error> {
+        let [arg] = args else {
+            return Ok(Operands::over(self.numbers(args.iter())?, false));
+        };
+        match &arg.node {
+            Expr::List(xs) if xs.iter().any(|x| x.optional) => {
+                self.extreme_opt(e, xs).map(Operands::Done)
+            }
+            Expr::List(xs) => Ok(Operands::over(
+                self.numbers(xs.iter().map(|x| &x.expr))?,
+                true,
+            )),
+            // A comprehension folds as it goes: over none, absent.
+            Expr::Comprehension(_) => match self.mapped(arg)? {
+                Some(list) => self.over_fold(greatest, list).map(Operands::Done),
+                None => unsupported("a math extreme of this comprehension"),
             },
             _ => {
-                let mut items = Vec::with_capacity(args.len());
-                for a in args {
-                    items.push(self.number(a)?);
+                let x = self.number(arg)?;
+                // A list value, not a literal: its typed overload takes it whole, and an empty
+                // one fails when it runs.
+                if let Type::List(t) = &x.ty {
+                    let elem = (**t).clone();
+                    return self.typed(e, vec![x], elem).map(Operands::Done);
                 }
-                (items, false)
+                Ok(Operands::over(vec![x], false))
             }
-        };
+        }
+    }
+
+    /// Each of `exprs` as a number.
+    fn numbers(
+        &mut self,
+        exprs: impl Iterator<Item = &'a SpannedExpr>,
+    ) -> Result<Vec<Typed>, Error> {
+        exprs.map(|x| self.number(x)).collect()
+    }
+
+    /// The extreme of `items`, a list's elements where `is_list`: the typed overload where they
+    /// agree, else the number over them.
+    fn pick(&self, e: &SpannedExpr, greatest: bool, over: Numbers) -> Result<Typed, Error> {
+        let Numbers { items, is_list } = over;
+        let name = if greatest { "greatest" } else { "least" };
         let Some(first) = items.first().map(|i| i.ty.clone()) else {
             return unsupported(format!("math.{name} of no values"));
         };
-        let agree = items.iter().all(|i| i.ty == first);
-        if agree && typed_scalar(&first) {
-            return if is_list {
-                let list = Typed::new(Type::list(first.clone()), Node::List(items));
-                self.typed(e, vec![list], first)
-            } else {
-                self.typed(e, items, first)
+        if typed_scalar(&first) && items.iter().all(|i| i.ty == first) {
+            let args = match is_list {
+                true => vec![Typed::new(Type::list(first.clone()), Node::List(items))],
+                false => items,
             };
+            return self.typed(e, args, first);
         }
         let items = items.into_iter().map(wrap).collect::<Result<Vec<_>, _>>()?;
         if is_list {
@@ -151,4 +164,24 @@ impl<'a> Lower<'a> {
 /// A type a typed overload of `math.greatest` or `math.least` gives.
 fn typed_scalar(ty: &Type) -> bool {
     matches!(ty, Type::Int | Type::Uint | Type::Double)
+}
+
+/// What the arguments of a `dyn` extreme give.
+enum Operands {
+    /// The extreme's value.
+    Done(Typed),
+    /// The numbers to take it over.
+    Over(Numbers),
+}
+
+impl Operands {
+    fn over(items: Vec<Typed>, is_list: bool) -> Operands {
+        Operands::Over(Numbers { items, is_list })
+    }
+}
+
+/// The numbers an extreme runs over, a list's elements where `is_list`.
+struct Numbers {
+    items: Vec<Typed>,
+    is_list: bool,
 }

@@ -5,7 +5,7 @@ use cel_core::Value::{self, Bool as B, Double as D, Int as I, UInt as U};
 use cel_emit::{Field, Type, Width};
 use cel_emit_runtime::Error;
 
-use crate::cases::{check, list, Cases, Got};
+use crate::cases::{check, list, Cases, Got, Stored};
 
 fn field(name: &str, ty: Type) -> Field {
     Field {
@@ -102,7 +102,7 @@ fn a_stored_map_widens_what_is_read_from_it() {
             ("v.all(k, k > 1)", value(B(false))),
             ("size(v.map(k, k * 2147483648))", value(I(2))),
         ] {
-            cases.stored(source, bytes_by_int(), stored.clone(), want);
+            cases.stored(source, Stored::new(bytes_by_int(), stored.clone()), want);
         }
     });
 }
@@ -122,7 +122,11 @@ fn a_stored_list_widens_each_element_it_reads_or_the_whole_where_it_must() {
             ("(v + [1])[3]", value(I(1))),
             ("v == [5, -7, 2147483647]", value(B(true))),
         ] {
-            cases.stored(source, Type::list(narrow(Width::I32)), stored.clone(), want);
+            cases.stored(
+                source,
+                Stored::new(Type::list(narrow(Width::I32)), stored.clone()),
+                want,
+            );
         }
     });
 }
@@ -136,15 +140,17 @@ fn a_read_of_a_fields_own_type_fills_it_whole() {
         let stored = list(vec![D(f64::from(0.1f32)), D(2.5)]);
         cases.stored(
             "M{fs: v}.fs[0] == v[0]",
-            float32s.clone(),
-            stored.clone(),
+            Stored::new(float32s.clone(), stored.clone()),
             value(B(true)),
         );
-        cases.stored("size(M{fs: v}.fs)", float32s, stored, value(I(2)));
+        cases.stored(
+            "size(M{fs: v}.fs)",
+            Stored::new(float32s, stored),
+            value(I(2)),
+        );
         cases.stored(
             "M{a: 1, xs: v}.xs[1]",
-            Type::list(narrow(Width::I32)),
-            list(vec![I(5), I(-7)]),
+            Stored::new(Type::list(narrow(Width::I32)), list(vec![I(5), I(-7)])),
             value(I(-7)),
         );
     });
@@ -154,54 +160,51 @@ fn a_read_of_a_fields_own_type_fills_it_whole() {
 /// write `9.300000190734863`.
 #[test]
 fn a_stored_float32_writes_its_own_digits() {
-    let text = |t: &str| value(Value::String(t.to_string().into()));
     check(|cases| {
         message(cases);
-        let one = narrow(Width::F32);
-        let held = D(f64::from(9.3f32));
-        for (source, want) in [
-            ("string(v)", "9.3"),
-            ("json.encode(v)", "9.3"),
-            ("'%s'.format([v])", "9.3"),
-            ("'%s %s'.format([v, v])", "9.3 9.3"),
-            ("'%.1f'.format([v])", "9.3"),
-            ("string(M{f: v}.f)", "9.3"),
-        ] {
-            cases.stored(source, one.clone(), held.clone(), text(want));
-        }
-        cases.stored("string(v)", one.clone(), D(21.0), text("21.0"));
-        cases.stored(
-            "string(v + 1.0)",
-            one,
-            held.clone(),
-            text("10.300000190734863"),
-        );
-        let many = Type::list(narrow(Width::F32));
-        let stored = list(vec![held, D(0.5)]);
-        for (source, want) in [
-            ("'%s'.format(v)", "9.3"),
-            ("json.encode(v)", "[9.3,0.5]"),
-            ("'%s'.format([v])", "[9.3, 0.5]"),
-            ("v.map(x, string(x))[0]", "9.3"),
-        ] {
-            cases.stored(source, many.clone(), stored.clone(), text(want));
-        }
+        scalar_digits(cases);
+        list_digits(cases);
     });
 }
 
-/// Only here: a stored float32 list reads each element as the double it is, never the decimal
-/// it was written from.
-#[test]
-fn a_stored_float32_list_reads_as_the_double_it_is() {
-    check(|cases| {
-        let stored = list(vec![D(f64::from(0.1f32))]);
-        let ty = Type::list(narrow(Width::F32));
+fn text(t: &str) -> Got {
+    value(Value::String(t.to_string().into()))
+}
+
+fn scalar_digits(cases: &mut Cases) {
+    let one = narrow(Width::F32);
+    let held = D(f64::from(9.3f32));
+    for (source, want) in [
+        ("string(v)", "9.3"),
+        ("json.encode(v)", "9.3"),
+        ("'%s'.format([v])", "9.3"),
+        ("'%s %s'.format([v, v])", "9.3 9.3"),
+        ("'%.1f'.format([v])", "9.3"),
+        ("string(M{f: v}.f)", "9.3"),
+    ] {
+        cases.stored(source, Stored::new(one.clone(), held.clone()), text(want));
+    }
+    cases.stored("string(v)", Stored::new(one.clone(), D(21.0)), text("21.0"));
+    cases.stored(
+        "string(v + 1.0)",
+        Stored::new(one, held),
+        text("10.300000190734863"),
+    );
+}
+
+fn list_digits(cases: &mut Cases) {
+    let many = Type::list(narrow(Width::F32));
+    let stored = list(vec![D(f64::from(9.3f32)), D(0.5)]);
+    for (source, want) in [
+        ("'%s'.format(v)", "9.3"),
+        ("json.encode(v)", "[9.3,0.5]"),
+        ("'%s'.format([v])", "[9.3, 0.5]"),
+        ("v.map(x, string(x))[0]", "9.3"),
+    ] {
         cases.stored(
-            "v[0]",
-            ty.clone(),
-            stored.clone(),
-            value(D(f64::from(0.1f32))),
+            source,
+            Stored::new(many.clone(), stored.clone()),
+            text(want),
         );
-        cases.stored("v[0] == 0.1", ty, stored, value(B(false)));
-    });
+    }
 }

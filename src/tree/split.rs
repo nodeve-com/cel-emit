@@ -1,7 +1,7 @@
 //! A message-typed tree as its fields, for an embedder that lays a message out field by field.
 
 use super::{Node, Typed};
-use crate::types::Type;
+use crate::types::{Field, Type};
 
 /// A message's fields, and the locals they read.
 #[derive(Clone, Debug, PartialEq)]
@@ -37,43 +37,32 @@ pub fn split(t: Typed) -> Split {
             fields: Vec::new(),
         };
     };
-    let name = |i: usize| declared.get(i).map(|f| f.name.clone());
     let (lets, t) = unbound(t);
-    match t.node {
-        Node::Message(entries) => Split {
-            lets,
-            fields: entries
-                .into_iter()
-                .filter_map(|(i, v, _)| Some((name(i)?, v)))
-                .collect(),
-        },
-        Node::FromDyn(x, _) => Split {
-            lets,
-            fields: declared
-                .iter()
-                .map(|f| {
-                    let key = Typed::string(&f.name);
-                    let got = Typed::call("dyn_get", vec![(*x).clone(), key], Type::Dyn);
-                    let read = Node::FromDyn(Box::new(got), f.ty.clone());
-                    (f.name.clone(), Typed::new(f.ty.clone(), read))
-                })
-                .collect(),
-        },
+    let fields = match t.node {
+        Node::Message(entries) => entries
+            .into_iter()
+            .filter_map(|(i, v, _)| Some((declared.get(i)?.name.clone(), v)))
+            .collect(),
+        Node::FromDyn(x, _) => declared.iter().map(|f| dyn_field(&x, f)).collect(),
         node => {
             let whole = Typed { node, ..t };
-            Split {
-                lets,
-                fields: declared
-                    .iter()
-                    .enumerate()
-                    .map(|(i, f)| {
-                        let read = Node::Field(Box::new(whole.clone()), i);
-                        (f.name.clone(), Typed::stored(f.ty.clone(), read))
-                    })
-                    .collect(),
-            }
+            (declared.iter().enumerate())
+                .map(|(i, f)| {
+                    let read = Node::Field(Box::new(whole.clone()), i);
+                    (f.name.clone(), Typed::stored(f.ty.clone(), read))
+                })
+                .collect()
         }
-    }
+    };
+    Split { lets, fields }
+}
+
+/// Field `f` read from the dyn `x`'s key of its name.
+fn dyn_field(x: &Typed, f: &Field) -> (String, Typed) {
+    let key = Typed::string(&f.name);
+    let got = Typed::call("dyn_get", vec![x.clone(), key], Type::Dyn);
+    let read = Node::FromDyn(Box::new(got), f.ty.clone());
+    (f.name.clone(), Typed::new(f.ty.clone(), read))
 }
 
 #[cfg(test)]

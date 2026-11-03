@@ -5,12 +5,16 @@
 
 use std::collections::BTreeMap;
 
+use cel_core_conformance::SimpleTest;
+use cel_core_proto::gen::cel::expr::decl::DeclKind;
+use cel_core_proto::gen::cel::expr::r#type::TypeKind;
+use cel_core_proto::gen::cel::expr::Decl;
 use cel_core_proto::ProstProtoRegistry;
 use cel_emit::decls::Name;
 use cel_emit::tree::{Node, Typed};
 use cel_emit::types::{Field, Type, Width};
 use cel_emit::{At, Decls};
-use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor};
+use prost_reflect::{EnumDescriptor, FieldDescriptor, Kind, MessageDescriptor};
 
 /// The packages the suite declares its `TestAllTypes` in.
 const PROTO2: &str = "cel.expr.conformance.proto2";
@@ -44,35 +48,12 @@ pub fn declared(registry: &ProstProtoRegistry, container: &str) -> Decls {
                 continue;
             };
             let short = name.strip_prefix(&format!("{package}.")).unwrap_or(&name);
-            let values: BTreeMap<String, i32> = e
-                .values()
-                .map(|v| (v.name().to_string(), v.number()))
-                .collect();
-            decls.enums.insert(name.clone(), values.clone());
-            if pkg == Some(package) {
-                decls.enums.insert(short.to_string(), values);
-            }
-            for v in e.values() {
-                let at = || At::Constant(Typed::new(Type::Int, Node::Int(i64::from(v.number()))));
-                let qualified = format!("{name}.{}", v.name());
-                decls.names.insert(
-                    qualified,
-                    Name {
-                        ty: Type::Int,
-                        at: at(),
-                    },
-                );
-                if pkg == Some(package) {
-                    let inside = format!("{short}.{}", v.name());
-                    decls.names.insert(
-                        inside,
-                        Name {
-                            ty: Type::Int,
-                            at: at(),
-                        },
-                    );
-                }
-            }
+            declare_enum(
+                &mut decls,
+                &e,
+                &name,
+                (pkg == Some(package)).then_some(short),
+            );
         }
     }
     if let Some(pkg) = pkg {
@@ -89,6 +70,32 @@ pub fn declared(registry: &ProstProtoRegistry, container: &str) -> Decls {
         }
     }
     decls
+}
+
+/// Enum `e`, named `name`, declared with its values qualified, and by `short` where given.
+fn declare_enum(decls: &mut Decls, e: &EnumDescriptor, name: &str, short: Option<&str>) {
+    let values: BTreeMap<String, i32> = e
+        .values()
+        .map(|v| (v.name().to_string(), v.number()))
+        .collect();
+    decls.enums.insert(name.to_string(), values.clone());
+    if let Some(short) = short {
+        decls.enums.insert(short.to_string(), values);
+    }
+    for v in e.values() {
+        let constant = || Name {
+            ty: Type::Int,
+            at: At::Constant(Typed::new(Type::Int, Node::Int(i64::from(v.number())))),
+        };
+        decls
+            .names
+            .insert(format!("{name}.{}", v.name()), constant());
+        if let Some(short) = short {
+            decls
+                .names
+                .insert(format!("{short}.{}", v.name()), constant());
+        }
+    }
 }
 
 /// `msg` as a message of the fields cel-emit has a type for. A message already being built is
@@ -158,4 +165,16 @@ fn kind(k: &Kind, open: &mut Vec<String>) -> Option<Type> {
             _ => message(m, open)?,
         },
     })
+}
+
+/// Each name `test` declares as a message, with the message's type name.
+pub fn declared_messages(test: &SimpleTest) -> BTreeMap<String, String> {
+    let kind = |decl: &Decl| match &decl.decl_kind {
+        Some(DeclKind::Ident(ident)) => match ident.r#type.as_ref()?.type_kind.as_ref()? {
+            TypeKind::MessageType(n) => Some((decl.name.clone(), n.clone())),
+            _ => None,
+        },
+        _ => None,
+    };
+    test.type_env.iter().filter_map(kind).collect()
 }

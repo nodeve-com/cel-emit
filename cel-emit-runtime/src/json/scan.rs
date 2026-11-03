@@ -39,45 +39,49 @@ pub(super) fn value(b: &[u8]) -> Option<&[u8]> {
 fn nested(mut b: &[u8]) -> Option<&[u8]> {
     let mut open = Open::default();
     loop {
-        // At a value, or at a bracket that opens one.
-        let (&c, rest) = ws(b).split_first()?;
-        b = match c {
-            b'{' | b'[' => {
-                let object = c == b'{';
-                let close = if object { b'}' } else { b']' };
-                let inner = ws(rest);
-                match inner.split_first() {
-                    Some((&d, after)) if d == close => after,
-                    _ => {
-                        open.push(object);
-                        b = if object { member(inner)? } else { inner };
-                        continue;
-                    }
-                }
-            }
-            _ => value(b)?,
-        };
-        // Past a value: close each bracket it ends, then on to the next value, if any.
-        loop {
-            let Some(object) = open.top() else {
-                return Some(b);
-            };
-            let (&c, rest) = ws(b).split_first()?;
-            match c {
-                b',' if object => {
-                    b = member(ws(rest))?;
-                    break;
-                }
-                b',' => {
-                    b = rest;
-                    break;
-                }
-                b'}' if object => open.pop(),
-                b']' if !object => open.pop(),
-                _ => return None,
-            }
-            b = rest;
+        b = descend(b, &mut open)?;
+        let (rest, done) = ascend(b, &mut open)?;
+        if done {
+            return Some(rest);
         }
+        b = rest;
+    }
+}
+
+/// `b` past the value at its start, opening each bracket that starts it: an empty one is a value.
+fn descend<'a>(mut b: &'a [u8], open: &mut Open) -> Option<&'a [u8]> {
+    loop {
+        let (&c, rest) = ws(b).split_first()?;
+        if !matches!(c, b'{' | b'[') {
+            return value(b);
+        }
+        let object = c == b'{';
+        let inner = ws(rest);
+        match inner.split_first() {
+            Some((&d, after)) if d == if object { b'}' } else { b']' } => return Some(after),
+            _ => {}
+        }
+        open.push(object);
+        b = if object { member(inner)? } else { inner };
+    }
+}
+
+/// `b` past a value, closing each bracket it ends: the rest and whether none is left open, else
+/// the rest starts the next value.
+fn ascend<'a>(mut b: &'a [u8], open: &mut Open) -> Option<(&'a [u8], bool)> {
+    loop {
+        let Some(object) = open.top() else {
+            return Some((b, true));
+        };
+        let (&c, rest) = ws(b).split_first()?;
+        match c {
+            b',' if object => return Some((member(ws(rest))?, false)),
+            b',' => return Some((rest, false)),
+            b'}' if object => open.pop(),
+            b']' if !object => open.pop(),
+            _ => return None,
+        }
+        b = rest;
     }
 }
 

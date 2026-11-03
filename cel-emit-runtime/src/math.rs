@@ -187,26 +187,16 @@ pub fn least_of<T: PartialOrd + Copy>(xs: impl IntoIterator<Item = Result<T>>) -
     extreme(xs, Less, Error::Absent)
 }
 
-/// `math.greatest` and `math.least` of each arity's arguments.
-macro_rules! arities {
-    ($($greatest:ident, $least:ident ($($a:ident),+);)*) => {$(
-        pub fn $greatest<T: PartialOrd + Copy>($($a: T),+) -> Result<T> {
-            extreme([$(Ok($a)),+], Greater, Error::Function)
-        }
-
-        pub fn $least<T: PartialOrd + Copy>($($a: T),+) -> Result<T> {
-            extreme([$(Ok($a)),+], Less, Error::Function)
-        }
-    )*};
+/// `math.greatest` of its `N` arguments, at least one.
+pub fn greatest<T: PartialOrd + Copy, const N: usize>(xs: [T; N]) -> Result<T> {
+    const { assert!(N >= 1) };
+    extreme(xs.into_iter().map(Ok), Greater, Error::Function)
 }
 
-arities! {
-    greatest1, least1 (a);
-    greatest2, least2 (a, b);
-    greatest3, least3 (a, b, c);
-    greatest4, least4 (a, b, c, d);
-    greatest5, least5 (a, b, c, d, e);
-    greatest6, least6 (a, b, c, d, e, f);
+/// `math.least` of its `N` arguments, at least one.
+pub fn least<T: PartialOrd + Copy, const N: usize>(xs: [T; N]) -> Result<T> {
+    const { assert!(N >= 1) };
+    extreme(xs.into_iter().map(Ok), Less, Error::Function)
 }
 
 /// A number `math.sum` adds: an int checked, a double as IEEE 754 does.
@@ -244,14 +234,14 @@ mod tests {
 
     #[test]
     fn extremes_keep_the_first_of_a_tie_and_cant_order_a_nan() {
-        assert_eq!(greatest4(3, -3, 7, 7), Ok(7));
-        assert_eq!(least3(3, -3, 7), Ok(-3));
+        assert_eq!(greatest([3, -3, 7, 7]), Ok(7));
+        assert_eq!(least([3, -3, 7]), Ok(-3));
         assert_eq!(greatest_list(&Vec::<i64>::new()), Err(Error::Function));
         assert_eq!(greatest_of(Vec::<Result<i64>>::new()), Err(Error::Absent));
-        assert_eq!(least2(0.0, -0.0).map(f64::is_sign_positive), Ok(true));
-        assert!(greatest1(f64::NAN).is_ok_and(f64::is_nan));
-        assert_eq!(greatest2(1.0, f64::NAN), Err(Error::Function));
-        assert_eq!(least2(f64::NAN, 1.0), Err(Error::Function));
+        assert_eq!(least([0.0, -0.0]).map(f64::is_sign_positive), Ok(true));
+        assert!(greatest([f64::NAN]).is_ok_and(f64::is_nan));
+        assert_eq!(greatest([1.0, f64::NAN]), Err(Error::Function));
+        assert_eq!(least([f64::NAN, 1.0]), Err(Error::Function));
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use cel_core::{MapKey, Value, ValueMap};
 use cel_core_proto::{maybe_unwrap_well_known, ProstMessage};
-use prost_reflect::{DynamicMessage, ReflectMessage, Value as Proto};
+use prost_reflect::{DynamicMessage, FieldDescriptor, ReflectMessage, Value as Proto};
 
 use crate::common::values;
 
@@ -35,24 +35,36 @@ fn check(msg: &DynamicMessage, at: &[String], got: &[Leaf]) -> Result<(), String
             .filter(|(p, _)| p.starts_with(&here[..]))
             .collect();
         if under.is_empty() {
-            if msg.has_field(&fd) && *value != Proto::default_value_for_field(&fd) {
-                return Err(format!(
-                    "{} is set, but the result leaves it out",
-                    here.join(".")
-                ));
-            }
+            unset(msg, &fd, &here)?;
         } else if let [(p, v)] = under.as_slice() {
             if p.len() == here.len() {
-                let want = cel(&value).ok_or_else(|| format!("{}: unreadable", here.join(".")))?;
-                if values::show(&want) != *v {
-                    return Err(format!("{}: want {want:?}, got {v:?}", here.join(".")));
-                }
+                leaf(&value, &here, v)?;
                 continue;
             }
             nested(&value, &here, got)?;
         } else {
             nested(&value, &here, got)?;
         }
+    }
+    Ok(())
+}
+
+/// Whether field `fd` of `msg`, which the result leaves out, is unset.
+fn unset(msg: &DynamicMessage, fd: &FieldDescriptor, here: &[String]) -> Result<(), String> {
+    if msg.has_field(fd) && *msg.get_field(fd) != Proto::default_value_for_field(fd) {
+        return Err(format!(
+            "{} is set, but the result leaves it out",
+            here.join(".")
+        ));
+    }
+    Ok(())
+}
+
+/// Whether the result `got` at `here` shows as the field's `value`.
+fn leaf(value: &Proto, here: &[String], got: &str) -> Result<(), String> {
+    let want = cel(value).ok_or_else(|| format!("{}: unreadable", here.join(".")))?;
+    if values::show(&want) != got {
+        return Err(format!("{}: want {want:?}, got {got:?}", here.join(".")));
     }
     Ok(())
 }
@@ -84,26 +96,34 @@ fn cel(v: &Proto) -> Option<Value> {
         Proto::List(items) => {
             Value::List(items.iter().map(cel).collect::<Option<Vec<_>>>()?.into())
         }
-        Proto::Map(m) => Value::Map(Arc::new(ValueMap::from_entries(
-            m.iter()
-                .map(|(k, v)| match k {
-                    prost_reflect::MapKey::String(k) => {
-                        Some((MapKey::String(k.as_str().into()), cel(v)?))
-                    }
-                    _ => None,
-                })
-                .collect::<Option<Vec<_>>>()?,
-        ))),
-        Proto::Message(m) => match maybe_unwrap_well_known(m.clone()) {
-            v @ (Value::Timestamp(_)
-            | Value::Duration(_)
-            | Value::Int(_)
-            | Value::UInt(_)
-            | Value::Double(_)
-            | Value::Bool(_)
-            | Value::String(_)
-            | Value::Bytes(_)) => v,
-            _ => return None,
-        },
+        Proto::Map(m) => cel_map(m)?,
+        Proto::Message(m) => well_known(m)?,
     })
+}
+
+/// A string-keyed map `m` as a CEL value.
+fn cel_map(m: &std::collections::HashMap<prost_reflect::MapKey, Proto>) -> Option<Value> {
+    let entries = m
+        .iter()
+        .map(|(k, v)| match k {
+            prost_reflect::MapKey::String(k) => Some((MapKey::String(k.as_str().into()), cel(v)?)),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(Value::Map(Arc::new(ValueMap::from_entries(entries))))
+}
+
+/// A message `m` that is a time or a wrapper of a scalar, as the value it is.
+fn well_known(m: &DynamicMessage) -> Option<Value> {
+    match maybe_unwrap_well_known(m.clone()) {
+        v @ (Value::Timestamp(_)
+        | Value::Duration(_)
+        | Value::Int(_)
+        | Value::UInt(_)
+        | Value::Double(_)
+        | Value::Bool(_)
+        | Value::String(_)
+        | Value::Bytes(_)) => Some(v),
+        _ => None,
+    }
 }

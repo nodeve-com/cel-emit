@@ -29,36 +29,46 @@ pub struct Case {
 /// A case's name, its expression, and the case.
 pub type Prepared = (String, String, Case);
 
-/// `test` lowered, or its verdict without running.
-pub fn prepare(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Case, Verdict> {
+/// The verdict of a case outside what the suite runs here, if it is one.
+fn outside(test: &SimpleTest, registry: &ProstProtoRegistry) -> Option<Verdict> {
     if test.check_only {
-        return Err(NotApplicable("check only: the suite runs nothing"));
+        return Some(NotApplicable("check only: the suite runs nothing"));
     }
     // Typed CEL, no `dyn`. An unchecked case runs dynamically.
     if test.disable_check || test.expr.contains("dyn(") {
-        return Err(NotApplicable("dyn"));
+        return Some(NotApplicable("dyn"));
     }
     // Proto2 extensions and `Any` values: the case's own names and values, found structurally.
-    if let Some(why) = scope::outside(test, registry) {
-        return Err(NotApplicable(why));
-    }
+    scope::outside(test, registry).map(NotApplicable)
+}
+
+/// What `test` expects: a value, or an error.
+fn expectation(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Expect, Verdict> {
     let value = |v| {
         proto_value_to_value(v, registry)
             .map(Expect::Value)
             .map_err(|e| Unsupported(format!("an expected value that can't be held: {e}")))
     };
-    let expect = match &test.result_matcher {
-        None => Expect::Value(Value::Bool(true)),
-        Some(ResultMatcher::Value(v)) => value(v)?,
+    match &test.result_matcher {
+        None => Ok(Expect::Value(Value::Bool(true))),
+        Some(ResultMatcher::Value(v)) => value(v),
         Some(ResultMatcher::TypedResult(t)) => match &t.result {
-            None => Expect::Value(Value::Bool(true)),
-            Some(v) => value(v)?,
+            None => Ok(Expect::Value(Value::Bool(true))),
+            Some(v) => value(v),
         },
-        Some(ResultMatcher::EvalError(_) | ResultMatcher::AnyEvalErrors(_)) => Expect::Error,
+        Some(ResultMatcher::EvalError(_) | ResultMatcher::AnyEvalErrors(_)) => Ok(Expect::Error),
         Some(ResultMatcher::Unknown(_) | ResultMatcher::AnyUnknowns(_)) => {
-            return Err(Unsupported("an unknown: no partial evaluation".into()))
+            Err(Unsupported("an unknown: no partial evaluation".into()))
         }
-    };
+    }
+}
+
+/// `test` lowered, or its verdict without running.
+pub fn prepare(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Case, Verdict> {
+    if let Some(verdict) = outside(test, registry) {
+        return Err(verdict);
+    }
+    let expect = expectation(test, registry)?;
     if test.disable_macros {
         return Err(Unsupported("macros off".into()));
     }
@@ -68,6 +78,15 @@ pub fn prepare(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Case,
     if !test.container.is_empty() && declares {
         return Err(Unsupported("a container over declared names".into()));
     }
+    lowered(test, registry, expect)
+}
+
+/// `test`, which expects `expect`, lowered over its bindings.
+fn lowered(
+    test: &SimpleTest,
+    registry: &ProstProtoRegistry,
+    expect: Expect,
+) -> Result<Case, Verdict> {
     let inputs = values::inputs(test, registry)?;
     let mut decls = types::declared(registry, &test.container);
     for (i, (name, ty, _)) in inputs.iter().enumerate() {

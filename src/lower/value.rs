@@ -1,5 +1,7 @@
 //! What an expression fills: a message built, a map literal, a message read whole, or one value; and what a `cel.bind` name stands for.
 
+use cel_core::types::MapEntry;
+
 use super::*;
 
 impl<'a> Lower<'a> {
@@ -15,19 +17,7 @@ impl<'a> Lower<'a> {
                 Ok(super::scope::wrap(v, &lets))
             }
             Expr::Struct { .. } => self.message(e),
-            Expr::Map(entries) => {
-                let mut made = Vec::with_capacity(entries.len());
-                for entry in entries {
-                    let Expr::String(key) = &entry.key.node else {
-                        return unsupported("a map key other than a string literal");
-                    };
-                    if made.iter().any(|(k, _, _)| k == key) {
-                        return invalid(format!("map key '{key}' is repeated"));
-                    }
-                    made.push((key.clone(), self.value(&entry.value)?, entry.optional));
-                }
-                super::parts::literal_map(made)
-            }
+            Expr::Map(entries) => self.map_value(entries),
             Expr::Ident(name) => match self.bound(name) {
                 Some(v) => Ok(v.clone()),
                 None if self.local(name).is_none() && self.whole(name) => self.expand(name),
@@ -39,6 +29,21 @@ impl<'a> Lower<'a> {
             },
             _ => self.expr(e),
         }
+    }
+
+    /// A map literal of string keys as a message of its entries.
+    fn map_value(&mut self, entries: &'a [MapEntry]) -> Result<Typed, Error> {
+        let mut made = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let Expr::String(key) = &entry.key.node else {
+                return unsupported("a map key other than a string literal");
+            };
+            if made.iter().any(|(k, _, _)| k == key) {
+                return invalid(format!("map key '{key}' is repeated"));
+            }
+            made.push((key.clone(), self.value(&entry.value)?, entry.optional));
+        }
+        super::parts::literal_map(made)
     }
 
     /// Whether `name` is a message read whole: one with a field in scope.
@@ -61,20 +66,15 @@ impl<'a> Lower<'a> {
             let (head, tail) = rest
                 .split_once('.')
                 .map_or((rest.as_str(), None), |(h, t)| (h, Some(t)));
-            match tail {
-                None => {
-                    let value = match n.at {
-                        At::Var(v) => Typed::new(n.ty.clone(), Node::Var(v)),
-                        At::Constant(c) => c,
-                    };
-                    fields.push((head.to_string(), value));
-                }
-                Some(_) => {
-                    if !fields.iter().any(|(f, _)| f == head) {
-                        fields.push((head.to_string(), self.expand(&format!("{prefix}{head}"))?));
-                    }
-                }
+            if tail.is_some() && fields.iter().any(|(f, _)| f == head) {
+                continue;
             }
+            let value = match (tail, n.at) {
+                (None, At::Var(v)) => Typed::new(n.ty.clone(), Node::Var(v)),
+                (None, At::Constant(c)) => c,
+                (Some(_), _) => self.expand(&format!("{prefix}{head}"))?,
+            };
+            fields.push((head.to_string(), value));
         }
         super::parts::anonymous(fields)
     }

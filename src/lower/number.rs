@@ -18,76 +18,106 @@ impl<'a> Lower<'a> {
             return self.extreme(e).map(Some);
         }
         match &e.node {
-            Expr::Call { expr, args } => {
-                let (Expr::Ident(to), [arg]) = (&expr.node, args.as_slice()) else {
-                    return Ok(None);
-                };
-                let (func, ty) = match to.as_str() {
-                    "int" => ("number_to_int", Type::Int),
-                    "uint" => ("number_to_uint", Type::Uint),
-                    "double" => ("number_to_double", Type::Double),
-                    _ => return Ok(None),
-                };
-                if !self.is_numeric(arg) {
-                    return Ok(None);
-                }
-                let x = wrap(self.number(arg)?)?;
-                Ok(Some(Typed::call(func, vec![x], ty)))
-            }
+            Expr::Call { expr, args } => self.number_cast(expr, args),
             Expr::Binary { op, left, right }
                 if is_comparison(op) && (self.is_numeric(left) || self.is_numeric(right)) =>
             {
-                let id = match op {
-                    BinaryOp::Eq => "equals",
-                    BinaryOp::Ne => "not_equals",
-                    BinaryOp::Lt => "less_number",
-                    BinaryOp::Le => "less_equals_number",
-                    BinaryOp::Gt => "greater_number",
-                    _ => "greater_equals_number",
-                };
-                let a = wrap(self.number(left)?)?;
-                let b = wrap(self.number(right)?)?;
-                Ok(Some(Typed::call(id, vec![a, b], Type::Bool)))
+                self.number_comparison(op, left, right).map(Some)
             }
             // Arithmetic over a `dyn` extreme's typed value: the checker left several overloads.
             Expr::Binary { op, left, right } if self.is_numeric(left) || self.is_numeric(right) => {
-                let sym = match op {
-                    BinaryOp::Add => "+",
-                    BinaryOp::Sub => "-",
-                    BinaryOp::Mul => "*",
-                    BinaryOp::Div => "/",
-                    BinaryOp::Mod => "%",
-                    _ => return Ok(None),
-                };
-                let (a, b) = (self.number(left)?, self.number(right)?);
-                if a.ty == Type::Number {
-                    return self.as_value(left, a).map(Some);
-                }
-                if b.ty == Type::Number {
-                    return self.as_value(right, b).map(Some);
-                }
-                if !matches!(a.ty, Type::Int | Type::Double) {
-                    return unsupported(format!("arithmetic on {}", a.ty.display()));
-                }
-                Typed::binary(sym, a, b)
-                    .map(Some)
-                    .ok_or_else(|| Error::Unsupported("arithmetic on mixed operands".into()))
+                self.number_arithmetic(op, left, right)
             }
             Expr::Unary {
                 op: UnaryOp::Neg,
                 expr,
-            } if self.is_numeric(expr) => {
-                let x = self.number(expr)?;
-                let (id, ty) = match x.ty {
-                    Type::Number => return self.as_value(expr, x).map(Some),
-                    Type::Int => ("negate_int64", Type::Int),
-                    Type::Double => ("negate_double", Type::Double),
-                    _ => return unsupported(format!("negation of {}", x.ty.display())),
-                };
-                Ok(Some(Typed::call(id, vec![x], ty)))
-            }
+            } if self.is_numeric(expr) => self.number_negation(expr).map(Some),
             _ => Ok(None),
         }
+    }
+
+    /// A cast of a number form to `int`, `uint`, or `double`.
+    fn number_cast(
+        &mut self,
+        callee: &'a SpannedExpr,
+        args: &'a [SpannedExpr],
+    ) -> Result<Option<Typed>, Error> {
+        let (Expr::Ident(to), [arg]) = (&callee.node, args) else {
+            return Ok(None);
+        };
+        let (func, ty) = match to.as_str() {
+            "int" => ("number_to_int", Type::Int),
+            "uint" => ("number_to_uint", Type::Uint),
+            "double" => ("number_to_double", Type::Double),
+            _ => return Ok(None),
+        };
+        if !self.is_numeric(arg) {
+            return Ok(None);
+        }
+        let x = wrap(self.number(arg)?)?;
+        Ok(Some(Typed::call(func, vec![x], ty)))
+    }
+
+    /// A comparison `op` of `left` and `right`, one a number form, each as a number.
+    fn number_comparison(
+        &mut self,
+        op: &BinaryOp,
+        left: &'a SpannedExpr,
+        right: &'a SpannedExpr,
+    ) -> Result<Typed, Error> {
+        let id = match op {
+            BinaryOp::Eq => "equals",
+            BinaryOp::Ne => "not_equals",
+            BinaryOp::Lt => "less_number",
+            BinaryOp::Le => "less_equals_number",
+            BinaryOp::Gt => "greater_number",
+            _ => "greater_equals_number",
+        };
+        let a = wrap(self.number(left)?)?;
+        let b = wrap(self.number(right)?)?;
+        Ok(Typed::call(id, vec![a, b], Type::Bool))
+    }
+
+    /// Arithmetic `op` of `left` and `right`, one a number form, on their typed values.
+    fn number_arithmetic(
+        &mut self,
+        op: &BinaryOp,
+        left: &'a SpannedExpr,
+        right: &'a SpannedExpr,
+    ) -> Result<Option<Typed>, Error> {
+        let sym = match op {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Mod => "%",
+            _ => return Ok(None),
+        };
+        let (a, b) = (self.number(left)?, self.number(right)?);
+        if a.ty == Type::Number {
+            return self.as_value(left, a).map(Some);
+        }
+        if b.ty == Type::Number {
+            return self.as_value(right, b).map(Some);
+        }
+        if !matches!(a.ty, Type::Int | Type::Double) {
+            return unsupported(format!("arithmetic on {}", a.ty.display()));
+        }
+        Typed::binary(sym, a, b)
+            .map(Some)
+            .ok_or_else(|| Error::Unsupported("arithmetic on mixed operands".into()))
+    }
+
+    /// The negation of `expr`, a number form.
+    fn number_negation(&mut self, expr: &'a SpannedExpr) -> Result<Typed, Error> {
+        let x = self.number(expr)?;
+        let (id, ty) = match x.ty {
+            Type::Number => return self.as_value(expr, x),
+            Type::Int => ("negate_int64", Type::Int),
+            Type::Double => ("negate_double", Type::Double),
+            _ => return unsupported(format!("negation of {}", x.ty.display())),
+        };
+        Ok(Typed::call(id, vec![x], ty))
     }
 
     /// `e` as an operand of a number form: a uint literal, or whatever [`Self::number_form`] or

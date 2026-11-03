@@ -5,7 +5,7 @@ use cel_emit::{Field, Type, Width};
 use cel_emit_runtime::Error;
 
 use super::{gives, ints};
-use crate::cases::{check, list, refusal, s, Got};
+use crate::cases::{check, list, refusal, s, Cases, Got, Stored};
 
 /// Only here: `lists.range` counts from zero, empty for no count, and a count past memory is a
 /// Range status, not a trap.
@@ -61,67 +61,85 @@ fn field(name: &str, ty: Type) -> Field {
 #[test]
 fn stored_lists_take_the_methods() {
     check(|cases| {
-        let narrow = Type::list(Type::Narrow(Width::I32));
-        let fields = vec![
-            field("xs", narrow.clone()),
-            field("fs", Type::list(Type::Narrow(Width::F32))),
-        ];
-        cases.message("M", Type::Message(fields));
-        let m = "M{xs: [3, -1, 2, 3], fs: [2.5, 0.5]}";
-        gives(
-            cases,
-            &format!("[0, 1].map(i, {m}.xs[i])"),
-            &[],
-            ints(&[3, -1]),
-        );
-        for (source, want) in [
-            ("sort()", ints(&[-1, 2, 3, 3])),
-            ("distinct()", ints(&[3, -1, 2])),
-            ("reverse()", ints(&[3, 2, -1, 3])),
-            ("slice(1, 3)", ints(&[-1, 2])),
-        ] {
-            gives(cases, &format!("{m}.xs.{source}"), &[], want);
-        }
-        gives(cases, &format!("{m}.xs.first().orValue(0)"), &[], I(3));
-        gives(
-            cases,
-            &format!("{m}.xs.sort().first().orValue(0)"),
-            &[],
-            I(-1),
-        );
-        gives(
-            cases,
-            &format!("{m}.fs.sort()"),
-            &[],
-            list(vec![D(0.5), D(2.5)]),
-        );
-        gives(cases, &format!("size({m}.xs.distinct())"), &[], I(3));
-        gives(
-            cases,
-            &format!("{m}.xs.distinct().map(x, x + 3000000000)[0]"),
-            &[],
-            I(3000000003),
-        );
-        cases.stored(
-            "v.sort()",
-            narrow.clone(),
-            ints(&[5, -5, 0]),
-            Got::Value(ints(&[-5, 0, 5])),
-        );
-        cases.stored(
-            "v.reverse()",
-            narrow.clone(),
-            ints(&[5, -5]),
-            Got::Value(ints(&[-5, 5])),
-        );
-        cases.stored("v.first().orValue(9)", narrow, ints(&[]), Got::Value(I(9)));
-        cases.stored(
-            "v.sort()",
-            Type::list(Type::String),
-            list(vec![s("b"), s("a")]),
-            Got::Value(list(vec![s("a"), s("b")])),
-        );
+        stored_methods(cases);
+        stored_results(cases);
+        stored_values(cases);
     });
+}
+
+/// Methods on a list stored at a narrow width.
+fn stored_methods(cases: &mut Cases) {
+    let narrow = Type::list(Type::Narrow(Width::I32));
+    let fields = vec![
+        field("xs", narrow.clone()),
+        field("fs", Type::list(Type::Narrow(Width::F32))),
+    ];
+    cases.message("M", Type::Message(fields));
+    let m = "M{xs: [3, -1, 2, 3], fs: [2.5, 0.5]}";
+    gives(
+        cases,
+        &format!("[0, 1].map(i, {m}.xs[i])"),
+        &[],
+        ints(&[3, -1]),
+    );
+    for (source, want) in [
+        ("sort()", ints(&[-1, 2, 3, 3])),
+        ("distinct()", ints(&[3, -1, 2])),
+        ("reverse()", ints(&[3, 2, -1, 3])),
+        ("slice(1, 3)", ints(&[-1, 2])),
+    ] {
+        gives(cases, &format!("{m}.xs.{source}"), &[], want);
+    }
+}
+
+/// What the methods give over stored lists, widened.
+fn stored_results(cases: &mut Cases) {
+    let m = "M{xs: [3, -1, 2, 3], fs: [2.5, 0.5]}";
+    gives(cases, &format!("{m}.xs.first().orValue(0)"), &[], I(3));
+    gives(
+        cases,
+        &format!("{m}.xs.sort().first().orValue(0)"),
+        &[],
+        I(-1),
+    );
+    gives(
+        cases,
+        &format!("{m}.fs.sort()"),
+        &[],
+        list(vec![D(0.5), D(2.5)]),
+    );
+    gives(cases, &format!("size({m}.xs.distinct())"), &[], I(3));
+    gives(
+        cases,
+        &format!("{m}.xs.distinct().map(x, x + 3000000000)[0]"),
+        &[],
+        I(3000000003),
+    );
+}
+
+/// Methods over stored values bound as inputs.
+fn stored_values(cases: &mut Cases) {
+    let narrow = Type::list(Type::Narrow(Width::I32));
+    cases.stored(
+        "v.sort()",
+        Stored::new(narrow.clone(), ints(&[5, -5, 0])),
+        Got::Value(ints(&[-5, 0, 5])),
+    );
+    cases.stored(
+        "v.reverse()",
+        Stored::new(narrow.clone(), ints(&[5, -5])),
+        Got::Value(ints(&[-5, 5])),
+    );
+    cases.stored(
+        "v.first().orValue(9)",
+        Stored::new(narrow, ints(&[])),
+        Got::Value(I(9)),
+    );
+    cases.stored(
+        "v.sort()",
+        Stored::new(Type::list(Type::String), list(vec![s("b"), s("a")])),
+        Got::Value(list(vec![s("a"), s("b")])),
+    );
 }
 
 /// Only here: what lowering refuses stays refused, with its reason.

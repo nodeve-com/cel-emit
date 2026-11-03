@@ -120,20 +120,25 @@ impl<K: Equal, V: Equal> Equal for Vec<(K, V)> {
             return Ok(false);
         }
         for (key, value) in self {
-            let mut found = None;
-            for (k, v) in other {
-                if key.equal(k)? {
-                    found = Some(v);
-                    break;
-                }
-            }
-            match found {
-                Some(v) if value.equal(v)? => {}
-                _ => return Ok(false),
+            let Some(v) = find_equal(other, key)? else {
+                return Ok(false);
+            };
+            if !value.equal(v)? {
+                return Ok(false);
             }
         }
         Ok(true)
     }
+}
+
+/// The value of the first entry whose key equals `key`.
+fn find_equal<'a, K: Equal, V>(entries: &'a [(K, V)], key: &K) -> Result<Option<&'a V>> {
+    for (k, v) in entries {
+        if key.equal(k)? {
+            return Ok(Some(v));
+        }
+    }
+    Ok(None)
 }
 
 pub fn eq<T: Equal>(a: T, b: T) -> Result<bool> {

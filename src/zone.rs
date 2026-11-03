@@ -65,24 +65,32 @@ fn changes(tz: Tz) -> Option<Vec<(i64, i32)>> {
     let mut t = FROM;
     while t < UNTIL {
         let next = t.checked_add(STEP)?.min(UNTIL);
-        let (was, now) = (at(t)?, at(next)?);
-        if was != now {
-            // `was` holds at `lo`, `now` at `hi`, both whole seconds.
-            let (mut lo, mut hi) = (t, next);
-            while hi.checked_sub(lo)? > 1000 {
-                let mid =
-                    lo.checked_add(hi.checked_sub(lo)?.checked_div(2000)?.checked_mul(1000)?)?;
-                if at(mid)? == was {
-                    lo = mid;
-                } else {
-                    hi = mid;
-                }
-            }
+        let was = at(t)?;
+        if was != at(next)? {
+            let hi = first_change(&at, was, t, next)?;
             changes.push((hi, at(hi)?));
         }
         t = next;
     }
     Some(changes)
+}
+
+/// The whole second, in `lo..=hi`, where `at` first differs from `was`, which holds at `lo`.
+fn first_change(
+    at: &impl Fn(i64) -> Option<i32>,
+    was: i32,
+    mut lo: i64,
+    mut hi: i64,
+) -> Option<i64> {
+    while hi.checked_sub(lo)? > 1000 {
+        let mid = lo.checked_add(hi.checked_sub(lo)?.checked_div(2000)?.checked_mul(1000)?)?;
+        if at(mid)? == was {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    Some(hi)
 }
 
 #[cfg(test)]

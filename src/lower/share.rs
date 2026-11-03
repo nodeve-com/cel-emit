@@ -26,11 +26,7 @@ impl Lower<'_> {
             let n = self.local_number()?;
             let local = Typed::new(x.ty.clone(), Node::Local(n));
             for root in &mut roots {
-                always(root, &mut |y| {
-                    if *y == x {
-                        *y = local.clone();
-                    }
-                });
+                replace(root, &x, &local);
             }
             lets.push((n, x));
         }
@@ -140,6 +136,15 @@ fn size(t: &Typed) -> usize {
     let mut n = 0usize;
     crate::walk::nodes(t, &mut |_| n = n.saturating_add(1));
     n
+}
+
+/// Every always-run subtree of `root` equal to `x`, replaced by `local`.
+fn replace(root: &mut Typed, x: &Typed, local: &Typed) {
+    always(root, &mut |y| {
+        if *y == *x {
+            *y = local.clone();
+        }
+    });
 }
 
 #[cfg(test)]

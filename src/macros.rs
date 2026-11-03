@@ -78,23 +78,33 @@ fn expand_sort_by(
         MacroExpansion::Expanded(keys) => keys,
         error => return error,
     };
-    let held = ident(ctx, HELD, &span);
-    let callee = ident(ctx, SORT_BY_KEYS, &span);
+    MacroExpansion::Expanded(bind_sorted(ctx, &span, xs, keys))
+}
+
+/// `cel.bind(held, xs, sort(held, keys))`.
+fn bind_sorted(
+    ctx: &mut MacroContext,
+    span: &Span,
+    xs: SpannedExpr,
+    keys: SpannedExpr,
+) -> SpannedExpr {
+    let held = ident(ctx, HELD, span);
+    let callee = ident(ctx, SORT_BY_KEYS, span);
     let call = node(
         ctx,
         Expr::Call {
             expr: Box::new(callee),
             args: vec![held, keys],
         },
-        &span,
+        span,
     );
-    MacroExpansion::Expanded(node(
+    node(
         ctx,
         Expr::Bind {
             var_name: HELD.into(),
             init: Box::new(xs),
             body: Box::new(call),
         },
-        &span,
-    ))
+        span,
+    )
 }

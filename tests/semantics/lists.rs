@@ -4,7 +4,7 @@
 use cel_core::Value::{self, Bool as B, Double as D, Int as I};
 use cel_emit::Type;
 
-use crate::cases::{check, list, map, refusal, s, Got};
+use crate::cases::{check, list, map, refusal, s, Cases, Got};
 
 /// Only here: a negative index errs in `xs[i]` and holds nothing in `xs[?i]`, where cel-core
 /// counts from the end; `math.pow` and `math.sum` over lists and maps match cel-core, a sum of
@@ -12,51 +12,63 @@ use crate::cases::{check, list, map, refusal, s, Got};
 #[test]
 fn lists_follow_cel_go_where_cel_core_differs() {
     check(|cases| {
-        let strings = list(vec![s("a"), s("bc")]);
-        let doubles = list(vec![D(1.5), D(-2.0)]);
-        for xs in [&strings, &doubles] {
-            for i in [-1, i64::MIN] {
-                cases.gives("xs[i]", &[("xs", xs.clone()), ("i", I(i))], Got::Error);
-            }
-        }
-        let inputs = [("xs", doubles), ("i", I(-1))];
-        cases.gives("xs[?i].orValue(7.0)", &inputs, Got::Value(D(7.0)));
-        cases.gives("xs[?i].hasValue()", &inputs, Got::Value(B(false)));
-        for (x, y) in [
-            (0.5, 3.0),
-            (2.0, -1.0),
-            (10.0, 0.1),
-            (-8.0, 1.0 / 3.0),
-            (f64::NAN, 0.0),
-            (0.0, -1.0),
-            (1.0000001, 1e9),
-        ] {
-            cases.agrees("math.pow(x, y)", &[("x", D(x)), ("y", D(y))]);
-        }
+        negative_indexes(cases);
+        powers(cases);
         cases.absent("math.greatest(xs.map(x, x * 2.0))", &[("xs", list(vec![]))]);
-        let maps = [
-            map(&[]),
-            map(&[("a", D(1.5))]),
-            map(&[("a", D(1.5)), ("bc", D(-2.0)), ("b", D(4.0))]),
-        ];
-        for m in maps {
-            let inputs = [("m", m.clone())];
-            // cel-core picks an empty list's overload as it runs: int, not the double checked.
-            let empty = matches!(&m, Value::Map(e) if e.is_empty());
-            for source in [
-                "math.sum(m.map(x, m[x]))",
-                "math.sum(m.transformList(x, v, v * 2.0))",
-            ] {
-                match empty {
-                    true => cases.gives(source, &inputs, Got::Value(D(0.0))),
-                    false => cases.agrees(source, &inputs),
-                }
+        map_sums(cases);
+    });
+}
+
+fn negative_indexes(cases: &mut Cases) {
+    let strings = list(vec![s("a"), s("bc")]);
+    let doubles = list(vec![D(1.5), D(-2.0)]);
+    for xs in [&strings, &doubles] {
+        for i in [-1, i64::MIN] {
+            cases.gives("xs[i]", &[("xs", xs.clone()), ("i", I(i))], Got::Error);
+        }
+    }
+    let inputs = [("xs", doubles), ("i", I(-1))];
+    cases.gives("xs[?i].orValue(7.0)", &inputs, Got::Value(D(7.0)));
+    cases.gives("xs[?i].hasValue()", &inputs, Got::Value(B(false)));
+}
+
+fn powers(cases: &mut Cases) {
+    for (x, y) in [
+        (0.5, 3.0),
+        (2.0, -1.0),
+        (10.0, 0.1),
+        (-8.0, 1.0 / 3.0),
+        (f64::NAN, 0.0),
+        (0.0, -1.0),
+        (1.0000001, 1e9),
+    ] {
+        cases.agrees("math.pow(x, y)", &[("x", D(x)), ("y", D(y))]);
+    }
+}
+
+fn map_sums(cases: &mut Cases) {
+    let maps = [
+        map(&[]),
+        map(&[("a", D(1.5))]),
+        map(&[("a", D(1.5)), ("bc", D(-2.0)), ("b", D(4.0))]),
+    ];
+    for m in maps {
+        let inputs = [("m", m.clone())];
+        // cel-core picks an empty list's overload as it runs: int, not the double checked.
+        let empty = matches!(&m, Value::Map(e) if e.is_empty());
+        for source in [
+            "math.sum(m.map(x, m[x]))",
+            "math.sum(m.transformList(x, v, v * 2.0))",
+        ] {
+            match empty {
+                true => cases.gives(source, &inputs, Got::Value(D(0.0))),
+                false => cases.agrees(source, &inputs),
             }
         }
-        let ints = [("m", map(&[("a", I(i64::MAX)), ("b", I(1))]))];
-        cases.agrees("math.sum(m.transformList(k, v, v))", &ints);
-        cases.gives("math.sum(m.map(k, m[k]))", &ints, Got::Error);
-    });
+    }
+    let ints = [("m", map(&[("a", I(i64::MAX)), ("b", I(1))]))];
+    cases.agrees("math.sum(m.transformList(k, v, v))", &ints);
+    cases.gives("math.sum(m.map(k, m[k]))", &ints, Got::Error);
 }
 
 /// Only here: compile refuses a `math` call whose operands no single declared type holds.

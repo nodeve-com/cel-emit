@@ -13,11 +13,12 @@ mod dynamic;
 mod encode;
 mod messages;
 mod narrow;
+mod node;
 mod optional;
 mod place;
 mod tables;
 
-use crate::functions::{Function, Index, STD};
+use crate::functions::{Function, Index, Pass, STD};
 use crate::tree::{Node, Typed};
 use crate::types::{Field, Type};
 use crate::{walk, Error};
@@ -102,161 +103,26 @@ impl Emitter {
 
     /// `t` as a Rust expression of its type.
     pub fn expr(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
-        let e = |x: &Typed, me: &mut Emitter| me.expr(x, vars);
-        Ok(match &t.node {
-            Node::Int(v) => format!("{v}i64"),
-            Node::Uint(v) => format!("{v}u64"),
-            Node::Double(v) => format!("f64::from_bits({:#x})", v.to_bits()),
-            Node::Bool(v) => v.to_string(),
-            Node::Str(v) => format!("String::from({v:?})"),
-            Node::Bytes(v) => format!("Vec::<u8>::from(&{v:?}[..])"),
-            Node::Null => format!("{STD}::Null"),
-            Node::Some(x) => format!("Some({})", e(x, self)?),
-            Node::None => match &t.ty {
-                Type::Optional(of) | Type::Nullable(of) => {
-                    format!("None::<{}>", self.rust(of)?)
-                }
-                _ => return Err(Error::Invalid("a none of other than an optional".into())),
-            },
-            Node::ListOpt(items) => self.list_opt(items, vars)?,
-            Node::MapOpt(entries) => self.map_opt(entries, vars)?,
-            Node::Timestamp(s, n) => format!("{STD}::time::timestamp_at({s}i64, {n}u32)?"),
-            Node::Duration(s, n) => format!("{STD}::time::duration_at({s}i64, {n}i32)?"),
-            // A field reads as a value, so one of a copied type needs no clone.
-            Node::Field(..) if t.ty.copied() => place::receiver(&self.place(t, vars)?),
-            Node::Var(_) | Node::Local(_) | Node::Item(..) | Node::Field(..) | Node::First(..) => {
-                format!("{}.clone()", place::receiver(&self.place(t, vars)?))
-            }
-            Node::Has(v) => vars.has(*v)?,
-            Node::Call(id, args)
-                if args.iter().any(|a| a.ty.narrow()) && !narrow::writes_stored(id) =>
-            {
-                self.stored_call(id, args, vars)?
-            }
-            Node::Call(..) if place::by_reference(t) => {
-                format!("{}.clone()", self.place(t, vars)?)
-            }
-            Node::Call(id, _) if place::lends_optional(id) => {
-                format!("{}.cloned()", self.optional_reference(t, vars)?)
-            }
-            Node::Call(id, args) => self.call(id, args, vars)?,
-            Node::Matches(subject, table, source) => {
-                let n = match self.patterns.iter().position(|(_, p)| p == table) {
-                    Some(n) => n,
-                    None => {
-                        self.patterns.push((source.clone(), table.clone()));
-                        self.patterns.len().saturating_sub(1)
-                    }
-                };
-                format!(
-                    "{STD}::strings::matches_table(&P{n}, {})?",
-                    self.reference(subject, true, vars)?
-                )
-            }
-            Node::And(a, b) | Node::Or(a, b) => {
-                let f = if matches!(t.node, Node::And(..)) {
-                    "and"
-                } else {
-                    "or"
-                };
-                let (a, b) = (e(a, self)?, e(b, self)?);
-                format!("{STD}::cmp::{f}(|| {STD}::ok({a}), || {STD}::ok({b}))?")
-            }
-            Node::Cond(c, a, b) => {
-                let (c, a, b) = (e(c, self)?, e(a, self)?, e(b, self)?);
-                format!("if {c} {{ {a} }} else {{ {b} }}")
-            }
-            Node::Message(entries) => self.message(t, entries, vars)?,
-            Node::Within(x, ty) => {
-                let x = e(x, self)?;
-                narrow::convert(&place::receiver(&x), ty, narrow::To::Within, 0)
-                    .map_or(x, |c| format!("{c}?"))
-            }
-            Node::Store(x) => {
-                let x = e(x, self)?;
-                narrow::convert(&place::receiver(&x), &t.ty, narrow::To::Stored, 0)
-                    .map_or(x, |c| format!("{c}?"))
-            }
-            Node::FromDyn(x, ty) => self.read_dyn(x, ty, vars)?,
-            Node::Shaped(text, message, rest) => {
-                self.shaped(text, message, rest.as_deref(), vars)?
-            }
-            Node::ToDyn(x) => self.enter_dyn(x, &t.ty, vars)?,
-            Node::Written(x, rest) => self.written(x, rest.as_deref(), vars)?,
-            Node::Widen(x) => {
-                let inner = e(x, self)?;
-                narrow::convert(&place::receiver(&inner), &x.ty, narrow::To::Cel, 0)
-                    .map_or(inner, |c| format!("{c}?"))
-            }
-            Node::Position(n) => format!("n{n}"),
-            Node::Map(..) | Node::Keep(..) => {
-                format!(
-                    "{}.collect::<{STD}::Result<Vec<_>>>()?",
-                    self.mapped(t, vars)?
-                )
-            }
-            Node::All(every, list, body) => {
-                let (iter, bind) = self.over(list, &[body], vars)?;
-                let body = self.inside(body, vars)?;
-                format!("{STD}::collections::all({iter}, {every}, |{bind}| {STD}::ok({body}))?")
-            }
-            Node::Extreme(greatest, map) => {
-                let f = if *greatest { "greatest_of" } else { "least_of" };
-                format!("{STD}::math::{f}({})?", self.mapped(map, vars)?)
-            }
-            Node::Sum(map) => format!("{STD}::math::sum_of({})?", self.mapped(map, vars)?),
-            Node::Count(map) => {
-                format!("{STD}::collections::count({})?", self.mapped(map, vars)?)
-            }
-            Node::List(items) => {
-                let Type::List(of) = &t.ty else {
-                    return Err(Error::Invalid("a list literal of other than a list".into()));
-                };
-                if items.is_empty() {
-                    format!("Vec::<{}>::new()", self.rust(of)?)
-                } else {
-                    let items = items
-                        .iter()
-                        .map(|a| e(a, self))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    format!("Vec::from([{}])", items.join(", "))
-                }
-            }
-            Node::MapOf(entries) => {
-                if entries.is_empty() {
-                    format!("{}::new()", self.rust(&t.ty)?.replacen("Vec<", "Vec::<", 1))
-                } else {
-                    let mut made = Vec::with_capacity(entries.len());
-                    for (k, v) in entries {
-                        made.push(format!("({}, {})", e(k, self)?, e(v, self)?));
-                    }
-                    format!("{STD}::collections::map_of([{}])?", made.join(", "))
-                }
-            }
-            Node::Encode(object) => self.encode(object, vars)?,
-            Node::Let(..) => {
-                let mut rest = t;
-                let mut lets = String::new();
-                while let Node::Let(n, value, body) = &rest.node {
-                    let read = walk::any(body, |x| *x == Node::Local(*n));
-                    let name = if read { format!("l{n}") } else { "_".into() };
-                    lets.push_str(&format!("let {name} = {}; ", self.bound(value, vars)?));
-                    rest = body;
-                }
-                format!("{{ {lets}{} }}", e(rest, self)?)
-            }
-            Node::Fail(error) => {
-                let ty = self.rust(&t.ty)?;
-                format!("{STD}::fail::<{ty}>({STD}::Error::{error:?})?")
-            }
-        })
+        match &t.node {
+            walk::literal!() => node::literal(t),
+            walk::access!() => self.access(t, vars),
+            walk::control!() => self.control(t, vars),
+            walk::converting!() => self.converted(t, vars),
+            walk::iterating!() => self.comprehension(t, vars),
+            walk::collecting!() => self.collection(t, vars),
+        }
     }
 
     /// The call of overload `id`.
     fn call(&mut self, id: &str, args: &[Typed], vars: &dyn Vars) -> Result<String, Error> {
         let path = self.path(id, args)?;
-        let args = self.args(id, args, vars)?;
-        Ok(format!("{path}({})?", args.join(", ")))
+        let types: Vec<Type> = args.iter().map(|a| a.ty.clone()).collect();
+        let pass = self.paths.pass(id, &types);
+        let args = self.args(id, args, vars)?.join(", ");
+        Ok(match pass {
+            Pass::Each => format!("{path}({args})?"),
+            Pass::Array => format!("{path}([{args}])?"),
+        })
     }
 
     /// The arguments of overload `id`, by reference where it reads them so.

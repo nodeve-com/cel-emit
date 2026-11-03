@@ -44,28 +44,41 @@ fn built(name: &str, schema: Option<&str>) -> PathBuf {
                 ("schema_emit_runtime", &schema_runtime),
                 ("serde_json", &json),
             ];
-            let mut rustc = Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()));
-            rustc.args(["--edition", "2021", "-Cdebuginfo=0", "-Dwarnings"]);
-            for (name, rlib) in linked {
-                rustc
-                    .arg("--extern")
-                    .arg(format!("{name}={}", rlib.display()));
+            match compile(deps, &linked, &source, &exe) {
+                Ok(()) => return exe,
+                Err(stderr) => errors.push_str(&stderr),
             }
-            let out = rustc
-                .arg("-L")
-                .arg(format!("dependency={}", deps.display()))
-                .arg("-o")
-                .arg(&exe)
-                .arg(&source)
-                .output()
-                .unwrap();
-            if out.status.success() {
-                return exe;
-            }
-            errors.push_str(&String::from_utf8_lossy(&out.stderr));
         }
     }
     panic!("no runtime built it: {errors}");
+}
+
+/// `source` built as `exe` against the `linked` crates, or rustc's errors.
+fn compile(
+    deps: &Path,
+    linked: &[(&str, &PathBuf)],
+    source: &Path,
+    exe: &Path,
+) -> Result<(), String> {
+    let mut rustc = Command::new(std::env::var("RUSTC").unwrap_or("rustc".into()));
+    rustc.args(["--edition", "2021", "-Cdebuginfo=0", "-Dwarnings"]);
+    for (name, rlib) in linked {
+        rustc
+            .arg("--extern")
+            .arg(format!("{name}={}", rlib.display()));
+    }
+    let out = rustc
+        .arg("-L")
+        .arg(format!("dependency={}", deps.display()))
+        .arg("-o")
+        .arg(exe)
+        .arg(source)
+        .output()
+        .unwrap();
+    match out.status.success() {
+        true => Ok(()),
+        false => Err(String::from_utf8_lossy(&out.stderr).into_owned()),
+    }
 }
 
 /// What the program prints for `answer`, and whether it succeeded.

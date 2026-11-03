@@ -26,3 +26,6 @@ syn = { version = "2", features = ["full", "parsing"] }
 [dev-dependencies]
 cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
 schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "8b03dbe36b771d3200c3b622825b7fc16da89fc6", features = ["decode"] }
+
+[lints.clippy]
+too_many_lines = "warn"

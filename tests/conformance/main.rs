@@ -22,15 +22,16 @@ mod message;
 mod mixed;
 mod native;
 mod scope;
+mod suite;
 mod types;
 mod values;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use cel_core_conformance::{build_descriptor_pool, load_test_file};
+use cel_core_conformance::build_descriptor_pool;
 use cel_core_proto::ProstProtoRegistry;
 
 use case::Prepared;
@@ -55,103 +56,21 @@ fn the_cel_spec_suite_passes_its_baseline() {
     let only: Option<BTreeSet<String>> = std::env::var("CEL_SPEC")
         .ok()
         .map(|v| v.split(',').map(|f| f.trim().to_string()).collect());
-    let mut files: Vec<PathBuf> = std::fs::read_dir(testdata())
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == "textproto"))
-        .collect();
-    files.sort();
-    let (mut passed, mut wrong, mut reasons) = (BTreeSet::new(), BTreeMap::new(), BTreeMap::new());
-    let mut ran = BTreeSet::new();
-    let mut seen = BTreeMap::new();
     println!(
         "{:<16} {:>5} {:>5} {:>5} {:>5}",
         "file", "pass", "unsup", "wrong", "n/a"
     );
-    let mut prepared = Vec::new();
-    for path in &files {
-        let file = load_test_file(path).unwrap();
-        if only.as_ref().is_some_and(|o| !o.contains(&file.name)) {
-            continue;
-        }
-        ran.insert(file.name.clone());
-        let mut verdicts = Vec::new();
-        let mut cases = Vec::new();
-        for section in &file.section {
-            for test in &section.test {
-                // The suite repeats a few names within a section: the repeat takes its ordinal.
-                let mut name = format!("{}/{}/{}", file.name, section.name, test.name);
-                let n = seen.entry(name.clone()).or_insert(0);
-                *n += 1;
-                if *n > 1 {
-                    name = format!("{name}#{n}");
-                }
-                match case::prepare(test, &registry) {
-                    Ok(c) => cases.push((name, test.expr.clone(), c)),
-                    Err(v) => verdicts.push((name, test.expr.clone(), v)),
-                }
-            }
-        }
-        prepared.push((file.name, verdicts, cases));
-    }
+    let (prepared, ran) = suite::prepare(&registry, only.as_ref());
     let mut built = build_all(&prepared);
+    let mut tally = suite::Tally::default();
     for (file, mut verdicts, cases) in prepared {
         for (name, expr, case) in &cases {
             let answer = built.remove(&(name.clone(), expr.clone())).unwrap();
             verdicts.push((name.clone(), expr.clone(), case::judge(case, answer)));
         }
-        let mut counts = [0; 4];
-        for (name, expr, verdict) in verdicts {
-            let (slot, reason) = match verdict {
-                Verdict::Pass => {
-                    passed.insert(name.clone());
-                    (0, None)
-                }
-                // Check's messages each name their expression: blanked, then grouped.
-                Verdict::Unsupported(why) if why.starts_with("rejected") => {
-                    (1, Some(format!("unsupported: {}", generic(&why))))
-                }
-                Verdict::Unsupported(why) => (1, Some(format!("unsupported: {why}"))),
-                Verdict::Wrong(why) => {
-                    wrong.insert(name.clone(), format!("{expr}: {why}"));
-                    (2, None)
-                }
-                Verdict::NotApplicable(why) => (3, Some(format!("n/a: {why}"))),
-            };
-            counts[slot] += 1;
-            if let Some(reason) = reason {
-                if only.is_some() {
-                    println!("  {name} — {expr} — {reason}");
-                }
-                *reasons.entry(reason).or_insert(0) += 1;
-            }
-        }
-        let [p, u, w, n] = counts;
-        println!("{:<16} {p:>5} {u:>5} {w:>5} {n:>5}", file);
+        tally.file(&file, verdicts, only.is_some());
     }
-    let mut reasons: Vec<_> = reasons.into_iter().collect();
-    reasons.sort_by_key(|r| std::cmp::Reverse(r.1));
-    println!("the most common reasons:");
-    for (why, n) in reasons.iter().take(25) {
-        println!("{n:>5} {why}");
-    }
-    for (name, why) in &wrong {
-        println!("wrong: {name} — {why}");
-    }
-
-    assert!(wrong.is_empty(), "wrong, worse than refused: {wrong:#?}");
-    let baseline: BTreeSet<String> = fixture("pass.txt")
-        .into_iter()
-        .filter(|c| ran.iter().any(|f| c.starts_with(&format!("{f}/"))))
-        .collect();
-    let lost: Vec<_> = baseline.difference(&passed).collect();
-    assert!(lost.is_empty(), "stopped passing:\n{lost:#?}");
-    let gained: Vec<_> = passed.difference(&baseline).cloned().collect();
-    assert!(
-        gained.is_empty(),
-        "newly passing: add to pass.txt\n{}",
-        gained.join("\n")
-    );
+    tally.conclude(&ran);
 }
 
 /// Every file's chunks built and run on as many threads as the machine has cores: each case's
@@ -166,66 +85,35 @@ fn build_all(prepared: &[File]) -> BTreeMap<(String, String), Answer> {
     let threads = std::thread::available_parallelism().map_or(4, usize::from);
     std::thread::scope(|s| {
         for _ in 0..threads {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::Relaxed);
-                let Some(chunk) = jobs.get(i) else { break };
-                let answers = native::build(&scratch.join(i.to_string()), chunk);
-                let mut done = done.lock().unwrap();
-                for ((name, expr, _), a) in chunk.iter().zip(answers) {
-                    done.insert((name.clone(), expr.clone()), a);
-                }
-            });
+            s.spawn(|| build_jobs(&jobs, &next, &scratch, &done));
         }
     });
     let _ = std::fs::remove_dir_all(&scratch);
     done.into_inner().unwrap()
 }
 
-/// A check message with the names of one expression's fields, messages, and literals blanked,
-/// so cases failing alike are counted as one reason.
-fn generic(why: &str) -> String {
-    let mut out = String::new();
-    let mut rest = why;
-    while let Some(i) = rest.find(['\'', '"']) {
-        let quote = &rest[i..=i];
-        out.push_str(&rest[..i]);
-        match rest[i + 1..].find(quote) {
-            Some(j) => {
-                out.push('_');
-                rest = &rest[i + j + 2..];
-            }
-            None => {
-                rest = &rest[i..];
-                break;
-            }
+/// Builds the jobs `next` hands out until none is left, adding each case's answer to `done`.
+fn build_jobs(
+    jobs: &[&[Prepared]],
+    next: &AtomicUsize,
+    scratch: &Path,
+    done: &Mutex<BTreeMap<(String, String), Answer>>,
+) {
+    loop {
+        let i = next.fetch_add(1, Ordering::Relaxed);
+        let Some(chunk) = jobs.get(i) else { break };
+        let answers = native::build(&scratch.join(i.to_string()), chunk);
+        let mut done = done.lock().unwrap();
+        for ((name, expr, _), a) in chunk.iter().zip(answers) {
+            done.insert((name.clone(), expr.clone()), a);
         }
     }
-    out.push_str(rest);
-    out.split(' ')
-        .map(|w| {
-            if w.len() > 1 && (w.contains('_') || w.contains('.')) {
-                "_"
-            } else {
-                w
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// The suite's data, in cel-core-conformance's checkout: cargo fetches its cel-spec submodule.
 /// Offline, metadata resolves only this build's host: cargo fetched no other's crates.
 fn testdata() -> PathBuf {
-    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
-    let version = std::process::Command::new(rustc)
-        .arg("-vV")
-        .output()
-        .unwrap();
-    let version = String::from_utf8(version.stdout).unwrap();
-    let host = version
-        .lines()
-        .find_map(|l| l.strip_prefix("host: "))
-        .unwrap();
+    let host = host();
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let out = std::process::Command::new(cargo)
         .args([
@@ -233,7 +121,7 @@ fn testdata() -> PathBuf {
             "--format-version=1",
             "--offline",
             "--filter-platform",
-            host,
+            &host,
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -255,6 +143,18 @@ fn testdata() -> PathBuf {
         .parent()
         .unwrap()
         .join("cel-spec/tests/simple/testdata")
+}
+
+/// The target triple rustc builds for.
+fn host() -> String {
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let version = std::process::Command::new(rustc)
+        .arg("-vV")
+        .output()
+        .unwrap();
+    let version = String::from_utf8(version.stdout).unwrap();
+    let host = version.lines().find_map(|l| l.strip_prefix("host: "));
+    host.unwrap().to_string()
 }
 
 /// A fixture's case names, one per line.

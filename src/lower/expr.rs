@@ -7,172 +7,109 @@ use super::*;
 
 impl<'a> Lower<'a> {
     pub(crate) fn expr(&mut self, e: &'a SpannedExpr) -> Result<Typed, Error> {
-        if let Some(t) = self.bound_value(e)? {
+        if let Some(t) = self.early(e)? {
             return Ok(t);
         }
-        if let Expr::Struct { .. } = &e.node {
-            return self.message_value(e);
-        }
-        if let Expr::Bind {
-            var_name,
-            init,
-            body,
-        } = &e.node
-        {
-            let (v, lets) = self.binding(var_name, init, |s| s.expr(body))?;
-            return Ok(super::scope::wrap(v, &lets));
-        }
-        if let Some(t) = self.number_form(e)? {
-            return self.as_value(e, t);
-        }
-        if self.open_none(e) {
-            return self.expr_as(e, None);
-        }
-        if let Expr::Comprehension(c) = &e.node {
-            if self.empty_loop(e) {
-                let want = self.settled(e);
-                return self.empty_loop_result(c, want.as_ref());
-            }
-        }
-        // The checker joins a ternary's branches to `dyn` where one is an optional holding
-        // nothing: the other branch's type is the ternary's.
-        if let Expr::Ternary {
-            cond,
-            then_expr,
-            else_expr,
-        } = &e.node
-        {
-            if self.settled(e).is_none() {
-                let (then, other) = self.pair_as(then_expr, else_expr)?;
-                let (then, other) = joined(then, other)?;
-                return Ok(Typed::cond(*self.sub_bool(cond)?, then, other));
-            }
+        if let Some(t) = self.settling(e)? {
+            return Ok(t);
         }
         let ty = self.ty(e)?;
         if let Some(node) = self.special(e)? {
             return Ok(retype(Typed { ty, node }));
         }
-        let node = match &e.node {
-            Expr::Int(v) => Node::Int(*v),
-            Expr::UInt(v) => Node::Uint(*v),
-            Expr::Float(v) => Node::Double(*v),
-            Expr::Bool(v) => Node::Bool(*v),
-            Expr::String(v) => Node::Str(v.clone()),
-            Expr::Bytes(v) => Node::Bytes(v.clone()),
-            Expr::Null => Node::Null,
-            Expr::Member {
-                expr,
-                field,
-                optional: true,
-            } => self.optional_field(e, expr, field)?,
-            Expr::Index {
-                expr,
-                index,
-                optional: true,
-            } => self.optional_index(expr, index)?,
-            // A selection after a `.?` is optional too: `a.?b.c` is present where `a.b` is.
-            Expr::Member { .. } if matches!(ty, Type::Optional(_)) => self.optional_chain(e)?,
-            Expr::Ident(_) | Expr::Member { .. } => self.name(e)?,
-            Expr::Binary {
-                op: BinaryOp::And,
-                left,
-                right,
-            } => Node::And(self.sub_bool(left)?, self.sub_bool(right)?),
-            Expr::Binary {
-                op: BinaryOp::Or,
-                left,
-                right,
-            } => Node::Or(self.sub_bool(left)?, self.sub_bool(right)?),
-            Expr::Binary {
-                op: op @ (BinaryOp::Eq | BinaryOp::Ne),
-                left,
-                right,
-            } if matches!(right.node, Expr::Null) && self.holds_null(left)? => {
-                let has = Typed::call("optional_has_value", vec![self.expr(left)?], Type::Bool);
-                match op {
-                    BinaryOp::Ne => has.node,
-                    _ => Node::Call("logical_not".into(), vec![has]),
-                }
+        if let Some(t) = self.collection(e, &ty)? {
+            return Ok(t);
+        }
+        let node = self.node(e, &ty)?;
+        Ok(self.finish(ty, node))
+    }
+
+    /// `node` as a value of `ty`, retyped, and the first match of a filter read as such.
+    pub(super) fn finish(&self, ty: Type, node: Node) -> Typed {
+        first_match(retype(Typed { ty, node }), self.loops.len())
+    }
+
+    /// `e` where it is bound, a struct, a binding, a number form, or an open `none`.
+    fn early(&mut self, e: &'a SpannedExpr) -> Result<Option<Typed>, Error> {
+        if let Some(t) = self.bound_value(e)? {
+            return Ok(Some(t));
+        }
+        match &e.node {
+            Expr::Struct { .. } => return self.message_value(e).map(Some),
+            Expr::Bind {
+                var_name,
+                init,
+                body,
+            } => {
+                let (v, lets) = self.binding(var_name, init, |s| s.expr(body))?;
+                return Ok(Some(super::scope::wrap(v, &lets)));
             }
-            Expr::Binary {
-                op: BinaryOp::In,
-                left,
-                right,
-            } if self.messages(right).is_some() => {
-                let root = self.messages(right).unwrap_or_default();
-                let column = self.column(&root, &self.loop_column(&root)?)?;
-                Node::Call("in_map".into(), vec![self.expr(left)?, column])
+            _ => {}
+        }
+        if let Some(t) = self.number_form(e)? {
+            return self.as_value(e, t).map(Some);
+        }
+        if self.open_none(e) {
+            return self.expr_as(e, None).map(Some);
+        }
+        Ok(None)
+    }
+
+    /// `e` where its type needs settling: a loop over nothing, or a ternary whose branches the
+    /// checker joined to `dyn`, where one is an optional holding nothing: the other branch's type
+    /// is the ternary's.
+    fn settling(&mut self, e: &'a SpannedExpr) -> Result<Option<Typed>, Error> {
+        match &e.node {
+            Expr::Comprehension(c) if self.empty_loop(e) => {
+                let want = self.settled(e);
+                self.empty_loop_result(c, want.as_ref()).map(Some)
             }
             Expr::Ternary {
                 cond,
                 then_expr,
                 else_expr,
-            } => {
+            } if self.settled(e).is_none() => {
                 let (then, other) = self.pair_as(then_expr, else_expr)?;
-                let branch = |t: Typed| match t.node {
-                    Node::Null if matches!(ty, Type::Nullable(_)) => {
-                        Typed::new(ty.clone(), Node::None)
-                    }
-                    _ => super::message::held(t, &ty),
-                };
-                Node::Cond(
-                    self.sub_bool(cond)?,
-                    Box::new(branch(then)),
-                    Box::new(branch(other)),
-                )
+                let (then, other) = joined(then, other)?;
+                Ok(Some(Typed::cond(*self.sub_bool(cond)?, then, other)))
             }
-            Expr::Call { expr, args } => self.call(e, expr, args)?,
-            Expr::Comprehension(c) => self.comprehension(c)?,
-            Expr::MemberTestOnly { expr, field } => match self.message_field(e)? {
-                Some((map, key)) => Node::Call("in_map".into(), vec![key, map]),
-                None => match self.path(e).and_then(|p| self.found(&p)) {
-                    Some(At::Constant(_)) => Node::Bool(true),
-                    Some(At::Var(v)) => Node::Has(v),
-                    None => self.has_field(expr, field)?,
-                },
-            },
-            Expr::List(items) if crate::stdlib::literal(&ty) => {
-                let Type::List(elem) = &ty else {
-                    return invalid("a list literal of other than a list");
-                };
-                let mut made = Vec::with_capacity(items.len());
-                for item in items {
-                    let x = self.expr(&item.expr)?;
-                    made.push((x, item.optional));
-                }
-                if made.iter().any(|(_, optional)| *optional) {
-                    return super::optional::list(made, elem);
-                }
-                let made = made.into_iter().map(|(x, _)| fits(x, elem));
-                Node::List(made.collect::<Result<_, _>>()?)
-            }
-            Expr::Map(entries) if crate::stdlib::literal(&ty) => {
-                let Type::Map(key, value) = &ty else {
-                    return invalid("a map literal of other than a map");
-                };
-                let mut made = Vec::with_capacity(entries.len());
-                for entry in entries {
-                    let (k, v) = (self.expr(&entry.key)?, self.expr(&entry.value)?);
-                    let v = if entry.optional { v } else { fits(v, value)? };
-                    made.push((fits(k, key)?, v, entry.optional));
-                }
-                if made.iter().any(|(_, _, optional)| *optional) {
-                    Node::MapOpt(made)
-                } else {
-                    Node::MapOf(made.into_iter().map(|(k, v, _)| (k, v)).collect())
-                }
-            }
+            _ => Ok(None),
+        }
+    }
+
+    /// The node `e` is, of type `ty`.
+    fn node(&mut self, e: &'a SpannedExpr, ty: &Type) -> Result<Node, Error> {
+        if let Some(node) = scalar(&e.node) {
+            return Ok(node);
+        }
+        if let Some(node) = self.logic(e)? {
+            return Ok(node);
+        }
+        match &e.node {
+            Expr::Member {
+                expr,
+                field,
+                optional: true,
+            } => self.optional_field(e, expr, field),
+            Expr::Index {
+                expr,
+                index,
+                optional: true,
+            } => self.optional_index(expr, index),
+            // A selection after a `.?` is optional too: `a.?b.c` is present where `a.b` is.
+            Expr::Member { .. } if matches!(ty, Type::Optional(_)) => self.optional_chain(e),
+            Expr::Ident(_) | Expr::Member { .. } => self.name(e),
+            Expr::Ternary { .. } => self.ternary(e, ty),
+            Expr::Call { expr, args } => self.call(e, expr, args),
+            Expr::Comprehension(c) => self.comprehension(c),
+            Expr::MemberTestOnly { expr, field } => self.test_only(e, expr, field),
             Expr::Unary { .. }
             | Expr::Binary { .. }
             | Expr::Index {
                 optional: false, ..
-            } => match self.overload(e)? {
-                Some(node) => node,
-                None => return unsupported(self.unresolved(e)),
-            },
-            other => return unsupported(kind(other)),
-        };
-        Ok(first_match(retype(Typed { ty, node }), self.loops.len()))
+            } => self.operated(e),
+            other => unsupported(kind(other)),
+        }
     }
 
     /// The call of the one overload the checker resolved `e` to, on its operands, if cel-emit
@@ -288,7 +225,7 @@ impl<'a> Lower<'a> {
 
 impl Lower<'_> {
     /// Whether `e` is a value that may be null: a nullable one, read as an `Option`.
-    fn holds_null(&self, e: &SpannedExpr) -> Result<bool, Error> {
+    pub(super) fn holds_null(&self, e: &SpannedExpr) -> Result<bool, Error> {
         Ok(matches!(self.ty(e)?, Type::Nullable(_)))
     }
 }
@@ -315,4 +252,18 @@ fn widen_lazily(id: &str, operands: &mut [Typed]) {
             *operand = stored;
         }
     }
+}
+
+/// The node of a literal with no child.
+fn scalar(e: &Expr) -> Option<Node> {
+    Some(match e {
+        Expr::Int(v) => Node::Int(*v),
+        Expr::UInt(v) => Node::Uint(*v),
+        Expr::Float(v) => Node::Double(*v),
+        Expr::Bool(v) => Node::Bool(*v),
+        Expr::String(v) => Node::Str(v.clone()),
+        Expr::Bytes(v) => Node::Bytes(v.clone()),
+        Expr::Null => Node::Null,
+        _ => return None,
+    })
 }

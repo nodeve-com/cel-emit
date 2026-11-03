@@ -17,17 +17,7 @@ impl<'a> Lower<'a> {
     ) -> Result<Option<Node>, Error> {
         let node = match (name, receiver, args) {
             ("optional.of", None, [x]) => Node::Call("optional_of".into(), vec![self.expr(x)?]),
-            ("optional.ofNonZeroValue", None, [x]) => {
-                let x = self.expr(x)?;
-                if self
-                    .paths
-                    .path("optional_of_non_zero_value", std::slice::from_ref(&x.ty))
-                    .is_none()
-                {
-                    return unsupported(format!("ofNonZeroValue of a {}", x.ty.display()));
-                }
-                Node::Call("optional_of_non_zero_value".into(), vec![x])
-            }
+            ("optional.ofNonZeroValue", None, [x]) => self.of_non_zero(x)?,
             ("optional.none", None, []) => Node::None,
             ("hasValue", Some(o), []) if self.optional_type(o) => {
                 Node::Call("optional_has_value".into(), vec![self.expr(o)?])
@@ -35,19 +25,7 @@ impl<'a> Lower<'a> {
             ("value", Some(o), []) if self.optional_type(o) => {
                 Node::Call("optional_value".into(), vec![self.expr(o)?])
             }
-            ("orValue", Some(o), [or]) if self.optional_type(o) => {
-                let or = self.expr(or)?;
-                let of = Type::Optional(Box::new(or.ty.clone()));
-                let o = self.expr_as(o, Some(&of))?;
-                let or = match &o.ty {
-                    Type::Optional(held) => super::dynamic::fits(or, held)?,
-                    _ => or,
-                };
-                if !matches!(&o.ty, Type::Optional(held) if **held == or.ty) {
-                    return unsupported("orValue across a dyn and another type");
-                }
-                Node::Call("optional_or_value".into(), vec![o, or])
-            }
+            ("orValue", Some(o), [or]) if self.optional_type(o) => self.or_value(o, or)?,
             ("or", Some(o), [other]) if self.optional_type(o) => {
                 let (o, other) = self.pair_as(o, other)?;
                 Node::Call("optional_or_optional".into(), vec![o, other])
@@ -55,6 +33,31 @@ impl<'a> Lower<'a> {
             _ => return Ok(None),
         };
         Ok(Some(node))
+    }
+
+    /// `optional.ofNonZeroValue(x)`, for the types that have a zero.
+    fn of_non_zero(&mut self, x: &'a SpannedExpr) -> Result<Node, Error> {
+        let x = self.expr(x)?;
+        let id = "optional_of_non_zero_value";
+        if self.paths.path(id, std::slice::from_ref(&x.ty)).is_none() {
+            return unsupported(format!("ofNonZeroValue of a {}", x.ty.display()));
+        }
+        Ok(Node::Call(id.into(), vec![x]))
+    }
+
+    /// `o.orValue(or)`, where the optional `o` holds the type of `or`.
+    fn or_value(&mut self, o: &'a SpannedExpr, or: &'a SpannedExpr) -> Result<Node, Error> {
+        let or = self.expr(or)?;
+        let of = Type::Optional(Box::new(or.ty.clone()));
+        let o = self.expr_as(o, Some(&of))?;
+        let or = match &o.ty {
+            Type::Optional(held) => super::dynamic::fits(or, held)?,
+            _ => or,
+        };
+        if !matches!(&o.ty, Type::Optional(held) if **held == or.ty) {
+            return unsupported("orValue across a dyn and another type");
+        }
+        Ok(Node::Call("optional_or_value".into(), vec![o, or]))
     }
 
     pub(crate) fn optional_type(&self, e: &SpannedExpr) -> bool {

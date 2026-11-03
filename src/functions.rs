@@ -31,6 +31,17 @@ pub struct Std {
     pub takes: fn(&[Type]) -> bool,
     /// Whether it reads its arguments of other than [`Type::copied`] types by reference.
     pub borrows: bool,
+    /// How its arguments are passed.
+    pub pass: Pass,
+}
+
+/// How a call passes an overload's arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pass {
+    /// One argument each, in order.
+    Each,
+    /// All in one array literal, for a function over `[T; N]`.
+    Array,
 }
 
 impl Std {
@@ -41,6 +52,15 @@ impl Std {
             path,
             takes: |_| true,
             borrows: false,
+            pass: Pass::Each,
+        }
+    }
+
+    /// For an overload whose function takes all its arguments as one array.
+    pub const fn array(id: &'static str, path: &'static str) -> Std {
+        Std {
+            pass: Pass::Array,
+            ..Std::any(id, path)
         }
     }
 
@@ -85,6 +105,16 @@ impl Index {
             Entry::Own(path) => Some(path.clone()),
             Entry::Std(s) => (s.takes)(args).then(|| format!("{STD}::{}", s.path)),
         })
+    }
+
+    /// How overload `id` on `args`' types takes its arguments.
+    pub(crate) fn pass(&self, id: &str, args: &[Type]) -> Pass {
+        let entries = self.0.get(id).map_or(&[][..], Vec::as_slice);
+        let std = entries.iter().find_map(|e| match e {
+            Entry::Std(s) if (s.takes)(args) => Some(s.pass),
+            _ => None,
+        });
+        std.unwrap_or(Pass::Each)
     }
 
     /// Whether overload `id` on `args`' types reads them by reference.

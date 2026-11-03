@@ -4,8 +4,8 @@ use crate::tree::{Node, Object, Out, Typed};
 use crate::types::Type;
 use crate::Error;
 
-/// A pattern for the nodes with no child.
-macro_rules! leaf {
+/// A pattern for the nodes with a literal's Rust and no child.
+macro_rules! literal {
     () => {
         Node::Int(_)
             | Node::Uint(_)
@@ -14,13 +14,21 @@ macro_rules! leaf {
             | Node::Str(_)
             | Node::Bytes(_)
             | Node::Null
-            | Node::None
             | Node::Timestamp(..)
             | Node::Duration(..)
+            | Node::Position(_)
+    };
+}
+pub(crate) use literal;
+
+/// A pattern for the nodes with no child.
+macro_rules! leaf {
+    () => {
+        $crate::walk::literal!()
+            | Node::None
             | Node::Var(_)
             | Node::Has(_)
             | Node::Item(..)
-            | Node::Position(_)
             | Node::Local(_)
             | Node::Fail(_)
     };
@@ -40,6 +48,71 @@ macro_rules! thin {
     };
 }
 pub(crate) use thin;
+
+/// A pattern for the nodes that read a place, call, or test.
+macro_rules! access {
+    () => {
+        Node::Var(_)
+            | Node::Local(_)
+            | Node::Item(..)
+            | Node::Field(..)
+            | Node::First(..)
+            | Node::Has(_)
+            | Node::Call(..)
+            | Node::Matches(..)
+    };
+}
+pub(crate) use access;
+
+/// A pattern for the nodes that choose, bind, or fail.
+macro_rules! control {
+    () => {
+        Node::And(..) | Node::Or(..) | Node::Cond(..) | Node::Let(..) | Node::Fail(_)
+    };
+}
+pub(crate) use control;
+
+/// A pattern for the nodes that change a value between forms or write it as JSON.
+macro_rules! converting {
+    () => {
+        Node::Within(..)
+            | Node::Store(_)
+            | Node::Widen(_)
+            | Node::FromDyn(..)
+            | Node::Shaped(..)
+            | Node::ToDyn(_)
+            | Node::Written(..)
+            | Node::Encode(_)
+    };
+}
+pub(crate) use converting;
+
+/// A pattern for the comprehensions and the folds over them.
+macro_rules! iterating {
+    () => {
+        Node::Map(..)
+            | Node::Keep(..)
+            | Node::All(..)
+            | Node::Extreme(..)
+            | Node::Sum(_)
+            | Node::Count(_)
+    };
+}
+pub(crate) use iterating;
+
+/// A pattern for the optionals and the list, map, and message literals.
+macro_rules! collecting {
+    () => {
+        Node::Some(_)
+            | Node::None
+            | Node::ListOpt(_)
+            | Node::MapOpt(_)
+            | Node::Message(_)
+            | Node::List(_)
+            | Node::MapOf(_)
+    };
+}
+pub(crate) use collecting;
 
 /// A node of type `to` from `x`, as a declared type casts a result: an int to a double, a value
 /// to the stored type of its CEL type; any other change is a mistake in the declarations.
@@ -111,32 +184,24 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
         | Node::Sum(x)
         | Node::Count(x) => nodes(x, f),
         Node::ListOpt(items) => items.iter().for_each(|(a, _)| nodes(a, f)),
-        Node::MapOpt(entries) => entries.iter().for_each(|(k, v, _)| {
-            nodes(k, f);
-            nodes(v, f);
-        }),
+        Node::MapOpt(entries) => entries.iter().for_each(|(k, v, _)| each([k, v], f)),
         Node::And(a, b)
         | Node::Or(a, b)
         | Node::Map(a, b)
         | Node::All(_, a, b)
         | Node::First(a, b)
-        | Node::Let(_, a, b) => {
-            nodes(a, f);
-            nodes(b, f);
-        }
-        Node::Cond(c, a, b) | Node::Keep(c, a, b) => {
-            nodes(c, f);
-            nodes(a, f);
-            nodes(b, f);
-        }
-        Node::Call(_, args) | Node::List(args) => args.iter().for_each(|a| nodes(a, f)),
+        | Node::Let(_, a, b) => each([a, b], f),
+        Node::Cond(c, a, b) | Node::Keep(c, a, b) => each([c, a, b], f),
+        Node::Call(_, args) | Node::List(args) => each(args, f),
         Node::Message(entries) => entries.iter().for_each(|(_, v, _)| nodes(v, f)),
-        Node::MapOf(entries) => entries.iter().for_each(|(k, v)| {
-            nodes(k, f);
-            nodes(v, f);
-        }),
+        Node::MapOf(entries) => entries.iter().for_each(|(k, v)| each([k, v], f)),
         Node::Encode(object) => members(object, f),
     }
+}
+
+/// `nodes` on each of `xs`, in order.
+fn each<X: AsRef<Typed>>(xs: impl IntoIterator<Item = X>, f: &mut impl FnMut(&Typed)) {
+    xs.into_iter().for_each(|x| nodes(x.as_ref(), f));
 }
 
 /// `f` on each node of `object`'s members, as [`nodes`] walks them.

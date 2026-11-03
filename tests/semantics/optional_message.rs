@@ -4,7 +4,7 @@
 use cel_core::Value::{Bool as B, Int as I};
 use cel_emit::{Field, Type};
 
-use crate::cases::{check, map, Cases, Got};
+use crate::cases::{check, map, Cases, Got, Stored};
 
 fn field(name: &str, ty: Type) -> Field {
     Field {
@@ -33,7 +33,7 @@ fn run(cases: &mut Cases, v: cel_core::Value, wants: [Option<Got>; 5]) {
     ];
     for (source, want) in sources.into_iter().zip(wants) {
         match want {
-            Some(want) => cases.stored(source, outer(), v.clone(), want),
+            Some(want) => cases.stored(source, Stored::new(outer(), v.clone()), want),
             None => cases.stored_absent(source, outer(), v.clone()),
         }
     }

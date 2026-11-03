@@ -4,7 +4,7 @@
 use cel_core::Value::{Bool as B, Int as I};
 use cel_emit::{Field, Type};
 
-use crate::cases::{check, map, Got};
+use crate::cases::{check, map, Got, Stored};
 
 fn field(name: &str, ty: Type, required: bool) -> Field {
     Field {
@@ -27,14 +27,26 @@ fn a_null_message_field_compares_and_selects() {
         let held = map(&[("o", map(&[("f", I(5))]))]);
         // A field the value leaves out holds its default: null.
         let null = map(&[]);
-        cases.stored("v.o != null", outer(), held.clone(), value(B(true)));
-        cases.stored("v.o == null", outer(), held.clone(), value(B(false)));
-        cases.stored("v.o != null", outer(), null.clone(), value(B(false)));
-        cases.stored("v.o.f", outer(), held.clone(), value(I(5)));
+        cases.stored(
+            "v.o != null",
+            Stored::new(outer(), held.clone()),
+            value(B(true)),
+        );
+        cases.stored(
+            "v.o == null",
+            Stored::new(outer(), held.clone()),
+            value(B(false)),
+        );
+        cases.stored(
+            "v.o != null",
+            Stored::new(outer(), null.clone()),
+            value(B(false)),
+        );
+        cases.stored("v.o.f", Stored::new(outer(), held.clone()), value(I(5)));
         cases.stored_absent("v.o.f", outer(), null.clone());
         let guarded = "dyn(v.o != null ? v.o.f : null) == 5";
-        cases.stored(guarded, outer(), held, value(B(true)));
+        cases.stored(guarded, Stored::new(outer(), held), value(B(true)));
         let guarded = "dyn(v.o != null ? v.o.f : null) == null";
-        cases.stored(guarded, outer(), null, value(B(true)));
+        cases.stored(guarded, Stored::new(outer(), null), value(B(true)));
     });
 }

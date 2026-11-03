@@ -16,6 +16,12 @@ pub struct Typed {
     pub node: Node,
 }
 
+impl AsRef<Typed> for Typed {
+    fn as_ref(&self) -> &Typed {
+        self
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Node {
     Int(i64),

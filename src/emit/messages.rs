@@ -39,36 +39,47 @@ impl Emitter {
         let mut i = 0;
         // Emitting a field's type may add a message.
         while let Some((fields, rust)) = self.messages.get(i).cloned() {
-            let names = self.declare.fields(&fields);
-            let mut held_fields = Vec::with_capacity(fields.len());
-            let mut same = String::new();
-            for (name, f) in names.into_iter().zip(&fields) {
-                let held = match &f.ty {
-                    Type::Optional(t) | Type::Nullable(t) => &**t,
-                    t => t,
-                };
-                if !held.laid_out() {
-                    return Err(Error::Unsupported("an absent field of a message".into()));
-                }
-                let _ = write!(
-                    same,
-                    "&& {STD}::cmp::Equal::equal(&self.{name}, &other.{name})? "
-                );
-                held_fields.push((name, self.rust(&f.ty)?));
-            }
-            if crate::stdlib::equal(&Type::Message(fields)) {
-                let _ = writeln!(
-                    out,
-                    "impl {STD}::cmp::Equal for {rust} {{ fn equal(&self, other: &Self) -> {STD}::Result<bool> {{ Ok(true {same}) }} }}"
-                );
-            }
-            declared.push(Declared {
-                rust,
-                fields: held_fields,
-            });
+            declared.push(self.declare_one(fields, rust, out)?);
             i = i.saturating_add(1);
         }
         Ok(declared)
+    }
+
+    /// One message of `fields` as Rust type `rust`, adding its `==` to `out` where CEL compares
+    /// its fields.
+    fn declare_one(
+        &mut self,
+        fields: Vec<Field>,
+        rust: String,
+        out: &mut String,
+    ) -> Result<Declared, Error> {
+        let names = self.declare.fields(&fields);
+        let mut held_fields = Vec::with_capacity(fields.len());
+        let mut same = String::new();
+        for (name, f) in names.into_iter().zip(&fields) {
+            let held = match &f.ty {
+                Type::Optional(t) | Type::Nullable(t) => &**t,
+                t => t,
+            };
+            if !held.laid_out() {
+                return Err(Error::Unsupported("an absent field of a message".into()));
+            }
+            let _ = write!(
+                same,
+                "&& {STD}::cmp::Equal::equal(&self.{name}, &other.{name})? "
+            );
+            held_fields.push((name, self.rust(&f.ty)?));
+        }
+        if crate::stdlib::equal(&Type::Message(fields)) {
+            let _ = writeln!(
+                out,
+                "impl {STD}::cmp::Equal for {rust} {{ fn equal(&self, other: &Self) -> {STD}::Result<bool> {{ Ok(true {same}) }} }}"
+            );
+        }
+        Ok(Declared {
+            rust,
+            fields: held_fields,
+        })
     }
 
     /// A struct literal: the message, defaulted, then each entry set in order, as its field

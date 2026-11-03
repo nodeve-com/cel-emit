@@ -2,6 +2,18 @@
 
 use cel_emit::{Decls, Field, Type};
 
+/// `Q`: a required field and a nullable one.
+fn required_q(field: impl Fn(&str, Type) -> Field) -> Type {
+    let required = Field {
+        required: true,
+        ..field("q", Type::Int)
+    };
+    Type::Message(vec![
+        required,
+        field("r", Type::Nullable(Box::new(Type::Int))),
+    ])
+}
+
 /// Every message, declared.
 pub fn declared() -> Decls {
     let field = |name: &str, ty| Field {
@@ -24,14 +36,7 @@ pub fn declared() -> Decls {
         field("f", Type::Nullable(Box::new(Type::Int))),
         field("n", n.clone()),
     ]);
-    let required = Field {
-        required: true,
-        ..field("q", Type::Int)
-    };
-    let q = Type::Message(vec![
-        required,
-        field("r", Type::Nullable(Box::new(Type::Int))),
-    ]);
+    let q = required_q(field);
     // `R` keeps the keys a decode does not declare, and a message writes, under `rest`.
     let r = Type::Message(vec![field("n", Type::Int), field("rest", Type::String)]);
     let mut decls = Decls {

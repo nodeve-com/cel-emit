@@ -27,53 +27,47 @@ impl<'a> Lower<'a> {
         let s = split(v);
         let mut members = Vec::new();
         for (key, v) in s.fields {
-            let v = held_by_field(v);
-            if is_fields(&v) {
-                let out = Out::Object(self.object(v)?);
-                members.push(Member {
-                    key,
-                    present: None,
-                    out,
-                });
-                continue;
-            }
-            // A message is there where its required reads are, else where any flagged one is.
-            let has = |vars: Vec<usize>, join: fn(Typed, Typed) -> Typed| {
-                let mut vars = vars;
-                vars.sort_unstable();
-                vars.dedup();
-                let tests = vars
-                    .into_iter()
-                    .map(|v| Typed::new(Type::Bool, Node::Has(v)));
-                tests.reduce(join)
-            };
-            let read = reading(&v, &s.lets);
-            let present = has(walk::vars(&wrap(unflagged(&v), &read)), Typed::and)
-                .or_else(|| has(walk::vars(&wrap(v.clone(), &read)), Typed::or));
-            let kept = self.decls.skip_failed && !is_literal(&v);
-            let rest = self.decls.rest.as_deref() == Some(key.as_str());
-            let out = match v.ty.clone() {
-                _ if is_object(&v) => Out::Object(self.object(v)?),
-                Type::String if rest => Out::Rest(v, kept),
-                Type::Optional(held) if *held == Type::String && rest => Out::Rest(v, kept),
-                Type::Optional(held) => {
-                    let local = self.local_number()?;
-                    let value = self.written(Typed::new(*held, Node::Local(local)))?;
-                    Out::Optional {
-                        optional: v,
-                        local,
-                        value,
-                        kept,
-                    }
-                }
-                _ => Out::Value(self.written(v)?, kept),
-            };
-            members.push(Member { key, present, out });
+            members.push(self.member(key, held_by_field(v), &s.lets)?);
         }
         Ok(Object {
             lets: s.lets,
             members,
         })
+    }
+
+    /// The member `key` of an object whose lets are `lets`, written from `v`.
+    fn member(&mut self, key: String, v: Typed, lets: &[(usize, Typed)]) -> Result<Member, Error> {
+        if is_fields(&v) {
+            let out = Out::Object(self.object(v)?);
+            return Ok(Member {
+                key,
+                present: None,
+                out,
+            });
+        }
+        let read = reading(&v, lets);
+        // A message is there where its required reads are, else where any flagged one is.
+        let present = present_when(walk::vars(&wrap(unflagged(&v), &read)), Typed::and)
+            .or_else(|| present_when(walk::vars(&wrap(v.clone(), &read)), Typed::or));
+        let kept = self.decls.skip_failed && !is_literal(&v);
+        let rest = self.decls.rest.as_deref() == Some(key.as_str());
+        let out = match v.ty.clone() {
+            _ if is_object(&v) => Out::Object(self.object(v)?),
+            Type::String if rest => Out::Rest(v, kept),
+            Type::Optional(held) if *held == Type::String && rest => Out::Rest(v, kept),
+            Type::Optional(held) => {
+                let local = self.local_number()?;
+                let value = self.written(Typed::new(*held, Node::Local(local)))?;
+                Out::Optional {
+                    optional: v,
+                    local,
+                    value,
+                    kept,
+                }
+            }
+            _ => Out::Value(self.written(v)?, kept),
+        };
+        Ok(Member { key, present, out })
     }
 
     /// `t` as a dyn: a float32 or a list of them as stored, so each is written in its own digits.
@@ -144,6 +138,16 @@ fn unflagged(v: &Typed) -> Typed {
         ),
         _ => v.clone(),
     }
+}
+
+/// The tests that each of `vars` holds a value, joined by `join`.
+fn present_when(mut vars: Vec<usize>, join: fn(Typed, Typed) -> Typed) -> Option<Typed> {
+    vars.sort_unstable();
+    vars.dedup();
+    let tests = vars
+        .into_iter()
+        .map(|v| Typed::new(Type::Bool, Node::Has(v)));
+    tests.reduce(join)
 }
 
 #[cfg(test)]

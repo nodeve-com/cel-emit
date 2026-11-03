@@ -1,6 +1,6 @@
 //! Comparisons and logic: cel-emit-runtime's `cmp`. `&&`, `||`, and `?:` are nodes of their own.
 
-use crate::functions::Std;
+use crate::functions::{Pass, Std};
 use crate::types::Type;
 
 /// Whether `==` compares values of `ty`.
@@ -39,12 +39,14 @@ pub(super) const FUNCTIONS: &[Std] = &[
         path: "cmp::eq",
         takes: |args| args.iter().all(equal),
         borrows: true,
+        pass: Pass::Each,
     },
     Std {
         id: "not_equals",
         path: "cmp::ne",
         takes: |args| args.iter().all(equal),
         borrows: true,
+        pass: Pass::Each,
     },
     Std::any("logical_not", "cmp::not"),
     Std::reads("less_number", "cmp::lt"),

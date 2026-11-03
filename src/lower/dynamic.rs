@@ -202,23 +202,13 @@ impl<'a> Lower<'a> {
     /// a typed place.
     pub(crate) fn settle(&self, id: &str, operands: &mut [Typed]) -> Result<(), Error> {
         match (id, operands) {
-            ("equals" | "not_equals", [a, b]) => {
-                if a.ty == Type::Dyn || b.ty == Type::Dyn {
-                    *a = fits(a.clone(), &Type::Dyn)?;
-                    *b = fits(b.clone(), &Type::Dyn)?;
-                }
-                if a.ty != b.ty && (a.ty.has_dyn() || b.ty.has_dyn()) {
-                    return unsupported("a comparison of a dyn with other than a dyn");
-                }
-            }
+            ("equals" | "not_equals", [a, b]) => settle_equality(a, b),
             (
                 "in_list",
                 [x, Typed {
                     ty: Type::List(of), ..
                 }],
-            ) => {
-                *x = fits(x.clone(), of)?;
-            }
+            ) => fit(x, of),
             (
                 "in_map",
                 [x, Typed {
@@ -232,32 +222,49 @@ impl<'a> Lower<'a> {
                     ty: Type::Map(k, _),
                     ..
                 }, x],
-            ) => {
-                *x = fits(x.clone(), k)?;
-            }
+            ) => fit(x, k),
             ("add_list_list", [a, b]) if a.ty != b.ty => {
-                *b = fits(b.clone(), &a.ty)?;
-                *a = fits(a.clone(), &b.ty)?;
+                fit(b, &a.ty.clone())?;
+                fit(a, &b.ty.clone())?;
                 if a.ty != b.ty {
                     return unsupported("lists of different types");
                 }
+                Ok(())
             }
-            (_, operands) => {
-                let Some(params) = self.params.get(id) else {
-                    return Ok(());
-                };
-                for (x, p) in operands.iter_mut().zip(params) {
-                    let want = of_cel(p, &self.messages);
-                    *x = match want {
-                        Some(want) => operand(x.clone(), &want, id)?,
-                        None if x.ty == Type::Dyn => {
-                            return unsupported(format!("{id} of a dyn"));
-                        }
-                        None => x.clone(),
-                    };
-                }
-            }
+            (_, operands) => self.settle_declared(id, operands),
+        }
+    }
+
+    /// Each operand of `id` fitted to the type the overload declares for it.
+    fn settle_declared(&self, id: &str, operands: &mut [Typed]) -> Result<(), Error> {
+        let Some(params) = self.params.get(id) else {
+            return Ok(());
+        };
+        for (x, p) in operands.iter_mut().zip(params) {
+            *x = match of_cel(p, &self.messages) {
+                Some(want) => operand(x.clone(), &want, id)?,
+                None if x.ty == Type::Dyn => return unsupported(format!("{id} of a dyn")),
+                None => x.clone(),
+            };
         }
         Ok(())
     }
+}
+
+/// `x` fitted to `ty`.
+fn fit(x: &mut Typed, ty: &Type) -> Result<(), Error> {
+    *x = fits(x.clone(), ty)?;
+    Ok(())
+}
+
+/// Both sides of `==` or `!=` as dyn where either is, else the same type.
+fn settle_equality(a: &mut Typed, b: &mut Typed) -> Result<(), Error> {
+    if a.ty == Type::Dyn || b.ty == Type::Dyn {
+        fit(a, &Type::Dyn)?;
+        fit(b, &Type::Dyn)?;
+    }
+    if a.ty != b.ty && (a.ty.has_dyn() || b.ty.has_dyn()) {
+        return unsupported("a comparison of a dyn with other than a dyn");
+    }
+    Ok(())
 }

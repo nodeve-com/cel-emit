@@ -5,12 +5,10 @@
 
 use std::collections::BTreeMap;
 
-use cel_core::{Expr, SpannedExpr, Value};
+use cel_core::{Expr, SpannedExpr, StructField, Value};
 use cel_core_conformance::SimpleTest;
 use cel_core_proto::gen::cel::expr::conformance::test::simple_test::ResultMatcher;
-use cel_core_proto::gen::cel::expr::decl::DeclKind;
 use cel_core_proto::gen::cel::expr::expr_value;
-use cel_core_proto::gen::cel::expr::r#type::TypeKind;
 use cel_core_proto::{proto_value_to_value, ProstMessage, ProstProtoRegistry};
 use prost_reflect::{FieldDescriptor, Kind, Syntax};
 
@@ -32,30 +30,18 @@ const OUT_OF_SCOPE: [(&str, &str); 5] = [
 
 /// Why `test` uses a proto2 extension or an out-of-scope type, if it does.
 pub fn outside(test: &SimpleTest, registry: &ProstProtoRegistry) -> Option<&'static str> {
-    let mut declared = BTreeMap::new();
-    for decl in &test.type_env {
-        if let Some(DeclKind::Ident(ident)) = &decl.decl_kind {
-            if let Some(TypeKind::MessageType(n)) =
-                ident.r#type.as_ref().and_then(|t| t.type_kind.as_ref())
-            {
-                declared.insert(decl.name.clone(), n.clone());
-            }
-        }
-    }
     let scope = Scope {
         registry,
         container: &test.container,
-        declared,
+        declared: super::types::declared_messages(test),
     };
     if let Some(ast) = cel_core::parse(&test.expr).ast {
         if let Some(why) = super::mixed::bare(&ast).or_else(|| scope.expr(&ast)) {
             return Some(why);
         }
     }
-    for n in scope.declared.values() {
-        if let Some(why) = scope.type_scope(n) {
-            return Some(why);
-        }
+    if let Some(why) = scope.declared.values().find_map(|n| scope.type_scope(n)) {
+        return Some(why);
     }
     let mut values = Vec::new();
     for bound in test.bindings.values() {
@@ -192,6 +178,28 @@ impl Scope<'_> {
             .or_else(|| self.expr(base))
     }
 
+    /// Why a message literal of `type_name` setting `fields` is out of scope.
+    fn literal_scope(
+        &self,
+        type_name: &SpannedExpr,
+        fields: &[StructField],
+    ) -> Option<&'static str> {
+        let name = dotted(type_name);
+        name.as_deref()
+            .and_then(|n| self.type_scope(n))
+            .or_else(|| {
+                // A field the message declares with an out-of-scope type.
+                let message = self.message(name.as_deref()?);
+                fields.iter().find_map(|f| {
+                    message
+                        .as_ref()?
+                        .get_field_by_name(&f.name)
+                        .and_then(|fd| field_scope(&fd))
+                })
+            })
+            .or_else(|| fields.iter().find_map(|f| self.expr(&f.value)))
+    }
+
     fn expr(&self, e: &SpannedExpr) -> Option<&'static str> {
         let sub = |e: &SpannedExpr| self.expr(e);
         match &e.node {
@@ -200,22 +208,7 @@ impl Scope<'_> {
                 .presence_outside(base, field)
                 .or_else(|| self.select(e, base, field)),
             Expr::Member { expr, field, .. } => self.select(e, expr, field),
-            Expr::Struct { type_name, fields } => {
-                let name = dotted(type_name);
-                name.as_deref()
-                    .and_then(|n| self.type_scope(n))
-                    .or_else(|| {
-                        // A field the message declares with an out-of-scope type.
-                        let message = self.message(name.as_deref()?);
-                        fields.iter().find_map(|f| {
-                            message
-                                .as_ref()?
-                                .get_field_by_name(&f.name)
-                                .and_then(|fd| field_scope(&fd))
-                        })
-                    })
-                    .or_else(|| fields.iter().find_map(|f| sub(&f.value)))
-            }
+            Expr::Struct { type_name, fields } => self.literal_scope(type_name, fields),
             Expr::Unary { expr, .. } => sub(expr),
             Expr::Binary { left, right, .. } => sub(left).or_else(|| sub(right)),
             Expr::Ternary {

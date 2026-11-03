@@ -3,28 +3,13 @@
 use cel_core::{CelType, FunctionDecl, OverloadDecl};
 
 pub(super) fn declarations() -> Vec<FunctionDecl> {
-    let t = || CelType::type_param("T");
-    let of_t = || CelType::list(t());
     let method = |id: &str, mut params: Vec<CelType>, result: CelType| {
         params.insert(0, of_t());
         OverloadDecl::method(id, params, result).with_type_params(vec!["T".to_string()])
     };
-    let flatten = OverloadDecl::method("list_flatten", vec![CelType::list(of_t())], of_t())
-        .with_type_params(vec!["T".to_string()]);
-    let flatten_depth = OverloadDecl::method(
-        "list_flatten_depth",
-        vec![CelType::list(CelType::Dyn), CelType::Int],
-        CelType::list(CelType::Dyn),
-    );
-    let sort_by_keys = OverloadDecl::function(
-        "list_sort_by_keys",
-        vec![of_t(), CelType::list(CelType::type_param("K"))],
-        of_t(),
-    )
-    .with_type_params(vec!["T".to_string(), "K".to_string()]);
     vec![
-        FunctionDecl::new(crate::macros::SORT_BY_KEYS).with_overload(sort_by_keys),
-        FunctionDecl::new("flatten").with_overloads([flatten, flatten_depth]),
+        sort_by_keys(),
+        flatten(),
         FunctionDecl::new("slice").with_overload(method(
             "list_slice",
             vec![CelType::Int, CelType::Int],
@@ -39,4 +24,30 @@ pub(super) fn declarations() -> Vec<FunctionDecl> {
             CelType::list(CelType::Int),
         )),
     ]
+}
+
+fn of_t() -> CelType {
+    CelType::list(CelType::type_param("T"))
+}
+
+/// The hidden function `sortBy` expands to.
+fn sort_by_keys() -> FunctionDecl {
+    let overload = OverloadDecl::function(
+        "list_sort_by_keys",
+        vec![of_t(), CelType::list(CelType::type_param("K"))],
+        of_t(),
+    )
+    .with_type_params(vec!["T".to_string(), "K".to_string()]);
+    FunctionDecl::new(crate::macros::SORT_BY_KEYS).with_overload(overload)
+}
+
+fn flatten() -> FunctionDecl {
+    let one = OverloadDecl::method("list_flatten", vec![CelType::list(of_t())], of_t())
+        .with_type_params(vec!["T".to_string()]);
+    let depth = OverloadDecl::method(
+        "list_flatten_depth",
+        vec![CelType::list(CelType::Dyn), CelType::Int],
+        CelType::list(CelType::Dyn),
+    );
+    FunctionDecl::new("flatten").with_overloads([one, depth])
 }

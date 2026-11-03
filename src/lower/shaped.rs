@@ -31,11 +31,11 @@ impl<'a> Lower<'a> {
             slots.clone(),
             Node::Shaped(Box::new(text), message.clone(), rest),
         );
-        let from = Slot {
-            slots: &Typed::new(slots, Node::Local(n)),
-            of: 0,
+        let mut slots = Slots {
+            typed: Typed::new(slots, Node::Local(n)),
+            next: 1,
         };
-        let body = self.read_fields(&message, from, &mut 1)?;
+        let body = self.read_fields(&message, 0, &mut slots)?;
         Ok(Node::Let(n, Box::new(decoded), Box::new(body)))
     }
 
@@ -47,36 +47,34 @@ impl<'a> Lower<'a> {
         Ok(n)
     }
 
-    /// The message `message`, each field read from its slot, the next of `next`, in the message
-    /// `from`.
+    /// The message `message`, in slot `of`, each field read from its slot, the next of `slots`.
     fn read_fields(
         &mut self,
         message: &Type,
-        from: Slot<'_>,
-        next: &mut usize,
+        of: usize,
+        slots: &mut Slots,
     ) -> Result<Typed, Error> {
         let mut made = Vec::with_capacity(message.fields().len());
         for (i, field) in message.fields().iter().enumerate() {
-            let at = *next;
-            *next = at
+            let at = slots.next;
+            slots.next = at
                 .checked_add(1)
                 .ok_or(Error::Unsupported("too many fields".into()))?;
             let (value, flagged) = self
-                .read_field(field, from, at, next)
+                .read_field(field, Place { of, at }, slots)
                 .map_err(|e| e.at(&field.name))?;
             made.push((i, value, flagged));
         }
         Ok(Typed::new(message.clone(), Node::Message(made)))
     }
 
-    /// One field of `from`, in slot `at`, and whether its entry is flagged (`?`): an optional
-    /// field a key does not give is left unset.
+    /// One field, in `place`, and whether its entry is flagged (`?`): an optional field a key
+    /// does not give is left unset.
     fn read_field(
         &mut self,
         field: &Field,
-        from: Slot<'_>,
-        at: usize,
-        next: &mut usize,
+        place: Place,
+        slots: &mut Slots,
     ) -> Result<(Typed, bool), Error> {
         // A field typed an option is one a key may leave out.
         let stripped;
@@ -91,89 +89,106 @@ impl<'a> Lower<'a> {
             }
             _ => field,
         };
-        let get = || from.read("json_field", at, Type::Dyn);
         let (held, nullable) = match &field.ty {
             Type::Nullable(t) => (&**t, true),
             t => (t, false),
         };
-        let of = field.ty.cel();
-        if matches!(held, Type::Message(_)) {
-            if nullable {
-                return unsupported("a nullable message in a decode");
-            }
-            let inner = Slot {
-                slots: from.slots,
-                of: at,
-            };
-            if field.required {
-                let read = self.read_fields(held, inner, next)?;
-                return Ok((read, false));
-            }
-            // An optional message is a flagged entry, set where its key is.
-            let has = from.read("json_has_field", at, Type::Bool);
-            let read = self.read_fields(held, inner, next)?;
-            let optional = Type::Optional(Box::new(read.ty.clone()));
-            let some = Typed::new(optional.clone(), Node::Some(Box::new(read)));
-            let none = Typed::new(optional, Node::None);
-            return Ok((Typed::cond(has, some, none), true));
+        if !matches!(held, Type::Message(_)) {
+            return scalar_field(field, nullable, place, slots);
         }
-        if !matches!(
-            held,
-            Type::Int
-                | Type::Uint
-                | Type::Double
-                | Type::Bool
-                | Type::String
-                | Type::Narrow(_)
-                | Type::Timestamp
-                | Type::Duration
-                | Type::Bytes
-        ) {
-            return unsupported(format!("a {} field in a decode", held.display()));
+        if nullable {
+            return unsupported("a nullable message in a decode");
         }
-        let read = |source: Typed, to: Type| {
-            let read = Typed::new(to.clone(), Node::FromDyn(Box::new(source), to));
-            if field.ty.narrow() {
-                super::message::within(read, &field.ty)
-            } else {
-                Ok(read)
-            }
+        let inner = Place {
+            of: place.at,
+            ..place
         };
-        let maybe = Type::Optional(Box::new(Type::Dyn));
-        let found = || from.read("json_optional_field", at, maybe.clone());
-        if nullable && field.ty.narrow() {
-            return unsupported("a nullable narrow field in a decode");
+        if field.required {
+            return Ok((self.read_fields(held, inner.of, slots)?, false));
         }
-        let (value, flagged) = match (nullable, field.required) {
-            (false, true) => (read(get(), of.clone())?, false),
-            (true, true) => {
-                let some = Typed::new(maybe.clone(), Node::Some(Box::new(get())));
-                (read(some, of.clone())?, false)
-            }
-            (true, false) => (read(found(), of.clone())?, false),
-            (false, false) => {
-                if field.ty.narrow() {
-                    return unsupported("an optional narrow field in a decode");
-                }
-                (read(found(), Type::Optional(Box::new(of.clone())))?, true)
-            }
-        };
-        Ok((value, flagged))
+        // An optional message is a flagged entry, set where its key is.
+        let has = slots.read(place, "json_has_field", Type::Bool);
+        let read = self.read_fields(held, inner.of, slots)?;
+        let optional = Type::Optional(Box::new(read.ty.clone()));
+        let some = Typed::new(optional.clone(), Node::Some(Box::new(read)));
+        let none = Typed::new(optional, Node::None);
+        Ok((Typed::cond(has, some, none), true))
     }
 }
 
-/// The message in slot `of` of a decode's `slots`.
-#[derive(Clone, Copy)]
-struct Slot<'t> {
-    slots: &'t Typed,
-    of: usize,
+/// A field of a decoded document that holds a scalar, in `place`, read from its slot.
+fn scalar_field(
+    field: &Field,
+    nullable: bool,
+    place: Place,
+    slots: &Slots,
+) -> Result<(Typed, bool), Error> {
+    scalar_kind(&field.ty)?;
+    let of = field.ty.cel();
+    let read = |source: Typed, to: Type| {
+        let read = Typed::new(to.clone(), Node::FromDyn(Box::new(source), to));
+        if field.ty.narrow() {
+            super::message::within(read, &field.ty)
+        } else {
+            Ok(read)
+        }
+    };
+    let get = || slots.read(place, "json_field", Type::Dyn);
+    let maybe = Type::Optional(Box::new(Type::Dyn));
+    let found = || slots.read(place, "json_optional_field", maybe.clone());
+    if nullable && field.ty.narrow() {
+        return unsupported("a nullable narrow field in a decode");
+    }
+    match (nullable, field.required) {
+        (false, true) => Ok((read(get(), of)?, false)),
+        (true, true) => {
+            let some = Typed::new(maybe.clone(), Node::Some(Box::new(get())));
+            Ok((read(some, of)?, false))
+        }
+        (true, false) => Ok((read(found(), of)?, false)),
+        (false, false) if field.ty.narrow() => unsupported("an optional narrow field in a decode"),
+        (false, false) => Ok((read(found(), Type::Optional(Box::new(of)))?, true)),
+    }
 }
 
-impl Slot<'_> {
-    /// `f` of the field in slot `at`, typed `ty`.
-    fn read(self, f: &str, at: usize, ty: Type) -> Typed {
+/// Whether a decode reads a field of type `ty`, nullable or not, from a scalar.
+fn scalar_kind(ty: &Type) -> Result<(), Error> {
+    let held = match ty {
+        Type::Nullable(t) => &**t,
+        t => t,
+    };
+    match held {
+        Type::Int
+        | Type::Uint
+        | Type::Double
+        | Type::Bool
+        | Type::String
+        | Type::Narrow(_)
+        | Type::Timestamp
+        | Type::Duration
+        | Type::Bytes => Ok(()),
+        _ => unsupported(format!("a {} field in a decode", held.display())),
+    }
+}
+
+/// A decode's slots: the document's slot values, and the next slot a field takes.
+struct Slots {
+    typed: Typed,
+    next: usize,
+}
+
+/// A field's place in a decode: the slot of the message holding it, and its own.
+#[derive(Clone, Copy)]
+struct Place {
+    of: usize,
+    at: usize,
+}
+
+impl Slots {
+    /// `f` of the field in `place`, typed `ty`.
+    fn read(&self, place: Place, f: &str, ty: Type) -> Typed {
         let n = |i: usize| Typed::int(i64::try_from(i).unwrap_or(i64::MAX));
-        Typed::call(f, vec![self.slots.clone(), n(self.of), n(at)], ty)
+        Typed::call(f, vec![self.typed.clone(), n(place.of), n(place.at)], ty)
     }
 }
 
@@ -209,6 +224,14 @@ mod tests {
         d
     }
 
+    /// The rest field a decode node keeps the other keys under.
+    fn rest_of(n: &crate::Typed) -> Option<Option<String>> {
+        match &n.node {
+            crate::Node::Shaped(_, _, rest) => Some(rest.clone()),
+            _ => None,
+        }
+    }
+
     #[test]
     fn a_message_name_is_a_type_argument() {
         let t = lower("json.decode('{}', M)", &decls()).unwrap();
@@ -222,11 +245,7 @@ mod tests {
             d.rest = Some(name.into());
             let t = lower(&format!("json.decode('{{}}', {message})"), &d).unwrap();
             let mut found = None;
-            crate::walk::nodes(&t, &mut |n| {
-                if let crate::Node::Shaped(_, _, rest) = &n.node {
-                    found = Some(rest.clone());
-                }
-            });
+            crate::walk::nodes(&t, &mut |n| found = found.take().or(rest_of(n)));
             found.unwrap()
         };
         assert_eq!(rest("M", "n"), Some("n".to_string()));

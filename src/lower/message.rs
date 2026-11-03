@@ -74,23 +74,7 @@ impl<'a> Lower<'a> {
             .ok_or_else(|| Error::Invalid(format!("no message {name} to build")))?;
         let mut made = Vec::with_capacity(fields.len());
         for f in fields {
-            let i = ty
-                .fields()
-                .iter()
-                .position(|x| x.name == f.name)
-                .ok_or_else(|| Error::Invalid(format!("{name} has no field {}", f.name)))?;
-            let field = ty
-                .fields()
-                .get(i)
-                .ok_or_else(|| Error::Invalid(f.name.clone()))?;
-            let declared = self.decls.tags.get(&format!("{name}.{}", f.name));
-            if let (Some(declared), Some((given, mismatch))) = (declared, self.tagged(&f.value)) {
-                if *declared != given {
-                    return invalid(mismatch(&f.name, declared, &given));
-                }
-            }
-            let v = self.entry(f, field).map_err(|e| e.at(&f.name))?;
-            made.push((i, v, f.optional));
+            made.push(self.set_field(&name, &ty, f)?);
         }
         for field in ty.fields() {
             let set = fields.iter().any(|f| f.name == field.name && !f.optional);
@@ -99,6 +83,33 @@ impl<'a> Lower<'a> {
             }
         }
         Ok(Typed::new(ty, Node::Message(made)))
+    }
+
+    /// The entry `f` of message `name` of type `ty`: its field's place, value, and whether it is
+    /// flagged.
+    fn set_field(
+        &mut self,
+        name: &str,
+        ty: &Type,
+        f: &'a StructField,
+    ) -> Result<(usize, Typed, bool), Error> {
+        let i = ty
+            .fields()
+            .iter()
+            .position(|x| x.name == f.name)
+            .ok_or_else(|| Error::Invalid(format!("{name} has no field {}", f.name)))?;
+        let field = ty
+            .fields()
+            .get(i)
+            .ok_or_else(|| Error::Invalid(f.name.clone()))?;
+        let declared = self.decls.tags.get(&format!("{name}.{}", f.name));
+        if let (Some(declared), Some((given, mismatch))) = (declared, self.tagged(&f.value)) {
+            if *declared != given {
+                return invalid(mismatch(&f.name, declared, &given));
+            }
+        }
+        let v = self.entry(f, field).map_err(|e| e.at(&f.name))?;
+        Ok((i, v, f.optional))
     }
 
     /// A struct literal as a value that is emitted whole.

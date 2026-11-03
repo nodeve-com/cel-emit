@@ -13,36 +13,14 @@ impl<'a> Lower<'a> {
             return Ok(Node::Call("index_map".into(), vec![map, key]));
         }
         let path = self.path(e);
-        let mut parts = path.iter().flat_map(|p| p.split('.'));
-        let (root, field) = (parts.next(), parts.next());
+        let root = path.iter().flat_map(|p| p.split('.')).next();
         let by_bind = matches!(root.map(|r| self.local(r)), Some(Some(Scoped::Bind(_))));
-        let looped = !by_bind && root.is_some();
-        for (n, l) in self.loops.iter().enumerate().rev().filter(|_| looped) {
-            if root == l.index.as_deref() && field.is_none() {
-                return Ok(match &l.over {
-                    Over::List(_) => Node::Position(n),
-                    Over::Map(key, _) => Typed::stored(key.clone(), Node::Item(n, Part::Key)).node,
-                    Over::Messages(_) => Node::Item(n, Part::Key),
-                });
+        if !by_bind {
+            if let Some(node) = self.loop_name(path.as_deref())? {
+                return Ok(node);
             }
-            if root == l.item.as_deref() {
-                let (ty, part) = match &l.over {
-                    Over::List(ty) => (ty, Part::Whole),
-                    Over::Map(_, ty) => (ty, Part::Value),
-                    Over::Messages(_) => {
-                        return unsupported("a map of messages' message other than by its fields")
-                    }
-                };
-                let item = Typed::stored(ty.clone(), Node::Item(n, part));
-                let rest: Vec<&str> = path.iter().flat_map(|p| p.split('.')).skip(1).collect();
-                return self.fields(item, &rest);
-            }
-        }
-        if let Some(p) = path.as_deref().filter(|_| !by_bind) {
-            match self.found(p) {
-                Some(At::Constant(c)) => return Ok(c.node),
-                Some(At::Var(v)) => return Ok(self.declared(p, v).node),
-                None => {}
+            if let Some(node) = path.as_deref().and_then(|p| self.declared_name(p)) {
+                return Ok(node);
             }
         }
         // A field of a message a literal or a bound name gives.
@@ -53,25 +31,62 @@ impl<'a> Lower<'a> {
             };
         }
         // A field of a message a value gives: a list's element, say.
-        if let Expr::Member { expr, field, .. } = &e.node {
-            let base = self.expr(expr)?;
-            match &base.ty {
-                Type::Message(_) | Type::Nullable(_) => {
-                    return self.fields(base, &[field.as_str()]);
-                }
-                // A string-keyed map's field is its entry: a key it lacks is no such key.
-                Type::Map(k, _) if matches!(**k, Type::String | Type::Dyn) => {
-                    let key = super::dynamic::field_key(k, field)?;
-                    return Ok(Node::Call("index_map".into(), vec![base, key]));
-                }
-                Type::Dyn => {
-                    let key = Typed::string(field);
-                    return Ok(Node::Call("dyn_get".into(), vec![base, key]));
-                }
-                _ => {}
+        match &e.node {
+            Expr::Member { expr, field, .. } => self.value_field(expr, field),
+            _ => unsupported("field access on a value"),
+        }
+    }
+
+    /// The comprehension's index, key, or element that `path` names, innermost first, or a field
+    /// of the element.
+    fn loop_name(&self, path: Option<&str>) -> Result<Option<Node>, Error> {
+        let mut parts = path.iter().flat_map(|p| p.split('.'));
+        let (root, field) = (parts.next(), parts.next());
+        if root.is_none() {
+            return Ok(None);
+        }
+        for (n, l) in self.loops.iter().enumerate().rev() {
+            if root == l.index.as_deref() && field.is_none() {
+                return Ok(Some(match &l.over {
+                    Over::List(_) => Node::Position(n),
+                    Over::Map(key, _) => Typed::stored(key.clone(), Node::Item(n, Part::Key)).node,
+                    Over::Messages(_) => Node::Item(n, Part::Key),
+                }));
+            }
+            if root == l.item.as_deref() {
+                let (ty, part) = loop_item(&l.over)?;
+                let item = Typed::stored(ty.clone(), Node::Item(n, part));
+                let rest: Vec<&str> = path.iter().flat_map(|p| p.split('.')).skip(1).collect();
+                return self.fields(item, &rest).map(Some);
             }
         }
-        unsupported("field access on a value")
+        Ok(None)
+    }
+
+    /// The constant or variable the name `path` declares.
+    fn declared_name(&self, path: &str) -> Option<Node> {
+        match self.found(path)? {
+            At::Constant(c) => Some(c.node),
+            At::Var(v) => Some(self.declared(path, v).node),
+        }
+    }
+
+    /// `field` of the message, map, or dyn that `expr` gives.
+    fn value_field(&mut self, expr: &'a SpannedExpr, field: &str) -> Result<Node, Error> {
+        let base = self.expr(expr)?;
+        match &base.ty {
+            Type::Message(_) | Type::Nullable(_) => self.fields(base, &[field]),
+            // A string-keyed map's field is its entry: a key it lacks is no such key.
+            Type::Map(k, _) if matches!(**k, Type::String | Type::Dyn) => {
+                let key = super::dynamic::field_key(k, field)?;
+                Ok(Node::Call("index_map".into(), vec![base, key]))
+            }
+            Type::Dyn => {
+                let key = Typed::string(field);
+                Ok(Node::Call("dyn_get".into(), vec![base, key]))
+            }
+            _ => unsupported("field access on a value"),
+        }
     }
 
     /// `path` of fields into `message`, a message by its address.
@@ -135,23 +150,10 @@ impl<'a> Lower<'a> {
                 }
                 _ => return Ok(None),
             },
-            Expr::Ident(name) => {
-                let bound = match self.local(name) {
-                    Some(Scoped::Loop(n, l)) => match l {
-                        Loop {
-                            item,
-                            over: Over::Messages(root),
-                            ..
-                        } if item.as_deref() == Some(name.as_str()) => Some((root.clone(), n)),
-                        _ => None,
-                    },
-                    _ => None,
-                };
-                match bound {
-                    Some((root, n)) => (root, string(Node::Item(n, Part::Key))),
-                    None => return Ok(None),
-                }
-            }
+            Expr::Ident(name) => match self.looped_messages(name) {
+                Some((root, n)) => (root, string(Node::Item(n, Part::Key))),
+                None => return Ok(None),
+            },
             _ => return Ok(None),
         };
         if fields.is_empty() {
@@ -159,6 +161,21 @@ impl<'a> Lower<'a> {
         }
         let map = self.column(&root, &fields.join("."))?;
         Ok(Some((map, key)))
+    }
+
+    /// The map of messages that loop variable `name` runs over, and the loop's number.
+    fn looped_messages(&self, name: &str) -> Option<(String, usize)> {
+        match self.local(name)? {
+            Scoped::Loop(
+                n,
+                Loop {
+                    item,
+                    over: Over::Messages(root),
+                    ..
+                },
+            ) if item.as_deref() == Some(name) => Some((root.clone(), n)),
+            _ => None,
+        }
     }
 
     /// A map of messages' `field` of each message, a map.
@@ -211,5 +228,14 @@ impl<'a> Lower<'a> {
     /// What a declared name is.
     pub(crate) fn found(&self, path: &str) -> Option<At> {
         self.decls.names.get(path).map(|n| n.at.clone())
+    }
+}
+
+/// The type and part of a comprehension's element, of a list or map.
+fn loop_item(over: &Over) -> Result<(&Type, Part), Error> {
+    match over {
+        Over::List(ty) => Ok((ty, Part::Whole)),
+        Over::Map(_, ty) => Ok((ty, Part::Value)),
+        Over::Messages(_) => unsupported("a map of messages' message other than by its fields"),
     }
 }

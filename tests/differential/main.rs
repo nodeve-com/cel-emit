@@ -135,54 +135,24 @@ fn show(v: s::Dyn) -> String {
 }
 "#;
 
+type Wrong<'a> = BTreeMap<&'a str, String>;
+
 #[test]
 fn emitted_code_agrees_with_the_interpreter() {
     let scratch = std::env::temp_dir().join(format!("cel-emit-diff-{}", std::process::id()));
     let mut emitter = Emitter::new(&[], Box::new(common::Positional));
-    let mut wrong: BTreeMap<&str, String> = BTreeMap::new();
-    let mut fns = Vec::new();
+    let mut wrong = Wrong::new();
     let all: Vec<&str> = cases::CASES
         .iter()
         .chain(messages::CASES)
         .chain(shaped::CASES)
         .copied()
         .collect();
-    for (n, source) in all.iter().enumerate() {
-        match function(n, source, &mut emitter) {
-            Ok(f) => fns.push((n, f)),
-            // A refusal is by design (README: refused, never stubbed): a gap, not a mismatch.
-            Err(e) if e.starts_with("unsupported") => eprintln!("refused: {source}: {e}"),
-            Err(e) => {
-                wrong.insert(source, format!("not emitted: {e}"));
-            }
-        }
-    }
+    let fns = emit_all(&all, &mut emitter, &mut wrong);
     let items = common::items(&mut emitter).unwrap();
-    let mut answers: BTreeMap<usize, String> = BTreeMap::new();
-    let mut collect = |lines: Vec<String>| {
-        for l in lines {
-            let (n, v) = l.split_once('\t').unwrap();
-            answers.insert(n.parse().unwrap(), v.to_string());
-        }
-    };
-    match common::build_run(&scratch.join("all"), &common::program(&fns, SHOW, &items)) {
-        Ok(lines) => collect(lines),
-        Err(_) => {
-            for f in &fns {
-                match common::build_run(
-                    &scratch.join(f.0.to_string()),
-                    &common::program(std::slice::from_ref(f), SHOW, &items),
-                ) {
-                    Ok(lines) => collect(lines),
-                    Err(e) => {
-                        wrong.insert(
-                            all[f.0],
-                            format!("rustc: {}", e.lines().next().unwrap_or("")),
-                        );
-                    }
-                }
-            }
-        }
+    let (answers, failed) = run_all(&fns, &items, &scratch);
+    for (n, why) in failed {
+        wrong.insert(all[n], why);
     }
     let _ = std::fs::remove_dir_all(&scratch);
     for (n, got) in &answers {
@@ -192,6 +162,60 @@ fn emitted_code_agrees_with_the_interpreter() {
             wrong.insert(source, format!("emitted {got}, interpreter {want}"));
         }
     }
+    report(&wrong);
+}
+
+/// Each of `all` emitted as a function; a failure other than a refusal is `wrong`.
+fn emit_all<'a>(
+    all: &[&'a str],
+    emitter: &mut Emitter,
+    wrong: &mut Wrong<'a>,
+) -> Vec<(usize, String)> {
+    let mut fns = Vec::new();
+    for (n, source) in all.iter().enumerate() {
+        match function(n, source, emitter) {
+            Ok(f) => fns.push((n, f)),
+            // A refusal is by design (README: refused, never stubbed): a gap, not a mismatch.
+            Err(e) if e.starts_with("unsupported") => eprintln!("refused: {source}: {e}"),
+            Err(e) => {
+                wrong.insert(source, format!("not emitted: {e}"));
+            }
+        }
+    }
+    fns
+}
+
+/// The answer of each function in `fns`, built together, else one at a time; a program that
+/// fails to build gives its case's number and why.
+fn run_all(
+    fns: &[(usize, String)],
+    items: &str,
+    scratch: &std::path::Path,
+) -> (BTreeMap<usize, String>, Vec<(usize, String)>) {
+    let mut answers = BTreeMap::new();
+    let mut failed = Vec::new();
+    let mut collect = |lines: Vec<String>| {
+        for l in lines {
+            let (n, v) = l.split_once('\t').unwrap();
+            answers.insert(n.parse().unwrap(), v.to_string());
+        }
+    };
+    if let Ok(lines) = common::build_run(&scratch.join("all"), &common::program(fns, SHOW, items)) {
+        collect(lines);
+        return (answers, failed);
+    }
+    for f in fns {
+        let program = common::program(std::slice::from_ref(f), SHOW, items);
+        match common::build_run(&scratch.join(f.0.to_string()), &program) {
+            Ok(lines) => collect(lines),
+            Err(e) => failed.push((f.0, format!("rustc: {}", e.lines().next().unwrap_or("")))),
+        }
+    }
+    (answers, failed)
+}
+
+/// Prints each disagreement, and fails on those not known.
+fn report(wrong: &Wrong) {
     for source in cases::KNOWN_FAILING {
         if !wrong.contains_key(source) {
             eprintln!("agrees now; remove from KNOWN_FAILING: {source}");
@@ -202,7 +226,7 @@ fn emitted_code_agrees_with_the_interpreter() {
         .filter(|(s, _)| !cases::KNOWN_FAILING.contains(s))
         .map(|(s, why)| format!("{s}\n    {why}"))
         .collect();
-    for (s, why) in &wrong {
+    for (s, why) in wrong {
         eprintln!("disagrees: {s}: {why}");
     }
     assert!(new.is_empty(), "new disagreements:\n{}", new.join("\n"));

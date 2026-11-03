@@ -121,33 +121,11 @@ impl<'a> Lower<'a> {
         };
         let mut slots = Vec::with_capacity(items.len());
         for item in items {
-            if item.optional {
-                let want = elem.clone().map(|t| Type::Optional(Box::new(t)));
-                let typed = self.expr_as(&item.expr, want.as_ref())?;
-                let Type::Optional(held) = &typed.ty else {
-                    return invalid("an optional list element of other than an optional");
-                };
-                match &elem {
-                    Some(t) if t != &**held => return Ok(None),
-                    Some(_) => {}
-                    None => elem = Some((**held).clone()),
-                }
-                slots.push(Some((typed, true)));
-                continue;
+            match self.open_slot(item, &mut elem)? {
+                Slot::Mixed => return Ok(None),
+                Slot::Open => slots.push(None),
+                Slot::Typed(typed, optional) => slots.push(Some((typed, optional))),
             }
-            let empty = matches!(&item.expr.node, Expr::List(v) if v.is_empty())
-                || matches!(&item.expr.node, Expr::Map(v) if v.is_empty());
-            if empty && self.open(&item.expr) {
-                slots.push(None);
-                continue;
-            }
-            let typed = self.expr_as(&item.expr, elem.as_ref())?;
-            match &elem {
-                Some(t) if *t != typed.ty => return Ok(None),
-                Some(_) => {}
-                None => elem = Some(typed.ty.clone()),
-            }
-            slots.push(Some((typed, false)));
         }
         let elem = elem.unwrap_or(Type::Int);
         let mut made = Vec::with_capacity(items.len());
@@ -166,6 +144,31 @@ impl<'a> Lower<'a> {
             false => Node::List(made.into_iter().map(|(x, _)| x).collect()),
         };
         Ok(Some(Typed::new(ty, node)))
+    }
+
+    /// Element `item` of an open list literal, settling the element type `elem` where it has none.
+    fn open_slot(
+        &mut self,
+        item: &'a cel_core::types::ListElement,
+        elem: &mut Option<Type>,
+    ) -> Result<Slot, Error> {
+        if item.optional {
+            let want = elem.clone().map(|t| Type::Optional(Box::new(t)));
+            let typed = self.expr_as(&item.expr, want.as_ref())?;
+            let Type::Optional(held) = &typed.ty else {
+                return invalid("an optional list element of other than an optional");
+            };
+            let held = (**held).clone();
+            return Ok(settle_elem(elem, held, typed, true));
+        }
+        let empty = matches!(&item.expr.node, Expr::List(v) if v.is_empty())
+            || matches!(&item.expr.node, Expr::Map(v) if v.is_empty());
+        if empty && self.open(&item.expr) {
+            return Ok(Slot::Open);
+        }
+        let typed = self.expr_as(&item.expr, elem.as_ref())?;
+        let held = typed.ty.clone();
+        Ok(settle_elem(elem, held, typed, false))
     }
 
     /// Two operands of one type, `a` then `b`, where either may be open: an open one takes the
@@ -214,5 +217,27 @@ impl<'a> Lower<'a> {
             _ => (self.expr_as(left, None)?, self.expr_as(right, None)?),
         };
         Ok(vec![l, r])
+    }
+}
+
+/// An element of an open list literal.
+enum Slot {
+    /// Its type differs from an earlier element's.
+    Mixed,
+    /// An empty list or map, typed once the others settle the element type.
+    Open,
+    /// A value, and whether it is optional (`?`).
+    Typed(Typed, bool),
+}
+
+/// `typed`, whose element type is `held`, as a slot of a list of `elem`, which it sets if unset.
+fn settle_elem(elem: &mut Option<Type>, held: Type, typed: Typed, optional: bool) -> Slot {
+    match elem {
+        Some(t) if *t != held => Slot::Mixed,
+        Some(_) => Slot::Typed(typed, optional),
+        None => {
+            *elem = Some(held);
+            Slot::Typed(typed, optional)
+        }
     }
 }

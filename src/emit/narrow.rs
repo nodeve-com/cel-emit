@@ -90,15 +90,7 @@ impl Emitter {
             return Ok(format!("{path}({c})?"));
         }
         if let Type::Optional(t) = collection {
-            // An optional of a stored width: presence needs no widening, the value does.
-            return match id {
-                "optional_has_value" => Ok(format!("{path}({c})?")),
-                "optional_value" => {
-                    let found = format!("{path}({c})?");
-                    Ok(convert(&found, t, To::Cel, 0).map_or(found, |w| format!("{w}?")))
-                }
-                _ => Err(refused()),
-            };
+            return optional_stored(id, &path, c, t).ok_or_else(refused);
         }
         let x = code.get(1usize.saturating_sub(at)).ok_or_else(refused)?;
         Ok(match (id, collection) {
@@ -121,5 +113,16 @@ impl Emitter {
             ),
             _ => return Err(refused()),
         })
+    }
+}
+
+/// A call `id` at `path` on the stored optional `c` of `t`: presence needs no widening, the value
+/// does; `None` for any other call.
+fn optional_stored(id: &str, path: &str, c: &str, t: &Type) -> Option<String> {
+    let found = format!("{path}({c})?");
+    match id {
+        "optional_has_value" => Some(found),
+        "optional_value" => Some(convert(&found, t, To::Cel, 0).map_or(found, |w| format!("{w}?"))),
+        _ => None,
     }
 }

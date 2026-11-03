@@ -19,27 +19,7 @@ pub type Input = (String, Type, Value);
 /// Each of `test`'s bindings by name: its declared type, or one from its value, and its value;
 /// or why they can't be supplied.
 pub fn inputs(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Vec<Input>, Verdict> {
-    let mut declared = BTreeMap::new();
-    for decl in &test.type_env {
-        let Some(DeclKind::Ident(ident)) = &decl.decl_kind else {
-            return Err(Unsupported("a declared function".into()));
-        };
-        let Some(ty) = &ident.r#type else {
-            return Err(Unsupported("a declaration without a type".into()));
-        };
-        if matches!(ty.type_kind, Some(TypeKind::Dyn(_))) {
-            return Err(NotApplicable("dyn"));
-        }
-        let cel = cel_type_from_proto(ty);
-        // No message: the suite's are protobuf's, never a declared message.
-        let Some(t) = of_cel(&cel, &BTreeMap::new()).filter(held) else {
-            return Err(Unsupported(format!(
-                "a declared type: {}",
-                cel.display_name()
-            )));
-        };
-        declared.insert(decl.name.clone(), t);
-    }
+    let mut declared = declared_types(test)?;
     let mut inputs = Vec::new();
     for (name, bound) in &test.bindings {
         let Some(expr_value::Kind::Value(v)) = &bound.kind else {
@@ -64,6 +44,32 @@ pub fn inputs(test: &SimpleTest, registry: &ProstProtoRegistry) -> Result<Vec<In
     }
     inputs.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(inputs)
+}
+
+/// The type each of `test`'s declared names has, or why one can't be supplied.
+fn declared_types(test: &SimpleTest) -> Result<BTreeMap<String, Type>, Verdict> {
+    let mut declared = BTreeMap::new();
+    for decl in &test.type_env {
+        let Some(DeclKind::Ident(ident)) = &decl.decl_kind else {
+            return Err(Unsupported("a declared function".into()));
+        };
+        let Some(ty) = &ident.r#type else {
+            return Err(Unsupported("a declaration without a type".into()));
+        };
+        if matches!(ty.type_kind, Some(TypeKind::Dyn(_))) {
+            return Err(NotApplicable("dyn"));
+        }
+        let cel = cel_type_from_proto(ty);
+        // No message: the suite's are protobuf's, never a declared message.
+        let Some(t) = of_cel(&cel, &BTreeMap::new()).filter(held) else {
+            return Err(Unsupported(format!(
+                "a declared type: {}",
+                cel.display_name()
+            )));
+        };
+        declared.insert(decl.name.clone(), t);
+    }
+    Ok(declared)
 }
 
 /// `v`'s kind, for a reason.
