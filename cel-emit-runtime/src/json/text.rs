@@ -109,26 +109,6 @@ impl Text {
         write::value(&mut self.0, &Dyn::Bool(x))
     }
 
-    /// Writes the entries of `text`, JSON object text, each value as the text has it: a key of
-    /// `own` the object wrote is left out, and text that is no object adds nothing.
-    pub fn rest(&mut self, text: String, own: &[(&str, bool)]) -> Result<()> {
-        let Some(raw) = super::shaped::object(text.as_bytes()) else {
-            return Ok(());
-        };
-        for (k, v) in raw.iter() {
-            if own.iter().any(|(o, written)| *written && *o == k) {
-                continue;
-            }
-            if self.0.last() != Some(&b'{') {
-                self.0.push(b',');
-            }
-            write::string(&mut self.0, k)?;
-            self.0.push(b':');
-            self.0.extend_from_slice(v.as_bytes());
-        }
-        Ok(())
-    }
-
     /// The text written.
     pub fn done(self) -> String {
         String::from_utf8(self.0).unwrap_or_default()

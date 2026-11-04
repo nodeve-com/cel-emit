@@ -175,6 +175,10 @@ impl<'a> Lower<'a> {
             },
             other => return unsupported(kind(other)),
         };
+        let operands: Vec<&'a SpannedExpr> = operands
+            .into_iter()
+            .filter(|o| !self.type_argument(o))
+            .collect();
         if !operands.iter().any(|o| self.open(o)) {
             return operands.into_iter().map(|o| self.expr(o)).collect();
         }
@@ -197,11 +201,28 @@ impl<'a> Lower<'a> {
             None => None,
         };
         match declared {
-            Some(params) if params.len() == n => {
-                params.iter().map(|p| of_cel(p, &self.messages)).collect()
+            Some(params) => {
+                let params: Vec<_> = params
+                    .iter()
+                    .filter(|p| !matches!(p, CelType::Type(_)))
+                    .collect();
+                match params.len() == n {
+                    true => params.iter().map(|p| of_cel(p, &self.messages)).collect(),
+                    false => vec![None; n],
+                }
             }
             _ => vec![None; n],
         }
+    }
+
+    /// Whether `a` is a message's name standing as a type, a call's type argument: it picks the
+    /// overload and is no operand.
+    fn type_argument(&self, a: &SpannedExpr) -> bool {
+        let Expr::Ident(name) = &a.node else {
+            return false;
+        };
+        self.decls.messages.contains_key(name)
+            && matches!(self.info.get_type(a.id), Some(CelType::Type(_)))
     }
 
     /// Whether `callee` names a namespaced function, as the checker resolved `e`'s call.

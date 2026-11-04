@@ -40,3 +40,6 @@ base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 # nearest double; no derive, no proc macro. `std` for `finite`'s writer into a sink.
 serde = { version = "1", default-features = false, features = ["alloc"] }
 serde_json = { version = "1", default-features = false, features = ["std", "float_roundtrip"] }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }

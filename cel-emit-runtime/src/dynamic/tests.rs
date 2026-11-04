@@ -9,28 +9,32 @@ fn same(a: Dyn, b: Dyn) -> bool {
 }
 
 #[test]
-fn a_number_fills_only_its_own_kind() {
+fn a_number_fills_a_typed_scalar_by_the_number_rule() {
     assert_eq!(to_int(&Dyn::Int(-7)), Ok(-7));
     assert_eq!(to_uint(&Dyn::UInt(u64::MAX)), Ok(u64::MAX));
     assert_eq!(to_double(&Dyn::Double(1.5)), Ok(1.5));
     assert_eq!(to_double(&Dyn::Float32(9.3)), Ok(9.300000190734863));
     assert!(to_double(&Dyn::Double(f64::NAN)).is_ok_and(f64::is_nan));
-    for other in [
-        Dyn::Double(3.0),
-        Dyn::Float32(2.0),
-        Dyn::UInt(7),
-        text("1"),
-        Dyn::Null,
-        Dyn::Bool(true),
-    ] {
+    assert_eq!(to_double(&Dyn::Int(5)), Ok(5.0));
+    assert_eq!(to_double(&Dyn::UInt(3)), Ok(3.0));
+    assert_eq!(to_int(&Dyn::Double(5.0)), Ok(5));
+    assert_eq!(to_int(&Dyn::Float32(-2.0)), Ok(-2));
+    assert_eq!(to_uint(&Dyn::Double(4.0)), Ok(4));
+    for other in [Dyn::Double(3.5), text("1"), Dyn::Null, Dyn::Bool(true)] {
         assert_eq!(to_int(&other), Err(Error::Cast), "{other:?}");
     }
-    for other in [Dyn::Int(5), Dyn::Double(4.0), text("1"), Dyn::Null] {
+    for other in [Dyn::Double(4.5), text("1"), Dyn::Null] {
         assert_eq!(to_uint(&other), Err(Error::Cast), "{other:?}");
     }
-    for other in [Dyn::Int(2), Dyn::UInt(3), text("1.5"), Dyn::Null] {
+    for other in [text("1.5"), Dyn::Null, Dyn::Bool(false)] {
         assert_eq!(to_double(&other), Err(Error::Cast), "{other:?}");
     }
+    assert_eq!(to_int(&Dyn::UInt(7)), Ok(7));
+    assert_eq!(to_uint(&Dyn::Int(5)), Ok(5));
+    assert_eq!(to_int(&Dyn::UInt(u64::MAX)), Err(Error::Range));
+    assert_eq!(to_uint(&Dyn::Int(-1)), Err(Error::Range));
+    assert_eq!(to_int(&Dyn::Double(1e30)), Err(Error::Range));
+    assert_eq!(to_uint(&Dyn::Double(-1.0)), Err(Error::Range));
 }
 
 #[test]

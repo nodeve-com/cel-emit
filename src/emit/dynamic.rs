@@ -20,16 +20,18 @@ impl Emitter {
             Type::Nullable(t) => (&**t, Some("nullable")),
             t => (t, None),
         };
+        let serde = self.fills_through_serde(kind);
         let f = match kind {
-            Type::Int => "to_int",
-            Type::Uint => "to_uint",
-            Type::Double => "to_double",
-            Type::Bool => "to_bool",
-            Type::String => "to_str",
-            Type::Timestamp => "to_timestamp",
-            Type::Duration => "to_duration",
-            Type::Bytes => "to_bytes",
-            Type::List(of) if **of == Type::Dyn => "to_list",
+            _ if serde => format!("to::<{}>", self.rust(kind)?),
+            Type::Int => "to_int".into(),
+            Type::Uint => "to_uint".into(),
+            Type::Double => "to_double".into(),
+            Type::Bool => "to_bool".into(),
+            Type::String => "to_str".into(),
+            Type::Timestamp => "to_timestamp".into(),
+            Type::Duration => "to_duration".into(),
+            Type::Bytes => "to_bytes".into(),
+            Type::List(of) if **of == Type::Dyn => "to_list".into(),
             other => {
                 return Err(Error::Unsupported(format!(
                     "a dyn read as {}",
@@ -49,18 +51,24 @@ impl Emitter {
         })
     }
 
-    /// The text `text` decoded as `shape`.
-    pub(super) fn shaped(
-        &mut self,
-        text: &Typed,
-        shape: &Shaped,
-        vars: &dyn Vars,
-    ) -> Result<String, Error> {
-        let text = self.reference(text, false, vars)?;
-        let Shaped { code, slots } = shape;
-        Ok(format!(
-            "{{ const SHAPE: &{STD}::json::Shape = &{code}; {STD}::json::decode_shaped({text}, SHAPE, {slots})? }}"
-        ))
+    /// Whether a dyn filling `ty` is read by `ty`'s own `Deserialize`: a message or a list of
+    /// them whose messages all read themselves.
+    fn fills_through_serde(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Message(_) => self.reads_itself(ty),
+            Type::List(of) => **of != Type::Dyn && self.reads_itself(ty),
+            _ => false,
+        }
+    }
+
+    /// Whether every message in `ty` reads itself and `ty` has no map, whose Rust is not a serde map.
+    fn reads_itself(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Message(fields) => self.declare.deserializes(fields),
+            Type::List(t) | Type::Optional(t) | Type::Nullable(t) => self.reads_itself(t),
+            Type::Map(..) | Type::Duration | Type::Bytes | Type::Number => false,
+            _ => true,
+        }
     }
 
     /// `x` as `to`: a dyn, or a list or map of dyn.
@@ -88,43 +96,25 @@ impl Emitter {
     }
 }
 
-/// What writing a value as a dyn carries down: the field holding the other keys' JSON text, and
-/// the depth that names what each level binds.
+/// What writing a value as a dyn carries down: the depth that names what each level binds.
 #[derive(Clone, Copy)]
-struct Writing<'a> {
-    rest: Option<&'a str>,
+struct Writing {
     depth: usize,
 }
 
-impl Writing<'_> {
+impl Writing {
     fn next(self) -> Self {
         Writing {
             depth: self.depth.saturating_add(1),
-            ..self
         }
-    }
-
-    /// Whether `f` is the field holding the other keys' text.
-    fn holds_rest(self, f: &Field) -> bool {
-        self.rest == Some(f.name.as_str())
     }
 }
 
 impl Emitter {
-    /// `x` as the dyn JSON writes it; with `rest`, a message's string field of that name holds
-    /// JSON object text, written as entries of the message's map.
-    pub(super) fn written(
-        &mut self,
-        x: &Typed,
-        rest: Option<&str>,
-        vars: &dyn Vars,
-    ) -> Result<String, Error> {
+    /// `x` as the dyn JSON writes it.
+    pub(super) fn written(&mut self, x: &Typed, vars: &dyn Vars) -> Result<String, Error> {
         let code = self.expr(x, vars)?;
-        self.dyn_of(
-            &super::place::receiver(&code),
-            &x.ty,
-            Writing { rest, depth: 0 },
-        )
+        self.dyn_of(&super::place::receiver(&code), &x.ty, Writing { depth: 0 })
     }
 
     /// The Rust giving `x`, a value of `ty`, as a dyn.
@@ -155,6 +145,9 @@ impl Emitter {
     /// The Rust giving message `x` of `fields` as a dyn map.
     fn dyn_message(&self, x: &str, fields: &[Field], w: Writing) -> Result<String, Error> {
         // An optional field holding nothing has no key, so entries may be left out.
+        if self.declare.serializes(fields) {
+            return Ok(format!("{STD}::json::serialized(&({x}))?"));
+        }
         let sparse = fields.iter().any(|f| matches!(f.ty, Type::Optional(_)));
         let names = self.declare.fields(fields);
         let mut entries = Vec::with_capacity(fields.len());
@@ -178,16 +171,11 @@ impl Emitter {
     }
 
     /// The entry of field `f`, named `name` in Rust, in its message's dyn map; for an optional
-    /// holding nothing, `None`. A string field named for the other keys' text writes them.
+    /// holding nothing, `None`.
     fn dyn_entry(&self, name: &str, f: &Field, w: Writing) -> Result<String, Error> {
         let d = w.depth;
         let entry = |value: String| format!("(String::from({:?}), {value})", f.name);
-        let held = |at: &str, ty: &Type| {
-            if w.holds_rest(f) && *ty == Type::String {
-                return Ok(format!("{STD}::json::rest({at})?"));
-            }
-            self.dyn_of(at, ty, w.next())
-        };
+        let held = |at: &str, ty: &Type| self.dyn_of(at, ty, w.next());
         if let Type::Optional(t) = &f.ty {
             let entry = entry(held(&format!("v{d}"), t)?);
             return Ok(format!(
@@ -223,59 +211,5 @@ fn scalar_dyn(x: &str, ty: &Type, d: usize) -> Result<String, Error> {
                 other.display()
             )))
         }
-    })
-}
-
-/// A `json::Shape` and the slots it fills.
-pub(super) struct Shaped {
-    code: String,
-    slots: usize,
-}
-
-/// `message` as the shape that reads a document into its declared fields only; with `rest`, the
-/// other keys are kept under that field.
-pub(super) fn shaped(message: &Type, rest: Option<&str>) -> Result<Shaped, Error> {
-    let mut slots = 1;
-    let code = shape(message, rest, &mut slots)?;
-    Ok(Shaped { code, slots })
-}
-
-/// `ty` as the `json::Shape` that reads a document into it, each field's slot the next of
-/// `slots` in field order, a message's before its own fields'; a message, however deep, keeping
-/// the other keys under `rest` gives that field's slot to them.
-fn shape(ty: &Type, rest: Option<&str>, slots: &mut usize) -> Result<String, Error> {
-    let kind = |k: &str| format!("{STD}::json::Shape::{k}");
-    Ok(match ty {
-        Type::Nullable(t) | Type::Optional(t) => shape(t, rest, slots)?,
-        Type::Int | Type::Narrow(Width::I8 | Width::I16 | Width::I32 | Width::I128) => kind("Int"),
-        Type::Uint | Type::Narrow(Width::U8 | Width::U16 | Width::U32 | Width::U128) => {
-            kind("Uint")
-        }
-        Type::Double | Type::Narrow(Width::F32) => kind("Double"),
-        Type::Message(fields) => message_shape(fields, rest, slots)?,
-        _ => kind("Plain"),
-    })
-}
-
-/// A message's `json::Shape`: each field keyed to its slot, the one named `rest` open.
-fn message_shape(fields: &[Field], rest: Option<&str>, slots: &mut usize) -> Result<String, Error> {
-    let mut keys = Vec::with_capacity(fields.len());
-    let mut opens = None;
-    for f in fields {
-        let slot = *slots;
-        *slots = slot
-            .checked_add(1)
-            .ok_or(Error::Unsupported("too many fields".into()))?;
-        if rest == Some(f.name.as_str()) {
-            opens = Some(slot);
-            continue;
-        }
-        let inner = shape(&f.ty, rest, slots)?;
-        keys.push(format!("({:?}, {slot}, {inner})", f.name));
-    }
-    let kind = |k: &str| format!("{STD}::json::Shape::{k}");
-    Ok(match opens {
-        Some(slot) => format!("{}(&[{}], {slot})", kind("Open"), keys.join(", ")),
-        None => format!("{}(&[{}])", kind("Message"), keys.join(", ")),
     })
 }

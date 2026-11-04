@@ -52,6 +52,9 @@ pub struct Decl {
 pub struct Overload {
     pub id: String,
     pub params: Vec<Type>,
+    /// The message type a call names as its last argument, as in `f(x, Message)`. The call picks
+    /// this overload for that message, and passes nothing at run time for the argument.
+    pub names: Option<Type>,
     pub result: Type,
 }
 
@@ -67,8 +70,19 @@ impl Decl {
         self.overloads.push(Overload {
             id: id.into(),
             params,
+            names: None,
             result,
         });
+        self
+    }
+
+    /// The last overload added also takes the message type `message` as its last argument, as in
+    /// `f(x, Message)`: `params` stay the arguments before it. Declare one overload per message,
+    /// each with its own id.
+    pub fn naming(mut self, message: Type) -> Decl {
+        if let Some(o) = self.overloads.last_mut() {
+            o.names = Some(message);
+        }
         self
     }
 }
@@ -88,11 +102,6 @@ pub struct Expansion {
     pub expand: Expand,
     pub mismatch: Mismatch,
 }
-
-/// How a dyn value fills a list or message place, which CEL's own rule cannot read it into: `x`, a dyn, as a
-/// value of `ty`, given how many comprehensions enclose the place. An embedder with a contract
-/// of its own supplies it; without one, only a string or bool fills a field from a dyn.
-pub type Fill = fn(x: Typed, ty: &Type, depth: usize) -> Result<Typed, crate::Error>;
 
 /// An expression's declarations.
 #[derive(Clone, Default)]
@@ -115,14 +124,6 @@ pub struct Decls {
     pub functions: Vec<Function>,
     /// Calls rewritten as they lower.
     pub expansions: Vec<Expansion>,
-    /// How a message's field takes a dyn value.
-    pub fill: Option<Fill>,
-    /// The name of the string field that `json.decode(text, Message)` fills, where a message has it,
-    /// with a JSON object text of the keys the message does not declare (none, when there are
-    /// none). The decode never reads that name as a key, and no expression writes it.
-    /// `json.encode` writes the field back: its text's entries join the object holding it, each
-    /// as the text has it, and never replace a key the object has.
-    pub rest: Option<String>,
     /// `json.encode` of a message, struct literal, or map literal leaves out a field whose value
     /// errors or holds a NaN or an infinity, as it does an absent one, where CEL fails the whole expression. A value written
     /// whole still fails.

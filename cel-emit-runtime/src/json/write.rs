@@ -5,7 +5,6 @@
 use serde::Serializer as _;
 use serde_json::ser::{CompactFormatter, Formatter};
 
-use super::shaped::Raw;
 use crate::dynamic::Dyn;
 use crate::time::{duration_text, timestamp_text};
 use crate::{Error, Result};
@@ -26,7 +25,6 @@ pub(super) fn value(w: &mut Vec<u8>, x: &Dyn) -> Result<()> {
         Dyn::Duration(d) => string(w, &duration_text(d)),
         Dyn::List(ref xs) => list(w, f, xs),
         Dyn::Map(ref m) => map(w, f, m),
-        Dyn::Rest(_) => Err(Error::Cast),
     }
 }
 
@@ -41,48 +39,16 @@ fn list(w: &mut Vec<u8>, f: &mut CompactFormatter, xs: &[Dyn]) -> Result<()> {
     io(f.end_array(w))
 }
 
-/// Writes `m` as an object: its own members, then each member a `Rest` text holds that no own
-/// member names.
+/// Writes `m` as an object.
 fn map(w: &mut Vec<u8>, f: &mut CompactFormatter, m: &[(String, Dyn)]) -> Result<()> {
     io(f.begin_object(w))?;
-    let (mut own, mut rest, mut first) = (Vec::new(), Vec::new(), true);
+    let mut first = true;
     for (k, v) in m {
-        match v {
-            Dyn::Rest(text) => rest.push(text),
-            v => {
-                let k = k.as_str();
-                own.push(k);
-                key(w, &mut first, k)?;
-                value(w, v)?;
-                io(f.end_object_value(w))?;
-            }
-        }
-    }
-    for text in rest {
-        // Text that is no object adds nothing.
-        let Some(raw) = super::shaped::object(text.as_bytes()) else {
-            continue;
-        };
-        for (k, v) in raw.iter().filter(|(k, _)| !own.contains(k)) {
-            key(w, &mut first, k)?;
-            w.extend_from_slice(v.as_bytes());
-            io(f.end_object_value(w))?;
-        }
+        key(w, &mut first, k)?;
+        value(w, v)?;
+        io(f.end_object_value(w))?;
     }
     io(f.end_object(w))
-}
-
-/// `raw` as one JSON object text, each value as it arrived: UTF-8, as each part is.
-pub(super) fn object(raw: &Raw) -> Result<String> {
-    let (mut w, f, mut first) = (Vec::new(), &mut CompactFormatter, true);
-    io(f.begin_object(&mut w))?;
-    for (k, v) in raw.iter() {
-        key(&mut w, &mut first, k)?;
-        w.extend_from_slice(v.as_bytes());
-        io(f.end_object_value(&mut w))?;
-    }
-    io(f.end_object(&mut w))?;
-    String::from_utf8(w).map_err(|_| Error::Cast)
 }
 
 /// Writes an object's key `k`, up to where its value goes.

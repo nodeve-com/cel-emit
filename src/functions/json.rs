@@ -1,8 +1,7 @@
 //! `json.decode` and `json.encode` as the interpreter runs them, for the differential harness to
 //! compare with cel-emit-runtime's: numbers decode as integer text to int (uint past int64), other
 //! numbers to double, a repeated object key keeping its last value; a timestamp and a duration
-//! encode as their text; malformed text or a value JSON can't hold is an error. The shaped `json.decode(text, Message)` is declared without a body:
-//! the interpreter has no message values to build.
+//! encode as their text; malformed text or a value JSON can't hold is an error.
 
 use std::fmt;
 use std::sync::Arc;
@@ -12,12 +11,6 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 pub(super) fn declarations() -> [FunctionDecl; 2] {
-    let shaped = OverloadDecl::function(
-        "json_decode_shaped",
-        vec![CelType::String, CelType::type_of(CelType::type_param("T"))],
-        CelType::type_param("T"),
-    )
-    .with_type_params(vec!["T".to_string()]);
     let decode = OverloadDecl::function("json_decode", vec![CelType::String], CelType::Dyn)
         .with_impl(|args| match args {
             [Value::String(text)] => decoded(text),
@@ -32,7 +25,7 @@ pub(super) fn declarations() -> [FunctionDecl; 2] {
             _ => Value::error("json.encode takes one value"),
         });
     [
-        FunctionDecl::new("json.decode").with_overloads([decode, shaped]),
+        FunctionDecl::new("json.decode").with_overload(decode),
         FunctionDecl::new("json.encode").with_overload(encode),
     ]
 }

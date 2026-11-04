@@ -120,18 +120,6 @@ impl<'a> Lower<'a> {
     /// An entry's value, typed as the field it fills: a `?` entry is an optional of it.
     fn entry(&mut self, f: &'a StructField, field: &Field) -> Result<Typed, Error> {
         let v = self.expr(&f.value)?;
-        let compound = matches!(field.ty.cel(), Type::List(_) | Type::Message(_));
-        if let (Type::Dyn, Some(fill), true, false) = (&v.ty, self.decls.fill, compound, f.optional)
-        {
-            // The embedder's value stands for the field, whatever form it holds it in.
-            let n = self.local_number()?;
-            let local = Typed::new(Type::Dyn, Node::Local(n));
-            let read = fill(local, &field.ty.cel(), self.loops.len())?;
-            return Ok(Typed::new(
-                read.ty.clone(),
-                Node::Let(n, Box::new(v), Box::new(read)),
-            ));
-        }
         if f.optional {
             let (of, optional) = match &field.ty {
                 Type::Optional(t) if matches!(**t, Type::Nullable(_)) => {

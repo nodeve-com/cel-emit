@@ -6,8 +6,7 @@
 //! its last value, in the place of its first.
 //! Encoding writes null as `null`, a float32 in its own shortest digits, a timestamp and a
 //! duration as their text, and refuses what JSON
-//! can't hold: NaN and infinities are [`Error::Range`]. A [`Dyn::Rest`] entry of a map writes
-//! its object text's entries into that map, each as the text has it.
+//! can't hold: NaN and infinities are [`Error::Range`].
 
 use core::fmt;
 
@@ -15,7 +14,7 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::dynamic::Dyn;
-use crate::{conversions, Error, Result};
+use crate::{Error, Result};
 
 /// Parses `text` as one JSON value and nothing after it.
 pub fn decode(text: &str) -> Result<Dyn> {
@@ -29,37 +28,27 @@ pub fn encode(x: &Dyn) -> Result<String> {
     String::from_utf8(text).map_err(|_| Error::Cast)
 }
 
-/// The entries of the map `x` whose keys are not in `keys`, as compact JSON object text; absent
-/// where none remain. Each value is written as [`encode`] writes it.
-pub fn encode_without(x: &Dyn, keys: &[String]) -> Result<Option<String>> {
-    let Dyn::Map(map) = x else {
-        return Err(Error::Cast);
-    };
-    let kept: Vec<_> = map
-        .iter()
-        .filter(|(k, _)| !keys.contains(k))
-        .cloned()
-        .collect();
-    if kept.is_empty() {
-        return Ok(None);
-    }
-    encode(&Dyn::Map(kept)).map(Some)
+/// What `x`'s own `Serialize` writes, as compact JSON text: `json.encode` of a message that
+/// serializes itself.
+pub fn own<T: serde::Serialize + ?Sized>(x: &T) -> Result<String> {
+    serde_json::to_string(x).map_err(|_| Error::Cast)
 }
 
-/// `text`, JSON object text, as an entry of a map that writes its entries as the map's own, each
-/// value as the text has it: a key the map has is kept, and text that is no object adds nothing.
-pub fn rest(text: String) -> Result<Dyn> {
-    Ok(Dyn::Rest(text))
+/// What `x`'s own `Serialize` writes, as a dynamic value: a message that serializes itself,
+/// inside what `json.encode` writes.
+pub fn serialized<T: serde::Serialize + ?Sized>(x: &T) -> Result<Dyn> {
+    let text = serde_json::to_vec(x).map_err(|_| Error::Cast)?;
+    serde_json::from_slice(&text).map_err(|_| Error::Cast)
 }
 
 impl<'de> Deserialize<'de> for Dyn {
     fn deserialize<D: Deserializer<'de>>(d: D) -> core::result::Result<Dyn, D::Error> {
-        d.deserialize_any(Build(&Shape::Plain))
+        d.deserialize_any(Build)
     }
 }
 
-/// Builds a [`Dyn`], reading numbers and objects as its shape has them.
-struct Build(&'static Shape);
+/// Builds a [`Dyn`].
+struct Build;
 
 impl<'de> Visitor<'de> for Build {
     type Value = Dyn;
@@ -77,30 +66,15 @@ impl<'de> Visitor<'de> for Build {
     }
 
     fn visit_i64<E: de::Error>(self, i: i64) -> core::result::Result<Dyn, E> {
-        Ok(match self.0 {
-            Shape::Uint => u64::try_from(i).map_or(Dyn::Int(i), Dyn::UInt),
-            Shape::Double => Dyn::Double(i as f64),
-            _ => Dyn::Int(i),
-        })
+        Ok(Dyn::Int(i))
     }
 
     fn visit_u64<E: de::Error>(self, u: u64) -> core::result::Result<Dyn, E> {
-        Ok(match self.0 {
-            Shape::Double => Dyn::Double(u as f64),
-            Shape::Uint => Dyn::UInt(u),
-            _ => i64::try_from(u).map_or(Dyn::UInt(u), Dyn::Int),
-        })
+        Ok(i64::try_from(u).map_or(Dyn::UInt(u), Dyn::Int))
     }
 
     fn visit_f64<E: de::Error>(self, d: f64) -> core::result::Result<Dyn, E> {
-        let whole = d.fract() == 0.0;
-        Ok(match self.0 {
-            Shape::Int if whole => conversions::double_to_int(d).map_or(Dyn::Double(d), Dyn::Int),
-            Shape::Uint if whole => {
-                conversions::double_to_uint(d).map_or(Dyn::Double(d), Dyn::UInt)
-            }
-            _ => Dyn::Double(d),
-        })
+        Ok(Dyn::Double(d))
     }
 
     fn visit_str<E: de::Error>(self, s: &str) -> core::result::Result<Dyn, E> {
@@ -119,7 +93,6 @@ impl<'de> Visitor<'de> for Build {
         Ok(Dyn::List(items))
     }
 
-    /// Every key: a message shape reads its object's keys itself, never through here.
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> core::result::Result<Dyn, A::Error> {
         let mut entries = Entries::default();
         while let Some(key) = map.next_key::<String>()? {
@@ -158,11 +131,8 @@ impl Entries {
     }
 }
 
-mod scan;
-mod shaped;
 mod text;
 mod write;
-pub use shaped::{decode_shaped, field, has_field, optional_field, Key, Shape, Slots};
 pub use text::Text;
 
 #[cfg(test)]

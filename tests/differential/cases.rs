@@ -280,3 +280,11 @@ pub const KNOWN_FAILING: &[&str] = &[
     "has(json.decode('[1]').a)",
     "json.decode('[1]').?a.hasValue()",
 ];
+
+/// Expressions where the emitted code departs from the interpreter by design: a dyn fills a
+/// typed number field by converting when it can, where CEL takes only the value's own kind.
+pub const INTENDED_DEPARTURES: &[&str] = &[
+    "P{d: json.decode('{\"d\":1}').d}.d",
+    "P{i: json.decode('{\"i\":2.0}').i}.i",
+    "P{u: json.decode('{\"u\":2}').u}.u",
+];

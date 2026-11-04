@@ -86,9 +86,7 @@ fn always(t: &mut Typed, f: &mut impl FnMut(&mut Typed)) {
 /// as written.
 fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
     match &mut t.node {
-        thin!(x) | Node::Shaped(x, ..) | Node::Written(x, _) | Node::Matches(x, ..) => {
-            (vec![&mut **x], Vec::new())
-        }
+        thin!(x) | Node::Written(x) | Node::Matches(x, ..) => (vec![&mut **x], Vec::new()),
         // A fold's comprehension stays under it: only its parts can leave.
         Node::Extreme(_, x) | Node::Sum(x) | Node::Count(x) => parts(x),
         Node::Call(id, args) => call_parts(id, args),

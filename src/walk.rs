@@ -79,7 +79,6 @@ macro_rules! converting {
             | Node::Store(_)
             | Node::Widen(_)
             | Node::FromDyn(..)
-            | Node::Shaped(..)
             | Node::ToDyn(_)
             | Node::Written(..)
             | Node::Encode(_)
@@ -178,8 +177,7 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
     match &t.node {
         leaf!() => {}
         thin!(x)
-        | Node::Shaped(x, ..)
-        | Node::Written(x, _)
+        | Node::Written(x)
         | Node::Matches(x, ..)
         | Node::Extreme(_, x)
         | Node::Sum(x)
@@ -220,7 +218,7 @@ fn members(object: &Object, f: &mut impl FnMut(&Typed)) {
             nodes(present, f);
         }
         match &m.out {
-            Out::Value(x, _) | Out::Rest(x, _) => nodes(x, f),
+            Out::Value(x, _) => nodes(x, f),
             Out::Optional {
                 optional, value, ..
             } => {

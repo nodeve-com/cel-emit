@@ -60,22 +60,6 @@ struct Block<'a> {
     body: String,
 }
 
-/// One object's place in the block: its nesting, the lets it holds, and whether a member is a
-/// rest.
-struct Level {
-    d: usize,
-    held: Vec<usize>,
-    rest: bool,
-    /// The keys and flags of the members written so far, which a rest's entries leave out.
-    own: Vec<String>,
-}
-
-/// One member's JSON key as a Rust literal, and the flag recording that it was written.
-struct Slot {
-    key: String,
-    written: Option<String>,
-}
-
 impl Block<'_> {
     fn expr(&mut self, x: &Typed) -> Result<String, Error> {
         self.emitter.expr(x, self.vars)
@@ -124,70 +108,35 @@ impl Block<'_> {
     /// Writes `object`'s members, at nesting `d`, into the block.
     fn members(&mut self, object: &Object, d: usize, held: &[usize]) -> Result<(), Error> {
         let held = self.lets(object, held)?;
-        // Which members were written, where a rest's entries must leave their keys out.
-        let rest = object
-            .members
-            .iter()
-            .any(|m| matches!(m.out, Out::Rest(..)));
-        if rest {
-            let _ = write!(self.body, "let mut jr{d} = None::<String>; ");
-        }
-        let mut level = Level {
-            d,
-            held,
-            rest,
-            own: Vec::new(),
-        };
-        for (i, m) in object.members.iter().enumerate() {
-            self.member(i, m, &mut level)?;
-        }
-        if rest {
-            let _ = write!(
-                self.body,
-                "if let Some(t) = jr{d} {{ json.rest(t, &[{}])?; }} ",
-                level.own.join(", ")
-            );
+        for m in &object.members {
+            self.member(m, d, &held)?;
         }
         Ok(())
     }
 
-    /// Writes member `m`, the `i`th of its object.
-    fn member(&mut self, i: usize, m: &Member, level: &mut Level) -> Result<(), Error> {
+    /// Writes member `m` of an object at nesting `d`.
+    fn member(&mut self, m: &Member, d: usize, held: &[usize]) -> Result<(), Error> {
         let key = serde_json::to_string(&m.key).map_err(|e| Error::Invalid(e.to_string()))?;
         let key = format!("{:?}", format!("{key}:"));
-        let flag = format!("jw{}_{i}", level.d);
-        let written = (level.rest && !matches!(m.out, Out::Rest(..))).then(|| {
-            level.own.push(format!("({:?}, {flag})", m.key));
-            flag
-        });
-        if let Some(w) = &written {
-            let _ = write!(self.body, "let mut {w} = false; ");
-        }
         if let Some(present) = &m.present {
             let present = self.expr(present)?;
             let _ = write!(self.body, "if {present} {{ ");
         }
-        self.out(&m.out, &Slot { key, written }, level)?;
+        self.out(&m.out, &key, (d, held))?;
         if m.present.is_some() {
             self.body.push_str("} ");
         }
         Ok(())
     }
 
-    /// Writes what a member gives.
-    fn out(&mut self, out: &Out, slot: &Slot, level: &Level) -> Result<(), Error> {
-        let held = &level.held;
-        let key = &slot.key;
+    /// Writes what a member gives under `key`.
+    fn out(&mut self, out: &Out, key: &str, (d, held): (usize, &[usize])) -> Result<(), Error> {
         match out {
-            Out::Value(..) | Out::Optional { .. } => self.scalar(out, slot, held)?,
-            Out::Rest(x, kept) => self.rest(x, *kept, level)?,
+            Out::Value(..) | Out::Optional { .. } => self.scalar(out, key, held)?,
             Out::Object(o) => {
                 let _ = write!(self.body, "{{ let jm = json.key({key}); json.open(); ");
-                self.members(o, level.d.saturating_add(1), held)?;
-                let _ = match &slot.written {
-                    Some(w) => write!(self.body, "{w} = json.close_or_cut(jm); }} "),
-                    None => write!(self.body, "json.close_or_cut(jm); }} "),
-                };
+                self.members(o, d.saturating_add(1), held)?;
+                self.body.push_str("json.close_or_cut(jm); } ");
             }
         }
         Ok(())
@@ -195,12 +144,7 @@ impl Block<'_> {
 
     /// Writes a member whose `inner` statements run where `guard`, if any, holds. Where `kept`, a
     /// closure holds a failure; else the block raises it with `?`.
-    fn plain(
-        &mut self,
-        (scope, guard, inner): (&str, Option<&str>, &str),
-        kept: bool,
-        slot: &Slot,
-    ) {
+    fn plain(&mut self, (scope, guard, inner): (&str, Option<&str>, &str), kept: bool) {
         if kept {
             let code = match guard {
                 Some(g) => {
@@ -208,23 +152,21 @@ impl Block<'_> {
                 }
                 None => format!("{scope}{inner}{STD}::ok(true)"),
             };
-            return kept_member(&mut self.body, &code, slot.written.as_deref());
+            return kept_member(&mut self.body, &code);
         }
-        let flag = (slot.written.as_ref()).map_or(String::new(), |w| format!("{w} = true; "));
         let _ = match guard {
-            Some(g) => write!(self.body, "{{ {scope}{g} {{ {inner}{flag}}} }} "),
-            None => write!(self.body, "{{ {scope}{inner}{flag}}} "),
+            Some(g) => write!(self.body, "{{ {scope}{g} {{ {inner}}} }} "),
+            None => write!(self.body, "{{ {scope}{inner}}} "),
         };
     }
 
     /// Writes a member of a value or an optional.
-    fn scalar(&mut self, out: &Out, slot: &Slot, held: &[usize]) -> Result<(), Error> {
-        let key = &slot.key;
+    fn scalar(&mut self, out: &Out, key: &str, held: &[usize]) -> Result<(), Error> {
         match out {
             Out::Value(x, kept) => {
                 let inner = format!("json.key({key}); {}", self.write(x)?);
                 let scope = reads(x, held);
-                self.plain((&scope, None, &inner), *kept, slot);
+                self.plain((&scope, None, &inner), *kept);
             }
             Out::Optional {
                 optional,
@@ -237,30 +179,10 @@ impl Block<'_> {
                 let inner = format!("json.key({key}); {value}");
                 let scope = reads(optional, held);
                 let guard = Some(guard.as_str());
-                self.plain((&scope, guard, &inner), *kept, slot);
+                self.plain((&scope, guard, &inner), *kept);
             }
             _ => {}
         }
         Ok(())
-    }
-
-    /// Writes a rest: the text whose other keys' entries follow the members.
-    fn rest(&mut self, x: &Typed, kept: bool, level: &Level) -> Result<(), Error> {
-        let d = level.d;
-        let scope = reads(x, &level.held);
-        let some = if matches!(x.ty, Type::Optional(_)) {
-            ""
-        } else {
-            "Some"
-        };
-        let x = self.expr(x)?;
-        match kept {
-            true => write!(
-                self.body,
-                "jr{d} = match (|| {{ {scope}{STD}::ok({x}) }})() {{ Ok(t) => {some}(t), Err(e) => {{ jf.get_or_insert(e); None }} }}; "
-            ),
-            false => write!(self.body, "jr{d} = {{ {scope}{some}({x}) }}; "),
-        }
-        .map_err(|e| Error::Invalid(e.to_string()))
     }
 }

@@ -12,10 +12,8 @@ impl<'a> Lower<'a> {
         let Some((name, receiver)) = self.callee_name(e, callee) else {
             return Ok(None);
         };
-        match (name.as_str(), receiver, args.as_slice()) {
-            ("json.decode", None, [text, _]) => return self.shaped(e, text).map(Some),
-            ("json.encode", None, [arg]) => return self.encoded(arg).map(Some),
-            _ => {}
+        if let ("json.encode", None, [arg]) = (name.as_str(), receiver, args.as_slice()) {
+            return self.encoded(arg).map(Some);
         }
         if let Some(node) = self.dyn_form(&name, receiver, args)? {
             return Ok(Some(node));

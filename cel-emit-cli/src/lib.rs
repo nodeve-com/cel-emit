@@ -193,9 +193,9 @@ fn typed(expression: &str, schema: &str) -> Result<String, String> {
     };
     let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(messages))?;
     let root = name(root);
-    let prelude = format!("mod types {{ use ::schema_emit_runtime as s; {types} }}");
+    let prelude = format!("mod types {{ use ::schema_emit_runtime as __s; {types} }}");
     let entry = Entry {
-        decode: "types::decode_input(text).map_err(|e| format!(\"{e:?}\"))",
+        decode: "::schema_emit_runtime::decode::json(text, |d| types::decode_input(d))\n            .map(|(input, _)| input)\n            .map_err(|e| format!(\"{e:?}\"))",
         input: &format!("types::{root}"),
     };
     source(&prelude, &items, &output, entry)

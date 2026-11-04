@@ -77,11 +77,8 @@ impl<'a> Lower<'a> {
         let present = present_when(walk::vars(&wrap(unflagged(&v), &read)), Typed::and)
             .or_else(|| present_when(walk::vars(&wrap(v.clone(), &read)), Typed::or));
         let kept = self.decls.skip_failed && !is_literal(&v);
-        let rest = self.decls.rest.as_deref() == Some(key.as_str());
         let out = match v.ty.clone() {
             _ if is_object(&v) => Out::Object(self.object(v)?),
-            Type::String if rest => Out::Rest(v, kept),
-            Type::Optional(held) if *held == Type::String && rest => Out::Rest(v, kept),
             Type::Optional(held) => {
                 let local = self.local_number()?;
                 let value = self.written(Typed::new(*held, Node::Local(local)))?;
@@ -115,10 +112,7 @@ impl<'a> Lower<'a> {
         if t.ty.dyn_into(&Type::Dyn) {
             return fits(t, &Type::Dyn);
         }
-        Ok(Typed::new(
-            Type::Dyn,
-            Node::Written(Box::new(t), self.decls.rest.clone()),
-        ))
+        Ok(Typed::new(Type::Dyn, Node::Written(Box::new(t))))
     }
 }
 
@@ -197,7 +191,7 @@ mod tests {
             o.members
                 .iter()
                 .map(|m| match &m.out {
-                    Out::Value(_, kept) | Out::Rest(_, kept) => usize::from(*kept),
+                    Out::Value(_, kept) => usize::from(*kept),
                     Out::Optional { kept, .. } => usize::from(*kept),
                     Out::Object(o) => flagged(o),
                 })

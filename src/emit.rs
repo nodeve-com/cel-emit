@@ -116,6 +116,9 @@ impl Emitter {
 
     /// The call of overload `id`.
     fn call(&mut self, id: &str, args: &[Typed], vars: &dyn Vars) -> Result<String, Error> {
+        if let Some(x) = self.own_text(id, args) {
+            return Ok(format!("{STD}::json::own(&({}))?", self.expr(x, vars)?));
+        }
         let path = self.path(id, args)?;
         let types: Vec<Type> = args.iter().map(|a| a.ty.clone()).collect();
         let pass = self.paths.pass(id, &types);

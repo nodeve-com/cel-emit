@@ -54,6 +54,22 @@ impl Emitter {
         self.call(id, args, vars)
     }
 
+    /// The message `json.encode` writes, where it serializes itself: its text is its
+    /// `Serialize`'s, with no dyn between.
+    pub(super) fn own_text<'t>(&self, id: &str, args: &'t [Typed]) -> Option<&'t Typed> {
+        let [Typed {
+            node: Node::Written(x),
+            ..
+        }] = args
+        else {
+            return None;
+        };
+        let Type::Message(fields) = &x.ty else {
+            return None;
+        };
+        (id == "json_encode" && self.declare.serializes(fields)).then_some(&**x)
+    }
+
     /// `&&`, `||`, a conditional, a binding, and a failure.
     pub(super) fn control(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
         Ok(match &t.node {
@@ -103,12 +119,8 @@ impl Emitter {
             Node::Store(x) => cast(self.expr(x, vars)?, &t.ty, narrow::To::Stored),
             Node::Widen(x) => cast(self.expr(x, vars)?, &x.ty, narrow::To::Cel),
             Node::FromDyn(x, ty) => self.read_dyn(x, ty, vars)?,
-            Node::Shaped(text, message, rest) => {
-                let shape = super::dynamic::shaped(message, rest.as_deref())?;
-                self.shaped(text, &shape, vars)?
-            }
             Node::ToDyn(x) => self.enter_dyn(x, &t.ty, vars)?,
-            Node::Written(x, rest) => self.written(x, rest.as_deref(), vars)?,
+            Node::Written(x) => self.written(x, vars)?,
             Node::Encode(object) => self.encode(object, vars)?,
             Node::EncodeEach(..) => self.encode_each(t, vars)?,
             _ => return not_a("conversion", t),

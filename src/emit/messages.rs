@@ -15,6 +15,18 @@ pub trait Messages {
     fn path(&mut self, i: usize, fields: &[Field]) -> String;
     /// The Rust name of each of `fields`.
     fn fields(&self, fields: &[Field]) -> Vec<String>;
+    /// Whether the message of `fields` writes itself: its type implements `serde::Serialize`, and
+    /// `json.encode` writes what that gives, wherever the message sits in the value. Else
+    /// `json.encode` writes each of its fields.
+    fn serializes(&self, _fields: &[Field]) -> bool {
+        false
+    }
+    /// Whether the message of `fields` reads itself: its type implements `serde::Deserialize`, and
+    /// a dynamic value filling a place of that message, or a list of it, is read through it.
+    /// Else such a fill is [`Error::Unsupported`].
+    fn deserializes(&self, _fields: &[Field]) -> bool {
+        false
+    }
 }
 
 /// A message the embedder writes: `Clone`, `Default`, and `Debug`.

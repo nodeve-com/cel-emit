@@ -2,7 +2,7 @@
 //! lowered, emitted, built natively, and run; the two must agree on the value or on being an
 //! error. All cases build as one program against the prebuilt cel-emit-runtime rlib (found beside
 //! this test's binary), each run under `catch_unwind`; a build that fails is retried case by case.
-//! Cases in `KNOWN_FAILING` may disagree; a new disagreement fails the test.
+//! Cases in `KNOWN_FAILING` or `INTENDED_DEPARTURES` may disagree; a new disagreement fails the test.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
@@ -115,7 +115,6 @@ fn show(v: s::Dyn) -> String {
         s::Dyn::UInt(u) => format!("{u}u"),
         s::Dyn::Double(d) => format!("{d:?}"),
         s::Dyn::Float32(f) => format!("{:?}", f64::from(f)),
-        s::Dyn::Rest(t) => format!("rest {t:?}"),
         s::Dyn::Str(t) => format!("{t:?}"),
         s::Dyn::Timestamp(t) => format!("{t:?}"),
         s::Dyn::Duration(d) => format!("{d:?}"),
@@ -223,7 +222,9 @@ fn report(wrong: &Wrong) {
     }
     let new: Vec<String> = wrong
         .iter()
-        .filter(|(s, _)| !cases::KNOWN_FAILING.contains(s))
+        .filter(|(s, _)| {
+            !cases::KNOWN_FAILING.contains(s) && !cases::INTENDED_DEPARTURES.contains(s)
+        })
         .map(|(s, why)| format!("{s}\n    {why}"))
         .collect();
     for (s, why) in wrong {

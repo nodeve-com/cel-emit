@@ -60,20 +60,12 @@ pub enum Node {
     /// A dyn value filling a place of this type (a field, a call's argument, an operand): the
     /// value if it holds that kind, else an error.
     FromDyn(Box<Typed>, Type),
-    /// The text decoded as a dyn map of the fields this message type declares and nothing else, a
-    /// number read as its field's kind has it (`2.0` an int where the field is one): what
-    /// `json.decode(text, Message)` reads its fields from. With a name, the keys the message does
-    /// not declare are kept too, as one JSON object text under it, which a field of that name
-    /// reads.
-    Shaped(Box<Typed>, Type, Option<String>),
     /// A typed value entering a dyn place: the node's type is that place's, `dyn` or a list or
     /// map of it.
     ToDyn(Box<Typed>),
     /// A typed value as the dyn JSON writes it, whatever its type holds ([`Type::writable`]): a
-    /// message a map of its fields, a float32 in its own digits. With a name, a message's string
-    /// field of that name holds JSON object text, written as the entries of the map for the
-    /// message ([`cel_emit_runtime::json::rest`]).
-    Written(Box<Typed>, Option<String>),
+    /// message a map of its fields, a float32 in its own digits.
+    Written(Box<Typed>),
     /// A stored value, whose type holds widths, as CEL computes it: each number widened, or an
     /// error where it doesn't fit.
     Widen(Box<Typed>),
@@ -132,7 +124,7 @@ pub enum Node {
     Fail(Fail),
 }
 
-/// An object [`Node::Encode`] writes: its members in order, then each [`Out::Rest`]'s entries.
+/// An object [`Node::Encode`] writes: its members in order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Object {
     /// Values its members read as locals, each computed once, first to last: one that fails
@@ -155,10 +147,6 @@ pub enum Out {
     /// A dyn value. Where flagged, the member is left out if the value errors or holds a NaN or
     /// an infinity, which JSON can't hold.
     Value(Typed, bool),
-    /// A string, or an optional of one holding nothing where it is absent, of JSON object text:
-    /// its entries written after the object's own members, each key the object wrote left out
-    /// ([`cel_emit_runtime::json::Text::rest`]). Flagged as [`Out::Value`] is.
-    Rest(Typed, bool),
     /// An optional: the member holds its value in `local`, and is left out where it holds none.
     /// `value` is a dyn reading `local`. Flagged as [`Out::Value`] is.
     Optional {

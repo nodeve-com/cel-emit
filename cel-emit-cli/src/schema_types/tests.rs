@@ -63,7 +63,7 @@ fn maps() {
             fields: vec![field],
             checks: vec![],
             others: None,
-            open: false,
+            additional: schema_emit::ir::Additional::Fail,
         };
         record(
             &Schema {
@@ -133,7 +133,7 @@ fn a_model_holding_itself_is_refused() {
         fields: vec![field],
         checks: vec![],
         others: None,
-        open: false,
+        additional: schema_emit::ir::Additional::Fail,
     };
     let schema = Schema {
         models: vec![model],

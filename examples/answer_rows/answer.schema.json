@@ -9,7 +9,8 @@
         "id": {
           "type": "string"
         }
-      }
+      },
+      "x-strip-additional": true
     }
   },
   "type": "object",
@@ -71,7 +72,8 @@
               "title": {
                 "type": "string"
               }
-            }
+            },
+            "x-strip-additional": true
           },
           "legs": {
             "type": "array",
@@ -88,7 +90,8 @@
                 "end_location": {
                   "$ref": "#/$defs/Place"
                 }
-              }
+              },
+              "x-strip-additional": true
             }
           },
           "pricing": {
@@ -100,7 +103,8 @@
               "total": {
                 "type": "integer"
               }
-            }
+            },
+            "x-strip-additional": true
           },
           "pricing_potential_best": {
             "type": [
@@ -114,7 +118,8 @@
               "total": {
                 "type": "integer"
               }
-            }
+            },
+            "x-strip-additional": true
           },
           "capacities": {
             "type": "object",
@@ -128,9 +133,11 @@
                   "null"
                 ]
               }
-            }
+            },
+            "x-strip-additional": true
           }
-        }
+        },
+        "x-strip-additional": true
       }
     },
     "products": {
@@ -168,11 +175,14 @@
                   "period": {
                     "type": "string"
                   }
-                }
+                },
+                "x-strip-additional": true
               }
-            }
+            },
+            "x-strip-additional": true
           }
-        }
+        },
+        "x-strip-additional": true
       }
     },
     "locations": {
@@ -194,8 +204,10 @@
           "timezone": {
             "type": "string"
           }
-        }
+        },
+        "x-strip-additional": true
       }
     }
-  }
+  },
+  "x-strip-additional": true
 }

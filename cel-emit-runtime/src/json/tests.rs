@@ -148,54 +148,6 @@ fn nested_values_read_and_keep_order() {
 }
 
 #[test]
-fn the_entries_without_some_keys_encode_as_one_object() {
-    let without = |text: &str, keys: &[&str]| {
-        let keys: Vec<String> = keys.iter().map(|k| (*k).to_string()).collect();
-        encode_without(&dec(text).unwrap(), &keys).unwrap()
-    };
-    let doc = r#"{"a":1,"x":2.50,"$k":{"n":[1,null]},"b":"s"}"#;
-    assert_eq!(
-        without(doc, &["a", "b"]).as_deref(),
-        Some(r#"{"x":2.5,"$k":{"n":[1,null]}}"#)
-    );
-    assert_eq!(
-        without(doc, &[]).as_deref(),
-        Some(r#"{"a":1,"x":2.5,"$k":{"n":[1,null]},"b":"s"}"#)
-    );
-    assert_eq!(without(doc, &["a", "x", "$k", "b", "zz"]), None);
-    assert_eq!(without("{}", &[]), None);
-    let list = dec("[1]").unwrap();
-    assert!(encode_without(&list, &[]).is_err_and(|e| e == Error::Cast));
-}
-
-#[test]
-fn a_rest_entry_writes_its_keys_into_the_map_holding_it_as_the_text_has_them() {
-    let entry = |key: &str, value: Dyn| (key.to_string(), value);
-    let rest = |text: &str| rest(text.to_string()).unwrap();
-    let held = |text: &str| {
-        let entries = vec![
-            entry("a", Dyn::Int(1)),
-            entry("$x", rest(text)),
-            entry("b", Dyn::Null),
-        ];
-        enc(Dyn::Map(entries))
-    };
-    assert_eq!(
-        held(r#"{"z":[1, 2.50],"a":9,"b":8}"#).as_deref(),
-        Ok(r#"{"a":1,"b":null,"z":[1, 2.50]}"#)
-    );
-    assert_eq!(
-        held(r#"{"y":1,"x\"":true,"y":2,"c":{"d":[]}}"#).as_deref(),
-        Ok(r#"{"a":1,"b":null,"c":{"d":[]},"x\"":true,"y":2}"#)
-    );
-    assert_eq!(held("[1]").as_deref(), Ok(r#"{"a":1,"b":null}"#));
-    assert_eq!(held("").as_deref(), Ok(r#"{"a":1,"b":null}"#));
-    assert_eq!(held(r#"{"z":1} x"#).as_deref(), Ok(r#"{"a":1,"b":null}"#));
-    assert_eq!(held(r#"{"z":01}"#).as_deref(), Ok(r#"{"a":1,"b":null}"#));
-    assert_eq!(enc(rest("{}")), Err(Error::Cast));
-}
-
-#[test]
 fn text_cuts_a_failed_member_and_an_empty_nested_object_back_out() {
     let mut t = Text::default();
     t.open();
@@ -212,10 +164,8 @@ fn text_cuts_a_failed_member_and_an_empty_nested_object_back_out() {
     t.key("\"b\":");
     t.value(Dyn::Bool(true)).unwrap();
     assert!(t.close_or_cut(m));
-    t.rest(String::from(r#"{"a":9,"z":[1, 2]}"#), &[("a", true)])
-        .unwrap();
     t.close();
-    assert_eq!(t.done(), r#"{"a":1,"p":{"b":true},"z":[1, 2]}"#);
+    assert_eq!(t.done(), r#"{"a":1,"p":{"b":true}}"#);
 }
 
 #[test]
@@ -248,16 +198,6 @@ fn text_writes_items_and_scalars_in_place() {
 }
 
 #[test]
-fn text_rest_alone_opens_without_a_comma_and_keeps_a_key_left_unwritten() {
-    let mut t = Text::default();
-    t.open();
-    t.rest(String::from(r#"{"a":9}"#), &[("a", false)]).unwrap();
-    t.rest(String::from("[1]"), &[]).unwrap();
-    t.close();
-    assert_eq!(t.done(), r#"{"a":9}"#);
-}
-
-#[test]
 fn a_time_writes_its_text() {
     let at = crate::time::timestamp_at(1_700_000_000, 500_000_000).unwrap();
     let span = crate::time::duration_at(1, 500_000_000).unwrap();
@@ -266,4 +206,22 @@ fn a_time_writes_its_text() {
         encode(&list).as_deref(),
         Ok(r#"["2023-11-14T22:13:20.500Z","1.5s"]"#)
     );
+}
+
+struct Own;
+
+impl serde::Serialize for Own {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> core::result::Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap as _;
+        let mut m = s.serialize_map(Some(2))?;
+        m.serialize_entry("a", &1)?;
+        m.serialize_entry("extra", &[true])?;
+        m.end()
+    }
+}
+
+#[test]
+fn a_value_serializing_itself_writes_what_it_serializes() {
+    let inside = Dyn::List(vec![serialized(&Own).unwrap()]);
+    assert_eq!(enc(inside).as_deref(), Ok(r#"[{"a":1,"extra":[true]}]"#));
 }

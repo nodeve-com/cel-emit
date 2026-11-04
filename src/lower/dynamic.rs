@@ -56,14 +56,20 @@ pub(crate) fn field_key(key: &Type, field: &str) -> Result<Typed, Error> {
     fits(Typed::string(field), key)
 }
 
-/// A dyn `x` filling a field of type `want`, as CEL does: each kind takes only its own, an int
-/// field no double and a double field no int.
+/// A dyn `x` filling a field of type `want`: a whole number fills a double field and a double
+/// with no fraction an int or uint one; the other kinds take only their own.
 pub(crate) fn filled(x: Typed, want: &Type) -> Result<Typed, Error> {
     if x.ty != Type::Dyn || *want == Type::Dyn {
         return Ok(x);
     }
     match want {
         Type::Int | Type::Uint | Type::Double | Type::Bool | Type::String => Ok(Typed::new(
+            want.clone(),
+            Node::FromDyn(Box::new(x), want.clone()),
+        )),
+        // A message or a list is read by its own `Deserialize` where the embedder declares it so;
+        // else the emitter refuses.
+        Type::Message(_) | Type::List(_) => Ok(Typed::new(
             want.clone(),
             Node::FromDyn(Box::new(x), want.clone()),
         )),

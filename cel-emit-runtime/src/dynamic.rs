@@ -22,10 +22,6 @@ pub enum Dyn {
     Duration(TimeDelta),
     List(Vec<Dyn>),
     Map(Vec<(String, Dyn)>),
-    /// JSON object text whose entries the map holding it takes as its own when written, never
-    /// replacing a key the map has. Only an entry of a map, built by [`crate::json::rest`]; no
-    /// expression reads one.
-    Rest(String),
 }
 
 macro_rules! from {
@@ -152,29 +148,24 @@ pub fn to_map(x: &Dyn) -> Result<Vec<(String, Dyn)>> {
     map_of(x).cloned()
 }
 
-/// A double, as CEL fills a double place: an int or uint is [`Error::Cast`].
+/// A double, as a typed double field takes it: a double, or a whole number. Another kind is
+/// [`Error::Cast`].
 pub fn to_double(x: &Dyn) -> Result<f64> {
-    match x {
-        Dyn::Double(d) => Ok(*d),
-        Dyn::Float32(f) => Ok(f64::from(*f)),
-        _ => Err(Error::Cast),
-    }
+    read::real(x)
 }
 
-/// An int, as CEL fills an int place: any other kind is [`Error::Cast`].
+/// An int, as a typed int field takes it: an int, a uint that fits, or a double with no
+/// fraction. A fractional double or another kind is [`Error::Cast`]; a number past int64 is
+/// [`Error::Range`].
 pub fn to_int(x: &Dyn) -> Result<i64> {
-    match x {
-        Dyn::Int(i) => Ok(*i),
-        _ => Err(Error::Cast),
-    }
+    i64::try_from(read::whole(x)?).map_err(|_| Error::Range)
 }
 
-/// A uint, as CEL fills a uint place: any other kind is [`Error::Cast`].
+/// A uint, as a typed uint field takes it: a uint, a non-negative int, or a double with no
+/// fraction. A fractional double or another kind is [`Error::Cast`]; a negative or past uint64
+/// is [`Error::Range`].
 pub fn to_uint(x: &Dyn) -> Result<u64> {
-    match x {
-        Dyn::UInt(u) => Ok(*u),
-        _ => Err(Error::Cast),
-    }
+    u64::try_from(read::whole(x)?).map_err(|_| Error::Range)
 }
 
 /// `x` read by `read`, where it is there: absent stays absent.
@@ -295,6 +286,8 @@ impl Num {
 }
 
 pub mod cast;
+mod read;
+pub use read::to;
 
 #[cfg(test)]
 mod tests;

@@ -92,6 +92,8 @@ fn int(i: Int) -> Type {
         Int::U16 => Type::Narrow(Width::U16),
         Int::U32 => Type::Narrow(Width::U32),
         Int::U64 => Type::Uint,
+        Int::I128 => Type::Narrow(Width::I128),
+        Int::U128 => Type::Narrow(Width::U128),
     }
 }
 

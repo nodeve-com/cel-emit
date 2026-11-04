@@ -107,4 +107,13 @@ impl<'a> Lower<'a> {
         lets.push((n, v));
         Ok(local)
     }
+
+    /// The next number for a local.
+    pub(crate) fn local_number(&mut self) -> Result<usize, Error> {
+        let n = self.next;
+        self.next = n
+            .checked_add(1)
+            .ok_or(Error::Unsupported("too many locals".into()))?;
+        Ok(n)
+    }
 }

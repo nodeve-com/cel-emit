@@ -32,7 +32,6 @@ mod parts;
 mod pattern;
 mod scope;
 mod select;
-mod shaped;
 mod share;
 mod special;
 mod value;

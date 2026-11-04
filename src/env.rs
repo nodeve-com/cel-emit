@@ -38,7 +38,7 @@ pub fn environment(decls: &Decls) -> Env {
         mut roots,
         ..
     } = scope;
-    // A message's name is also a type value, `json.decode(text, Message)`'s second argument, unless
+    // A message's name is also a type value, a function's type argument, unless
     // a name in scope already takes it.
     for (name, held) in &messages.names {
         roots
@@ -208,7 +208,10 @@ impl cel_core::ProtoRegistry for Messages {
 fn declared_as(decl: &Decl, messages: &mut Messages) -> FunctionDecl {
     let mut made = FunctionDecl::new(decl.name.clone());
     for o in &decl.overloads {
-        let params = o.params.iter().map(|p| cel_type(p, messages)).collect();
+        let mut params: Vec<CelType> = o.params.iter().map(|p| cel_type(p, messages)).collect();
+        if let Some(message) = &o.names {
+            params.push(CelType::type_of(cel_type(message, messages)));
+        }
         let result = cel_type(&o.result, messages);
         made = made.with_overload(OverloadDecl::function(o.id.clone(), params, result));
     }

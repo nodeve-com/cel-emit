@@ -8,20 +8,19 @@ use crate::tree::{Object, Out, Typed};
 use crate::walk;
 
 /// Writes a member that may be left out for failing: `code` is a closure's body giving whether
-/// it wrote one. A failure is cut back out and kept in `jf`; `written` takes the answer.
-pub(super) fn kept_member(body: &mut String, code: &str, written: Option<&str>) {
-    let to = written.map_or("let _ = ".to_string(), |w| format!("{w} = "));
+/// it wrote one. A failure is cut back out and kept in `jf`.
+pub(super) fn kept_member(body: &mut String, code: &str) {
     let call = format!("(|| -> {STD}::Result<bool> {{ {code} }})()");
     let _ = write!(
         body,
-        "let jm = json.mark(); {to}match {call} {{ Ok(b) => b, Err(e) => {{ jf.get_or_insert(e); json.cut(jm); false }} }}; "
+        "let jm = json.mark(); let _ = match {call} {{ Ok(b) => b, Err(e) => {{ jf.get_or_insert(e); json.cut(jm); false }} }}; "
     );
 }
 
 /// Whether a member of `object` can be left out for failing.
 pub(super) fn skips(object: &Object) -> bool {
     object.members.iter().any(|m| match &m.out {
-        Out::Value(_, kept) | Out::Rest(_, kept) | Out::Optional { kept, .. } => *kept,
+        Out::Value(_, kept) | Out::Optional { kept, .. } => *kept,
         Out::Object(o) => skips(o),
     })
 }
