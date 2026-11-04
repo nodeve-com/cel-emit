@@ -4,7 +4,7 @@
 use cel_core::Value::{Bool as B, Int as I};
 use cel_emit::{Field, Type};
 
-use crate::cases::{check, map, Cases, Got, Stored};
+use crate::cases::{check, list, map, Cases, Got, Stored};
 
 fn field(name: &str, ty: Type) -> Field {
     Field {
@@ -69,5 +69,20 @@ fn an_absent_optional_message_field_has_nothing_in_it() {
                 value(I(5)),
             ],
         );
+    });
+}
+
+/// Only here: an empty list literal falls back for an optional of a list of messages, taking
+/// the list type the optional holds.
+#[test]
+fn an_empty_list_falls_back_for_an_optional_list_of_messages() {
+    let sample = Type::Message(vec![field("f", Type::Int)]);
+    let ty = Type::Message(vec![field("w", Type::list(sample))]);
+    let items = list(vec![map(&[("f", I(5))])]);
+    check(|cases| {
+        let source = "v.?w.orValue([]).size()";
+        let v = |value| Stored::new(ty.clone(), value);
+        cases.stored(source, v(map(&[])), Got::Value(I(0)));
+        cases.stored(source, v(map(&[("w", items)])), Got::Value(I(1)));
     });
 }

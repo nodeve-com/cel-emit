@@ -136,7 +136,7 @@ impl<'a> Lower<'a> {
             });
         }
         let ty = Type::list(elem);
-        if !crate::stdlib::literal(&ty) {
+        if !made.is_empty() && !crate::stdlib::literal(&ty) {
             return unsupported("a list of messages");
         }
         let node = match made.iter().any(|(_, optional)| *optional) {

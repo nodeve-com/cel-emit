@@ -45,11 +45,22 @@ impl<'a> Lower<'a> {
         Ok(Node::Call(id.into(), vec![x]))
     }
 
-    /// `o.orValue(or)`, where the optional `o` holds the type of `or`.
+    /// `o.orValue(or)`, where the optional `o` holds the type of `or`. A fallback whose type an
+    /// expected type settles, such as `[]`, takes the type `o` holds.
     fn or_value(&mut self, o: &'a SpannedExpr, or: &'a SpannedExpr) -> Result<Node, Error> {
-        let or = self.expr(or)?;
-        let of = Type::Optional(Box::new(or.ty.clone()));
-        let o = self.expr_as(o, Some(&of))?;
+        let (o, or) = if self.open(or) && !self.open(o) {
+            let o = self.expr_as(o, None)?;
+            let held = match &o.ty {
+                Type::Optional(held) => Some((**held).clone()),
+                _ => None,
+            };
+            let or = self.expr_as(or, held.as_ref())?;
+            (o, or)
+        } else {
+            let or = self.expr(or)?;
+            let of = Type::Optional(Box::new(or.ty.clone()));
+            (self.expr_as(o, Some(&of))?, or)
+        };
         let or = match &o.ty {
             Type::Optional(held) => super::dynamic::fits(or, held)?,
             _ => or,
