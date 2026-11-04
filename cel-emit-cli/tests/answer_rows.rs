@@ -70,7 +70,7 @@ fn a_program_over_a_schema_names_no_dyn_read() {
 
 #[test]
 fn an_answer_breaking_the_schema_fails_by_name() {
-    let exe = built("answer_rows_broken", Some(SCHEMA));
+    let exe = built("answer_rows_schema", Some(SCHEMA));
     let broken = ANSWER.replace("\"total\": 13000", "\"total\": \"none\"");
     let (rows, said, ok) = programs::run(&exe, &broken);
     assert!(!ok && rows.is_empty(), "{rows}");
