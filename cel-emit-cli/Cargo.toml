@@ -17,7 +17,7 @@ path = "src/main.rs"
 [dependencies]
 cel-emit = { path = ".." }
 # A schema's types and their decode.
-schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "875dcb876ecacc8a9a40b137c58c6072cf47888e" }
+schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "203b67680ea888de58c59af2df5c728787109df3" }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 # Formats the Rust it writes.
 prettyplease = "0.2"
@@ -25,7 +25,7 @@ syn = { version = "2", features = ["full", "parsing"] }
 
 [dev-dependencies]
 cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
-schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "875dcb876ecacc8a9a40b137c58c6072cf47888e", features = ["decode"] }
+schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "203b67680ea888de58c59af2df5c728787109df3", features = ["decode"] }
 # An expression checked ahead of time and saved as a `CheckedExpr`, for the interpreter program
 # (tests/references.rs).
 cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
