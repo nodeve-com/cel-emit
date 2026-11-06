@@ -13,14 +13,11 @@ pub mod optional;
 pub mod strings;
 pub mod time;
 
+/// A value of any one kind, and null: what emitted code names for them.
+pub use any_value::{Null, Value};
 pub use chrono::{DateTime, TimeDelta, Utc};
-pub use dynamic::Dyn;
 /// A constant `matches` pattern's table, as emitted code holds it in a `static`.
 pub use pattern_emit::{Pattern, Unusable};
-
-/// The null value: a value of its own, which an optional holds apart from absence.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Null;
 
 /// A CEL error: what a computation gives instead of a value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

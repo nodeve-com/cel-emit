@@ -1,11 +1,11 @@
 use super::*;
 use crate::dynamic::{get, size};
 
-fn dec(text: &str) -> Result<Dyn> {
+fn dec(text: &str) -> Result<Value> {
     decode(text)
 }
 
-fn enc(x: Dyn) -> Result<String> {
+fn enc(x: Value) -> Result<String> {
     encode(&x)
 }
 
@@ -34,7 +34,7 @@ fn documents_round_trip() {
 #[test]
 fn null_and_absent_differ() {
     let m = dec(r#"{"a":null}"#).unwrap();
-    assert!(matches!(get(&m, "a"), Ok(Dyn::Null)));
+    assert!(matches!(get(&m, "a"), Ok(Value::Null)));
     assert!(matches!(get(&m, "b"), Err(Error::NoSuchKey)));
     assert_eq!(round("{}").as_deref(), Ok("{}"));
     assert_eq!(size(&m), Ok(1));
@@ -44,27 +44,30 @@ fn null_and_absent_differ() {
 fn numbers_keep_their_kind_at_the_boundaries() {
     assert!(matches!(
         dec("9007199254740993"),
-        Ok(Dyn::Int(9_007_199_254_740_993))
+        Ok(Value::Int(9_007_199_254_740_993))
     ));
     assert_eq!(round("9007199254740993").as_deref(), Ok("9007199254740993"));
-    assert!(matches!(dec("9223372036854775807"), Ok(Dyn::Int(i64::MAX))));
+    assert!(matches!(
+        dec("9223372036854775807"),
+        Ok(Value::Int(i64::MAX))
+    ));
     assert!(matches!(
         dec("-9223372036854775808"),
-        Ok(Dyn::Int(i64::MIN))
+        Ok(Value::Int(i64::MIN))
     ));
     assert!(matches!(
         dec("9223372036854775808"),
-        Ok(Dyn::UInt(9_223_372_036_854_775_808))
+        Ok(Value::UInt(9_223_372_036_854_775_808))
     ));
     assert!(matches!(
         dec("18446744073709551615"),
-        Ok(Dyn::UInt(u64::MAX))
+        Ok(Value::UInt(u64::MAX))
     ));
-    assert!(matches!(dec("18446744073709551616"), Ok(Dyn::Double(_))));
-    assert!(matches!(dec("-9223372036854775809"), Ok(Dyn::Double(_))));
-    assert!(matches!(dec("1.0"), Ok(Dyn::Double(d)) if d == 1.0));
-    assert!(matches!(dec("1e3"), Ok(Dyn::Double(d)) if d == 1000.0));
-    assert!(matches!(dec("0"), Ok(Dyn::Int(0))));
+    assert!(matches!(dec("18446744073709551616"), Ok(Value::Double(_))));
+    assert!(matches!(dec("-9223372036854775809"), Ok(Value::Double(_))));
+    assert!(matches!(dec("1.0"), Ok(Value::Double(d)) if d == 1.0));
+    assert!(matches!(dec("1e3"), Ok(Value::Double(d)) if d == 1000.0));
+    assert!(matches!(dec("0"), Ok(Value::Int(0))));
     assert_eq!(
         round("18446744073709551615").as_deref(),
         Ok("18446744073709551615")
@@ -73,26 +76,26 @@ fn numbers_keep_their_kind_at_the_boundaries() {
 
 #[test]
 fn a_double_reads_to_the_nearest_and_writes_shortest() {
-    assert!(matches!(dec("0.1"), Ok(Dyn::Double(d)) if d == 0.1));
+    assert!(matches!(dec("0.1"), Ok(Value::Double(d)) if d == 0.1));
     assert!(matches!(
         dec("1.7976931348623157e308"),
-        Ok(Dyn::Double(d)) if d == f64::MAX
+        Ok(Value::Double(d)) if d == f64::MAX
     ));
     assert_eq!(
         round("0.30000000000000004").as_deref(),
         Ok("0.30000000000000004")
     );
     assert_eq!(
-        enc(Dyn::Double(9.300000190734863)).as_deref(),
+        enc(Value::Double(9.300000190734863)).as_deref(),
         Ok("9.300000190734863")
     );
 }
 
 #[test]
 fn a_float32_writes_its_own_digits() {
-    assert_eq!(enc(Dyn::Float32(9.3)).as_deref(), Ok("9.3"));
+    assert_eq!(enc(Value::Float32(9.3)).as_deref(), Ok("9.3"));
     assert_eq!(
-        enc(Dyn::from(f64::from(9.3_f32))).as_deref(),
+        enc(Value::from(f64::from(9.3_f32))).as_deref(),
         Ok("9.300000190734863")
     );
 }
@@ -100,10 +103,10 @@ fn a_float32_writes_its_own_digits() {
 #[test]
 fn what_json_cannot_hold_is_refused() {
     for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert_eq!(enc(Dyn::Double(x)), Err(Error::Range));
-        assert_eq!(enc(Dyn::Float32(x as f32)), Err(Error::Range));
+        assert_eq!(enc(Value::Double(x)), Err(Error::Range));
+        assert_eq!(enc(Value::Float32(x as f32)), Err(Error::Range));
     }
-    let nested = Dyn::List(vec![Dyn::Double(f64::NAN)]);
+    let nested = Value::List(vec![Value::Double(f64::NAN)]);
     assert_eq!(enc(nested), Err(Error::Range));
 }
 
@@ -152,9 +155,9 @@ fn text_cuts_a_failed_member_and_an_empty_nested_object_back_out() {
     let mut t = Text::default();
     t.open();
     t.key("\"a\":");
-    t.value(Dyn::Int(1)).unwrap();
+    t.value(Value::Int(1)).unwrap();
     let m = t.key("\"nan\":");
-    assert_eq!(t.value(Dyn::Double(f64::NAN)), Err(Error::Range));
+    assert_eq!(t.value(Value::Double(f64::NAN)), Err(Error::Range));
     t.cut(m);
     let m = t.key("\"o\":");
     t.open();
@@ -162,7 +165,7 @@ fn text_cuts_a_failed_member_and_an_empty_nested_object_back_out() {
     let m = t.key("\"p\":");
     t.open();
     t.key("\"b\":");
-    t.value(Dyn::Bool(true)).unwrap();
+    t.value(Value::Bool(true)).unwrap();
     assert!(t.close_or_cut(m));
     t.close();
     assert_eq!(t.done(), r#"{"a":1,"p":{"b":true}}"#);
@@ -201,7 +204,7 @@ fn text_writes_items_and_scalars_in_place() {
 fn a_time_writes_its_text() {
     let at = crate::time::timestamp_at(1_700_000_000, 500_000_000).unwrap();
     let span = crate::time::duration_at(1, 500_000_000).unwrap();
-    let list = Dyn::List(vec![Dyn::from(at), Dyn::from(span)]);
+    let list = Value::List(vec![Value::from(at), Value::from(span)]);
     assert_eq!(
         encode(&list).as_deref(),
         Ok(r#"["2023-11-14T22:13:20.500Z","1.5s"]"#)
@@ -222,6 +225,6 @@ impl serde::Serialize for Own {
 
 #[test]
 fn a_value_serializing_itself_writes_what_it_serializes() {
-    let inside = Dyn::List(vec![serialized(&Own).unwrap()]);
+    let inside = Value::List(vec![serialized(&Own).unwrap()]);
     assert_eq!(enc(inside).as_deref(), Ok(r#"[{"a":1,"extra":[true]}]"#));
 }

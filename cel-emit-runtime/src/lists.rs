@@ -4,7 +4,7 @@
 use std::cmp::Ordering;
 
 use crate::cmp::{Equal, Order};
-use crate::{Dyn, Error, Result};
+use crate::{Error, Result, Value};
 
 /// `xs.flatten()` of a list of lists: one level.
 pub fn flatten<T>(xs: Vec<Vec<T>>) -> Result<Vec<T>> {
@@ -12,20 +12,20 @@ pub fn flatten<T>(xs: Vec<Vec<T>>) -> Result<Vec<T>> {
 }
 
 /// `xs.flatten()` of a dynamic list: an element that is a list spreads, any other stays.
-pub fn flatten_dyn(xs: Vec<Dyn>) -> Result<Vec<Dyn>> {
+pub fn flatten_dyn(xs: Vec<Value>) -> Result<Vec<Value>> {
     Ok(spread(xs))
 }
 
 /// `xs.flatten(depth)`: `depth` levels, or fewer where nothing is a list. A negative depth is an
 /// error. It loops once per level and stops when a level spreads nothing, so a large depth costs
 /// what the value holds.
-pub fn flatten_depth(xs: Vec<Dyn>, depth: i64) -> Result<Vec<Dyn>> {
+pub fn flatten_depth(xs: Vec<Value>, depth: i64) -> Result<Vec<Value>> {
     if depth < 0 {
         return Err(Error::Function);
     }
     let mut level = xs;
     for _ in 0..depth {
-        if !level.iter().any(|x| matches!(x, Dyn::List(_))) {
+        if !level.iter().any(|x| matches!(x, Value::List(_))) {
             break;
         }
         level = spread(level);
@@ -34,11 +34,11 @@ pub fn flatten_depth(xs: Vec<Dyn>, depth: i64) -> Result<Vec<Dyn>> {
 }
 
 /// `items` with each list element replaced by its elements.
-fn spread(items: Vec<Dyn>) -> Vec<Dyn> {
+fn spread(items: Vec<Value>) -> Vec<Value> {
     let mut out = Vec::new();
     for item in items {
         match item {
-            Dyn::List(inner) => out.extend(inner),
+            Value::List(inner) => out.extend(inner),
             other => out.push(other),
         }
     }
@@ -141,14 +141,14 @@ mod tests {
         xs.unwrap()
     }
 
-    fn dyn_list(xs: Vec<Dyn>) -> Dyn {
-        Dyn::List(xs)
+    fn dyn_list(xs: Vec<Value>) -> Value {
+        Value::List(xs)
     }
 
-    fn ints_of(xs: &[Dyn]) -> Vec<Option<i64>> {
+    fn ints_of(xs: &[Value]) -> Vec<Option<i64>> {
         xs.iter()
             .map(|x| match x {
-                Dyn::Int(i) => Some(*i),
+                Value::Int(i) => Some(*i),
                 _ => None,
             })
             .collect()
@@ -160,8 +160,8 @@ mod tests {
         assert_eq!(got(flatten(nested)), [1, 2, 3]);
         assert!(got(flatten(Vec::<Vec<i64>>::new())).is_empty());
         let mixed = vec![
-            Dyn::Int(1),
-            dyn_list(vec![Dyn::Int(2), dyn_list(vec![Dyn::Int(3)])]),
+            Value::Int(1),
+            dyn_list(vec![Value::Int(2), dyn_list(vec![Value::Int(3)])]),
         ];
         let once = flatten_dyn(mixed).unwrap();
         assert_eq!(ints_of(&once), [Some(1), Some(2), None]);
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn flatten_depth_stops_when_nothing_spreads() {
-        let deep = vec![dyn_list(vec![dyn_list(vec![Dyn::Int(1)])]), Dyn::Int(2)];
+        let deep = vec![dyn_list(vec![dyn_list(vec![Value::Int(1)])]), Value::Int(2)];
         assert_eq!(
             ints_of(&flatten_depth(deep.clone(), 0).unwrap()),
             [None, Some(2)]
@@ -223,7 +223,12 @@ mod tests {
         assert!(got(distinct(ints(&[]))).is_empty());
         let nan = vec![f64::NAN, f64::NAN];
         assert_eq!(got(distinct(nan)).len(), 2);
-        let mixed = vec![Dyn::Int(1), Dyn::UInt(1), Dyn::Double(1.0), Dyn::Null];
+        let mixed = vec![
+            Value::Int(1),
+            Value::UInt(1),
+            Value::Double(1.0),
+            Value::Null,
+        ];
         assert_eq!(got(distinct(mixed)).len(), 2);
     }
 
@@ -246,13 +251,13 @@ mod tests {
         assert_eq!(sort(nan).err(), Some(Error::Function));
         let only = vec![f64::NAN];
         assert_eq!(sort(only).err(), Some(Error::Function));
-        let mixed = vec![Dyn::Int(2), Dyn::Str(String::from("a")), Dyn::Int(1)];
+        let mixed = vec![Value::Int(2), Value::Str(String::from("a")), Value::Int(1)];
         assert_eq!(sort(mixed).err(), Some(Error::Function));
-        let numbers = vec![Dyn::Int(2), Dyn::UInt(1)];
+        let numbers = vec![Value::Int(2), Value::UInt(1)];
         assert_eq!(sort(numbers).err(), Some(Error::Function));
         let maps = vec![dyn_list(vec![])];
         assert_eq!(sort(maps).err(), Some(Error::Function));
-        let same = vec![Dyn::Int(2), Dyn::Int(1)];
+        let same = vec![Value::Int(2), Value::Int(1)];
         assert_eq!(ints_of(&sort(same).unwrap()), [Some(1), Some(2)]);
         assert_eq!(
             sort_by_keys(ints(&[1, 2]), ints(&[1])).err(),

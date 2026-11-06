@@ -1,209 +1,166 @@
-//! A dynamic value: any one of what JSON holds, and conversions from it to a typed place, each
-//! failing as CEL fills a typed place does: a wrong kind, a number of another kind included,
+//! CEL's operations on a dynamic [`Value`]: conversions from it to a typed place, each failing as
+//! CEL fills a typed place does: a wrong kind, a number of another kind included,
 //! [`Error::Cast`], a missing key [`Error::NoSuchKey`]. Nothing converts across kinds.
 
 use chrono::{DateTime, TimeDelta, Utc};
 
 use crate::cmp::Equal;
-use crate::{collections, conversions, strings, Error, Null, Result};
-
-/// A value whose kind is known only when read. A float32 is a double that keeps its own
-/// shortest digits when written.
-#[derive(Clone, Debug)]
-pub enum Dyn {
-    Null,
-    Bool(bool),
-    Int(i64),
-    UInt(u64),
-    Double(f64),
-    Float32(f32),
-    Str(String),
-    Timestamp(DateTime<Utc>),
-    Duration(TimeDelta),
-    List(Vec<Dyn>),
-    Map(Vec<(String, Dyn)>),
-}
-
-macro_rules! from {
-    ($($t:ty => $v:ident),*) => {$(
-        impl From<$t> for Dyn {
-            fn from(x: $t) -> Dyn {
-                Dyn::$v(x)
-            }
-        }
-    )*};
-}
-
-from!(bool => Bool, i64 => Int, u64 => UInt, f64 => Double, f32 => Float32, String => Str,
-    DateTime<Utc> => Timestamp, TimeDelta => Duration, Vec<Dyn> => List, Vec<(String, Dyn)> => Map);
-
-/// A nullable value: what it holds, or null.
-impl<T: Into<Dyn>> From<Option<T>> for Dyn {
-    fn from(x: Option<T>) -> Dyn {
-        x.map_or(Dyn::Null, Into::into)
-    }
-}
-
-impl From<Null> for Dyn {
-    fn from(_: Null) -> Dyn {
-        Dyn::Null
-    }
-}
+use crate::{collections, conversions, strings, Error, Result, Value};
 
 /// A typed list as a dynamic one.
-pub fn from_list<T: Into<Dyn>>(xs: Vec<T>) -> Result<Dyn> {
-    Ok(Dyn::List(lift_list(xs)?))
+pub fn from_list<T: Into<Value>>(xs: Vec<T>) -> Result<Value> {
+    Ok(Value::List(lift_list(xs)?))
 }
 
 /// A typed map, string-keyed, as a dynamic one.
-pub fn from_map<T: Into<Dyn>>(m: Vec<(String, T)>) -> Result<Dyn> {
-    Ok(Dyn::Map(lift_map(m)?))
+pub fn from_map<T: Into<Value>>(m: Vec<(String, T)>) -> Result<Value> {
+    Ok(Value::Map(lift_map(m)?))
 }
 
 /// A dynamic-keyed map as a dynamic one: a key of other than a string is [`Error::Cast`].
-pub fn from_keyed(m: Vec<(Dyn, Dyn)>) -> Result<Dyn> {
+pub fn from_keyed(m: Vec<(Value, Value)>) -> Result<Value> {
     let entries = m.into_iter().map(|(k, v)| match k {
-        Dyn::Str(k) => Ok((k, v)),
+        Value::Str(k) => Ok((k, v)),
         _ => Err(Error::Cast),
     });
-    Ok(Dyn::Map(entries.collect::<Result<_>>()?))
+    Ok(Value::Map(entries.collect::<Result<_>>()?))
 }
 
 /// A message's fields as a dynamic map. Not generic, so no program compiles its own copy.
-pub fn fields(entries: Vec<(String, Dyn)>) -> Dyn {
-    Dyn::Map(entries)
+pub fn fields(entries: Vec<(String, Value)>) -> Value {
+    Value::Map(entries)
 }
 
 /// A typed list's elements as dynamic ones.
-pub fn lift_list<T: Into<Dyn>>(xs: Vec<T>) -> Result<Vec<Dyn>> {
+pub fn lift_list<T: Into<Value>>(xs: Vec<T>) -> Result<Vec<Value>> {
     Ok(xs.into_iter().map(Into::into).collect())
 }
 
 /// A typed map's values as dynamic ones.
-pub fn lift_map<K, T: Into<Dyn>>(m: Vec<(K, T)>) -> Result<Vec<(K, Dyn)>> {
+pub fn lift_map<K, T: Into<Value>>(m: Vec<(K, T)>) -> Result<Vec<(K, Value)>> {
     Ok(m.into_iter().map(|(k, v)| (k, v.into())).collect())
 }
 
-pub fn to_bool(x: &Dyn) -> Result<bool> {
+pub fn to_bool(x: &Value) -> Result<bool> {
     match x {
-        Dyn::Bool(b) => Ok(*b),
+        Value::Bool(b) => Ok(*b),
         _ => Err(Error::Cast),
     }
 }
 
 /// `x`'s text, no copy made.
-pub fn str_of(x: &Dyn) -> Result<&str> {
+pub fn str_of(x: &Value) -> Result<&str> {
     match x {
-        Dyn::Str(s) => Ok(s),
+        Value::Str(s) => Ok(s),
         _ => Err(Error::Cast),
     }
 }
 
-pub fn to_str(x: &Dyn) -> Result<String> {
+pub fn to_str(x: &Value) -> Result<String> {
     str_of(x).map(String::from)
 }
 
 /// A timestamp, or one from RFC 3339 text, as JSON carries it.
-pub fn to_timestamp(x: &Dyn) -> Result<DateTime<Utc>> {
+pub fn to_timestamp(x: &Value) -> Result<DateTime<Utc>> {
     match x {
-        Dyn::Timestamp(t) => Ok(*t),
+        Value::Timestamp(t) => Ok(*t),
         x => crate::time::parse_timestamp(str_of(x)?),
     }
 }
 
 /// A duration, or one from text, as JSON carries it: `1.5s`, or `humantime`'s other units.
-pub fn to_duration(x: &Dyn) -> Result<TimeDelta> {
+pub fn to_duration(x: &Value) -> Result<TimeDelta> {
     match x {
-        Dyn::Duration(d) => Ok(*d),
+        Value::Duration(d) => Ok(*d),
         x => crate::time::parse_duration(str_of(x)?),
     }
 }
 
 /// Bytes from base64 text, as JSON carries them.
-pub fn to_bytes(x: &Dyn) -> Result<Vec<u8>> {
+pub fn to_bytes(x: &Value) -> Result<Vec<u8>> {
     conversions::base64_decode(str_of(x)?)
 }
 
 /// `x`'s elements, no copy made.
-pub fn list_of(x: &Dyn) -> Result<&Vec<Dyn>> {
+pub fn list_of(x: &Value) -> Result<&Vec<Value>> {
     match x {
-        Dyn::List(xs) => Ok(xs),
+        Value::List(xs) => Ok(xs),
         _ => Err(Error::Cast),
     }
 }
 
-pub fn to_list(x: &Dyn) -> Result<Vec<Dyn>> {
+pub fn to_list(x: &Value) -> Result<Vec<Value>> {
     list_of(x).cloned()
 }
 
 /// `x`'s entries, no copy made.
-pub fn map_of(x: &Dyn) -> Result<&Vec<(String, Dyn)>> {
+pub fn map_of(x: &Value) -> Result<&Vec<(String, Value)>> {
     match x {
-        Dyn::Map(m) => Ok(m),
+        Value::Map(m) => Ok(m),
         _ => Err(Error::Cast),
     }
 }
 
-pub fn to_map(x: &Dyn) -> Result<Vec<(String, Dyn)>> {
+pub fn to_map(x: &Value) -> Result<Vec<(String, Value)>> {
     map_of(x).cloned()
 }
 
 /// A double, as a typed double field takes it: a double, or a whole number. Another kind is
 /// [`Error::Cast`].
-pub fn to_double(x: &Dyn) -> Result<f64> {
-    read::real(x)
+pub fn to_double(x: &Value) -> Result<f64> {
+    to(x)
 }
 
 /// An int, as a typed int field takes it: an int, a uint that fits, or a double with no
 /// fraction. A fractional double or another kind is [`Error::Cast`]; a number past int64 is
 /// [`Error::Range`].
-pub fn to_int(x: &Dyn) -> Result<i64> {
-    i64::try_from(read::whole(x)?).map_err(|_| Error::Range)
+pub fn to_int(x: &Value) -> Result<i64> {
+    to(x)
 }
 
 /// A uint, as a typed uint field takes it: a uint, a non-negative int, or a double with no
 /// fraction. A fractional double or another kind is [`Error::Cast`]; a negative or past uint64
 /// is [`Error::Range`].
-pub fn to_uint(x: &Dyn) -> Result<u64> {
-    u64::try_from(read::whole(x)?).map_err(|_| Error::Range)
+pub fn to_uint(x: &Value) -> Result<u64> {
+    to(x)
 }
 
 /// `x` read by `read`, where it is there: absent stays absent.
-pub fn optional<T>(x: Option<&Dyn>, read: fn(&Dyn) -> Result<T>) -> Result<Option<T>> {
+pub fn optional<T>(x: Option<&Value>, read: fn(&Value) -> Result<T>) -> Result<Option<T>> {
     x.map(read).transpose()
 }
 
 /// `x` read by `read`, unless it is absent or null, which are null.
-pub fn nullable<T>(x: Option<&Dyn>, read: fn(&Dyn) -> Result<T>) -> Result<Option<T>> {
+pub fn nullable<T>(x: Option<&Value>, read: fn(&Value) -> Result<T>) -> Result<Option<T>> {
     match x {
-        None | Some(Dyn::Null) => Ok(None),
+        None | Some(Value::Null) => Ok(None),
         Some(x) => read(x).map(Some),
     }
 }
 
 /// `m[key]` of a dynamic map, no copy made: a key it lacks is [`Error::NoSuchKey`].
-pub fn get<'a>(x: &'a Dyn, key: &str) -> Result<&'a Dyn> {
+pub fn get<'a>(x: &'a Value, key: &str) -> Result<&'a Value> {
     optional_get(x, key)?.ok_or(Error::NoSuchKey)
 }
 
 /// `m[i]` of a dynamic list, no copy made: outside it, as [`collections::item`] has it.
-pub fn at(x: &Dyn, i: i64) -> Result<&Dyn> {
+pub fn at(x: &Value, i: i64) -> Result<&Value> {
     collections::item(list_of(x)?, i)
 }
 
 /// `has(m.key)` of a dynamic map.
-pub fn has(x: &Dyn, key: &str) -> Result<bool> {
+pub fn has(x: &Value, key: &str) -> Result<bool> {
     Ok(optional_get(x, key)?.is_some())
 }
 
 /// `m[?key]` of a dynamic map, no copy made: absent where it lacks the key.
-pub fn optional_get<'a>(x: &'a Dyn, key: &str) -> Result<Option<&'a Dyn>> {
+pub fn optional_get<'a>(x: &'a Value, key: &str) -> Result<Option<&'a Value>> {
     let found = map_of(x)?.iter().find(|(k, _)| k == key);
     Ok(found.map(|(_, v)| v))
 }
 
 /// `o.?key`, `o` an optional dynamic map: absent where `o` is, or lacks the key.
-pub fn chain<'a>(o: Option<&'a Dyn>, key: &str) -> Result<Option<&'a Dyn>> {
+pub fn chain<'a>(o: Option<&'a Value>, key: &str) -> Result<Option<&'a Value>> {
     match o {
         Some(x) => optional_get(x, key),
         None => Ok(None),
@@ -211,11 +168,11 @@ pub fn chain<'a>(o: Option<&'a Dyn>, key: &str) -> Result<Option<&'a Dyn>> {
 }
 
 /// `x in container`: a list holds an equal element, a map the string key.
-pub fn contains(x: &Dyn, container: &Dyn) -> Result<bool> {
+pub fn contains(x: &Value, container: &Value) -> Result<bool> {
     match container {
-        Dyn::List(xs) => collections::in_list(x, xs),
-        Dyn::Map(m) => match x {
-            Dyn::Str(key) => Ok(m.iter().any(|(k, _)| k == key)),
+        Value::List(xs) => collections::in_list(x, xs),
+        Value::Map(m) => match x {
+            Value::Str(key) => Ok(m.iter().any(|(k, _)| k == key)),
             _ => Ok(false),
         },
         _ => Err(Error::Cast),
@@ -223,26 +180,26 @@ pub fn contains(x: &Dyn, container: &Dyn) -> Result<bool> {
 }
 
 /// `size(x)` of a string (code points), list, or map.
-pub fn size(x: &Dyn) -> Result<i64> {
+pub fn size(x: &Value) -> Result<i64> {
     match x {
-        Dyn::Str(s) => strings::size(s),
-        Dyn::List(xs) => collections::list_size(xs),
-        Dyn::Map(m) => collections::map_size(m),
+        Value::Str(s) => strings::size(s),
+        Value::List(xs) => collections::list_size(xs),
+        Value::Map(m) => collections::map_size(m),
         _ => Err(Error::Cast),
     }
 }
 
 /// Numbers equal by value across int, uint, and double; other kinds equal only to their own.
-impl Equal for Dyn {
-    fn equal(&self, other: &Dyn) -> Result<bool> {
+impl Equal for Value {
+    fn equal(&self, other: &Value) -> Result<bool> {
         Ok(match (self, other) {
-            (Dyn::Null, Dyn::Null) => true,
-            (Dyn::Bool(a), Dyn::Bool(b)) => a == b,
-            (Dyn::Str(a), Dyn::Str(b)) => a == b,
-            (Dyn::Timestamp(a), Dyn::Timestamp(b)) => a == b,
-            (Dyn::Duration(a), Dyn::Duration(b)) => a == b,
-            (Dyn::List(a), Dyn::List(b)) => a.equal(b)?,
-            (Dyn::Map(a), Dyn::Map(b)) => a.equal(b)?,
+            (Value::Null, Value::Null) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
+            (Value::Duration(a), Value::Duration(b)) => a == b,
+            (Value::List(a), Value::List(b)) => a.equal(b)?,
+            (Value::Map(a), Value::Map(b)) => a.equal(b)?,
             (a, b) => number(a).zip(number(b)).is_some_and(|(a, b)| a.equals(b)),
         })
     }
@@ -256,12 +213,12 @@ enum Num {
     Double(f64),
 }
 
-fn number(x: &Dyn) -> Option<Num> {
+fn number(x: &Value) -> Option<Num> {
     Some(match *x {
-        Dyn::Int(i) => Num::Int(i),
-        Dyn::UInt(u) => Num::UInt(u),
-        Dyn::Double(d) => Num::Double(d),
-        Dyn::Float32(f) => Num::Double(f64::from(f)),
+        Value::Int(i) => Num::Int(i),
+        Value::UInt(u) => Num::UInt(u),
+        Value::Double(d) => Num::Double(d),
+        Value::Float32(f) => Num::Double(f64::from(f)),
         _ => return None,
     })
 }
@@ -286,8 +243,15 @@ impl Num {
 }
 
 pub mod cast;
-mod read;
-pub use read::to;
+
+/// A `T` filled from `x`; a value `T` does not accept is [`Error::Cast`], and a number past the
+/// width of the integer or float32 it fills is [`Error::Range`].
+pub fn to<T: serde::de::DeserializeOwned>(x: &Value) -> Result<T> {
+    any_value::to(x).map_err(|e| match e {
+        any_value::Error::Kind => Error::Cast,
+        any_value::Error::Range => Error::Range,
+    })
+}
 
 #[cfg(test)]
 mod tests;

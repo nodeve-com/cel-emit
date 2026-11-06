@@ -12,6 +12,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "any-value"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "humantime",
+ "serde",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -126,10 +135,10 @@ dependencies = [
 name = "cel-emit-runtime"
 version = "0.6.2"
 dependencies = [
+ "any-value",
  "base64",
  "chrono",
  "chrono-tz",
- "humantime",
  "jiff",
  "libm",
  "pattern-emit",

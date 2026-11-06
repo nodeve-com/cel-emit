@@ -1,124 +1,126 @@
 use super::*;
 
-fn text(s: &str) -> Dyn {
-    Dyn::Str(s.to_string())
+fn text(s: &str) -> Value {
+    Value::Str(s.to_string())
 }
 
-fn same(a: Dyn, b: Dyn) -> bool {
+fn same(a: Value, b: Value) -> bool {
     a.equal(&b).unwrap()
 }
 
 #[test]
 fn a_number_fills_a_typed_scalar_by_the_number_rule() {
-    assert_eq!(to_int(&Dyn::Int(-7)), Ok(-7));
-    assert_eq!(to_uint(&Dyn::UInt(u64::MAX)), Ok(u64::MAX));
-    assert_eq!(to_double(&Dyn::Double(1.5)), Ok(1.5));
-    assert_eq!(to_double(&Dyn::Float32(9.3)), Ok(9.300000190734863));
-    assert!(to_double(&Dyn::Double(f64::NAN)).is_ok_and(f64::is_nan));
-    assert_eq!(to_double(&Dyn::Int(5)), Ok(5.0));
-    assert_eq!(to_double(&Dyn::UInt(3)), Ok(3.0));
-    assert_eq!(to_int(&Dyn::Double(5.0)), Ok(5));
-    assert_eq!(to_int(&Dyn::Float32(-2.0)), Ok(-2));
-    assert_eq!(to_uint(&Dyn::Double(4.0)), Ok(4));
-    for other in [Dyn::Double(3.5), text("1"), Dyn::Null, Dyn::Bool(true)] {
+    assert_eq!(to_int(&Value::Int(-7)), Ok(-7));
+    assert_eq!(to_uint(&Value::UInt(u64::MAX)), Ok(u64::MAX));
+    assert_eq!(to_double(&Value::Double(1.5)), Ok(1.5));
+    assert_eq!(to_double(&Value::Float32(9.3)), Ok(9.300000190734863));
+    assert!(to_double(&Value::Double(f64::NAN)).is_ok_and(f64::is_nan));
+    assert_eq!(to_double(&Value::Int(5)), Ok(5.0));
+    assert_eq!(to_double(&Value::UInt(3)), Ok(3.0));
+    assert_eq!(to_int(&Value::Double(5.0)), Ok(5));
+    assert_eq!(to_int(&Value::Float32(-2.0)), Ok(-2));
+    assert_eq!(to_uint(&Value::Double(4.0)), Ok(4));
+    for other in [
+        Value::Double(3.5),
+        text("1"),
+        Value::Null,
+        Value::Bool(true),
+    ] {
         assert_eq!(to_int(&other), Err(Error::Cast), "{other:?}");
     }
-    for other in [Dyn::Double(4.5), text("1"), Dyn::Null] {
+    for other in [Value::Double(4.5), text("1"), Value::Null] {
         assert_eq!(to_uint(&other), Err(Error::Cast), "{other:?}");
     }
-    for other in [text("1.5"), Dyn::Null, Dyn::Bool(false)] {
+    for other in [text("1.5"), Value::Null, Value::Bool(false)] {
         assert_eq!(to_double(&other), Err(Error::Cast), "{other:?}");
     }
-    assert_eq!(to_int(&Dyn::UInt(7)), Ok(7));
-    assert_eq!(to_uint(&Dyn::Int(5)), Ok(5));
-    assert_eq!(to_int(&Dyn::UInt(u64::MAX)), Err(Error::Range));
-    assert_eq!(to_uint(&Dyn::Int(-1)), Err(Error::Range));
-    assert_eq!(to_int(&Dyn::Double(1e30)), Err(Error::Range));
-    assert_eq!(to_uint(&Dyn::Double(-1.0)), Err(Error::Range));
+    assert_eq!(to_int(&Value::UInt(7)), Ok(7));
+    assert_eq!(to_uint(&Value::Int(5)), Ok(5));
+    assert_eq!(to_int(&Value::UInt(u64::MAX)), Err(Error::Range));
+    assert_eq!(to_uint(&Value::Int(-1)), Err(Error::Range));
+    assert_eq!(to_int(&Value::Double(1e30)), Err(Error::Range));
+    assert_eq!(to_uint(&Value::Double(-1.0)), Err(Error::Range));
 }
 
 #[test]
 fn an_optional_read_keeps_absence_and_a_nullable_one_takes_null() {
     assert_eq!(optional(None, to_int), Ok(None));
-    assert_eq!(optional(Some(&Dyn::Int(1)), to_int), Ok(Some(1)));
-    assert_eq!(optional(Some(&Dyn::Null), to_int), Err(Error::Cast));
+    assert_eq!(optional(Some(&Value::Int(1)), to_int), Ok(Some(1)));
+    assert_eq!(optional(Some(&Value::Null), to_int), Err(Error::Cast));
     assert_eq!(nullable(None, to_int), Ok(None));
-    assert_eq!(nullable(Some(&Dyn::Null), to_int), Ok(None));
-    assert_eq!(nullable(Some(&Dyn::Int(1)), to_int), Ok(Some(1)));
-    assert_eq!(nullable(Some(&Dyn::Bool(true)), to_int), Err(Error::Cast));
+    assert_eq!(nullable(Some(&Value::Null), to_int), Ok(None));
+    assert_eq!(nullable(Some(&Value::Int(1)), to_int), Ok(Some(1)));
+    assert_eq!(nullable(Some(&Value::Bool(true)), to_int), Err(Error::Cast));
 }
 
 #[test]
 fn other_kinds_take_only_themselves() {
-    assert_eq!(to_bool(&Dyn::Bool(true)), Ok(true));
-    assert_eq!(to_bool(&Dyn::Int(1)), Err(Error::Cast));
+    assert_eq!(to_bool(&Value::Bool(true)), Ok(true));
+    assert_eq!(to_bool(&Value::Int(1)), Err(Error::Cast));
     assert_eq!(to_str(&text("a")).as_deref(), Ok("a"));
-    assert_eq!(to_str(&Dyn::Int(1)).err(), Some(Error::Cast));
-    assert!(to_list(&Dyn::Map(Vec::new())).is_err());
-    assert!(to_map(&Dyn::List(Vec::new())).is_err());
-    assert!(to_list(&Dyn::List(Vec::new())).is_ok());
+    assert_eq!(to_str(&Value::Int(1)).err(), Some(Error::Cast));
+    assert!(to_list(&Value::Map(Vec::new())).is_err());
+    assert!(to_map(&Value::List(Vec::new())).is_err());
+    assert!(to_list(&Value::List(Vec::new())).is_ok());
 }
 
 #[test]
 fn typed_values_lift_to_dyn() {
     let xs = from_list(vec![1_i64, 2]).unwrap();
-    assert!(same(xs, Dyn::List(vec![Dyn::Int(1), Dyn::Int(2)])));
+    assert!(same(xs, Value::List(vec![Value::Int(1), Value::Int(2)])));
     let m = vec![(String::from("a"), 1.5_f64)];
-    assert!(matches!(get(&from_map(m).unwrap(), "a"), Ok(Dyn::Double(d)) if *d == 1.5));
-    assert!(matches!(Dyn::from(Null), Dyn::Null));
-    assert!(matches!(Dyn::from(Some(1i64)), Dyn::Int(1)));
-    assert!(matches!(Dyn::from(None::<i64>), Dyn::Null));
+    assert!(matches!(get(&from_map(m).unwrap(), "a"), Ok(Value::Double(d)) if *d == 1.5));
 }
 
 #[test]
 fn get_and_size_read_maps_lists_and_strings() {
-    let m = Dyn::Map(vec![(String::from("a"), Dyn::Int(1))]);
-    assert!(matches!(get(&m, "a"), Ok(Dyn::Int(1))));
+    let m = Value::Map(vec![(String::from("a"), Value::Int(1))]);
+    assert!(matches!(get(&m, "a"), Ok(Value::Int(1))));
     assert_eq!(get(&m, "b").err(), Some(Error::NoSuchKey));
-    assert_eq!(get(&Dyn::Int(1), "a").err(), Some(Error::Cast));
+    assert_eq!(get(&Value::Int(1), "a").err(), Some(Error::Cast));
     assert_eq!(
-        (size(&m), size(&text("héé")), size(&Dyn::Int(1))),
+        (size(&m), size(&text("héé")), size(&Value::Int(1))),
         (Ok(1), Ok(3), Err(Error::Cast))
     );
 }
 
 #[test]
 fn numbers_are_equal_across_kinds() {
-    assert!(same(Dyn::Int(1), Dyn::UInt(1)));
-    assert!(same(Dyn::Int(1), Dyn::Double(1.0)));
-    assert!(same(Dyn::UInt(1), Dyn::Float32(1.0)));
-    assert!(!same(Dyn::Int(1), Dyn::Double(1.5)));
-    assert!(!same(Dyn::Int(-1), Dyn::UInt(u64::MAX)));
-    assert!(!same(Dyn::Double(f64::NAN), Dyn::Double(f64::NAN)));
+    assert!(same(Value::Int(1), Value::UInt(1)));
+    assert!(same(Value::Int(1), Value::Double(1.0)));
+    assert!(same(Value::UInt(1), Value::Float32(1.0)));
+    assert!(!same(Value::Int(1), Value::Double(1.5)));
+    assert!(!same(Value::Int(-1), Value::UInt(u64::MAX)));
+    assert!(!same(Value::Double(f64::NAN), Value::Double(f64::NAN)));
     // 2^53 + 1 is not the double 2^53.
     assert!(!same(
-        Dyn::Int(9_007_199_254_740_993),
-        Dyn::Double(9_007_199_254_740_992.0)
+        Value::Int(9_007_199_254_740_993),
+        Value::Double(9_007_199_254_740_992.0)
     ));
     assert!(!same(
-        Dyn::Int(i64::MAX),
-        Dyn::Double(9_223_372_036_854_775_808.0)
+        Value::Int(i64::MAX),
+        Value::Double(9_223_372_036_854_775_808.0)
     ));
     assert!(!same(
-        Dyn::UInt(u64::MAX),
-        Dyn::Double(1.8446744073709552e19)
+        Value::UInt(u64::MAX),
+        Value::Double(1.8446744073709552e19)
     ));
 }
 
 #[test]
 fn other_kinds_are_equal_only_to_their_own() {
-    assert!(same(Dyn::Null, Dyn::Null));
-    assert!(!same(Dyn::Null, Dyn::Bool(false)));
-    assert!(!same(Dyn::Int(1), Dyn::Bool(true)));
-    assert!(!same(Dyn::Int(1), text("1")));
-    let a = Dyn::List(vec![Dyn::Int(1), text("x")]);
-    let b = Dyn::List(vec![Dyn::Double(1.0), text("x")]);
+    assert!(same(Value::Null, Value::Null));
+    assert!(!same(Value::Null, Value::Bool(false)));
+    assert!(!same(Value::Int(1), Value::Bool(true)));
+    assert!(!same(Value::Int(1), text("1")));
+    let a = Value::List(vec![Value::Int(1), text("x")]);
+    let b = Value::List(vec![Value::Double(1.0), text("x")]);
     assert!(same(a.clone(), b));
-    assert!(!same(a, Dyn::List(vec![Dyn::Int(1)])));
+    assert!(!same(a, Value::List(vec![Value::Int(1)])));
 }
 
-fn map(entries: &[(&str, Dyn)]) -> Dyn {
-    Dyn::Map(
+fn map(entries: &[(&str, Value)]) -> Value {
+    Value::Map(
         entries
             .iter()
             .map(|(k, v)| (k.to_string(), v.clone()))
@@ -134,36 +136,42 @@ fn key(k: &str) -> String {
 fn a_typed_collection_lifts_to_dynamic() {
     let xs = lift_list(Vec::from([1i64, 2])).unwrap();
     assert!(same(
-        Dyn::List(xs),
+        Value::List(xs),
         from_list(Vec::from([1i64, 2])).unwrap()
     ));
     let m = vec![(key("k"), 1.5f64)];
-    assert!(same(from_map(m).unwrap(), map(&[("k", Dyn::Double(1.5))])));
+    assert!(same(
+        from_map(m).unwrap(),
+        map(&[("k", Value::Double(1.5))])
+    ));
     let none = lift_list::<f64>(Vec::new()).unwrap();
-    assert_eq!(size(&Dyn::List(none)), Ok(0));
+    assert_eq!(size(&Value::List(none)), Ok(0));
 }
 
 #[test]
 fn a_dynamic_keyed_map_needs_string_keys() {
-    let entry = |key: Dyn| vec![(key, Dyn::Int(1))];
+    let entry = |key: Value| vec![(key, Value::Int(1))];
     assert!(same(
         from_keyed(entry(text("k"))).unwrap(),
-        map(&[("k", Dyn::Int(1))])
+        map(&[("k", Value::Int(1))])
     ));
-    assert_eq!(from_keyed(entry(Dyn::Int(1))).map(|_| ()), Err(Error::Cast));
+    assert_eq!(
+        from_keyed(entry(Value::Int(1))).map(|_| ()),
+        Err(Error::Cast)
+    );
     assert_eq!(size(&from_keyed(Vec::new()).unwrap()), Ok(0));
 }
 
 #[test]
 fn a_dynamic_map_answers_has_and_optional_get() {
-    let m = map(&[("a", Dyn::Int(1))]);
+    let m = map(&[("a", Value::Int(1))]);
     assert_eq!(has(&m, "a"), Ok(true));
     assert_eq!(has(&m, "b"), Ok(false));
-    assert_eq!(has(&Dyn::Int(1), "a"), Err(Error::Cast));
+    assert_eq!(has(&Value::Int(1), "a"), Err(Error::Cast));
     assert!(optional_get(&m, "a").unwrap().is_some());
     assert!(optional_get(&m, "b").unwrap().is_none());
     assert_eq!(
-        optional_get(&Dyn::Null, "a").map(|o| o.is_some()),
+        optional_get(&Value::Null, "a").map(|o| o.is_some()),
         Err(Error::Cast)
     );
     assert!(chain(None, "a").unwrap().is_none());
@@ -172,74 +180,74 @@ fn a_dynamic_map_answers_has_and_optional_get() {
 
 #[test]
 fn a_dynamic_list_indexes_by_int() {
-    let xs = Dyn::List(vec![Dyn::Int(5), text("x")]);
+    let xs = Value::List(vec![Value::Int(5), text("x")]);
     assert!(same(at(&xs, 1).unwrap().clone(), text("x")));
     assert!(at(&xs, 2).is_err());
     assert!(at(&xs, -1).is_err());
-    assert_eq!(at(&Dyn::Int(1), 0).map(|_| ()), Err(Error::Cast));
+    assert_eq!(at(&Value::Int(1), 0).map(|_| ()), Err(Error::Cast));
 }
 
 #[test]
 fn in_finds_an_element_or_a_string_key() {
-    let xs = Dyn::List(vec![Dyn::Int(5), text("x")]);
-    assert_eq!(contains(&Dyn::Double(5.0), &xs), Ok(true));
-    assert_eq!(contains(&Dyn::Int(6), &xs), Ok(false));
-    let m = map(&[("a", Dyn::Int(1))]);
+    let xs = Value::List(vec![Value::Int(5), text("x")]);
+    assert_eq!(contains(&Value::Double(5.0), &xs), Ok(true));
+    assert_eq!(contains(&Value::Int(6), &xs), Ok(false));
+    let m = map(&[("a", Value::Int(1))]);
     assert_eq!(contains(&text("a"), &m), Ok(true));
     assert_eq!(contains(&text("b"), &m), Ok(false));
-    assert_eq!(contains(&Dyn::Int(1), &m), Ok(false));
-    assert_eq!(contains(&Dyn::Int(1), &Dyn::Int(1)), Err(Error::Cast));
+    assert_eq!(contains(&Value::Int(1), &m), Ok(false));
+    assert_eq!(contains(&Value::Int(1), &Value::Int(1)), Err(Error::Cast));
 }
 
 #[test]
 fn a_cast_converts_by_the_value_kind() {
     use cast::{to_bool, to_double, to_int, to_str, to_uint};
     assert_eq!(to_int(&text("12")), Ok(12));
-    assert_eq!(to_int(&Dyn::Double(2.9)), Ok(2));
-    assert_eq!(to_int(&Dyn::Double(-2.9)), Ok(-2));
-    assert_eq!(to_int(&Dyn::UInt(u64::MAX)), Err(Error::Overflow));
+    assert_eq!(to_int(&Value::Double(2.9)), Ok(2));
+    assert_eq!(to_int(&Value::Double(-2.9)), Ok(-2));
+    assert_eq!(to_int(&Value::UInt(u64::MAX)), Err(Error::Overflow));
     assert!(to_int(&text("x")).is_err());
-    assert_eq!(to_int(&Dyn::Bool(true)), Err(Error::Cast));
-    assert_eq!(to_int(&Dyn::Null), Err(Error::Cast));
-    assert_eq!(to_uint(&Dyn::Int(-1)), Err(Error::Overflow));
+    assert_eq!(to_int(&Value::Bool(true)), Err(Error::Cast));
+    assert_eq!(to_int(&Value::Null), Err(Error::Cast));
+    assert_eq!(to_uint(&Value::Int(-1)), Err(Error::Overflow));
     assert_eq!(to_uint(&text("7")), Ok(7));
-    assert_eq!(to_double(&Dyn::Int(2)), Ok(2.0));
+    assert_eq!(to_double(&Value::Int(2)), Ok(2.0));
     assert_eq!(to_double(&text("1.5")), Ok(1.5));
     assert_eq!(to_bool(&text("true")), Ok(true));
-    assert_eq!(to_bool(&Dyn::Int(1)), Err(Error::Cast));
-    assert_eq!(to_str(&Dyn::Int(-3)).as_deref(), Ok("-3"));
-    assert_eq!(to_str(&Dyn::Bool(false)).as_deref(), Ok("false"));
-    assert_eq!(to_str(&Dyn::Double(1.5)).as_deref(), Ok("1.5"));
-    assert_eq!(to_str(&Dyn::Null).map(|_| ()), Err(Error::Cast));
+    assert_eq!(to_bool(&Value::Int(1)), Err(Error::Cast));
+    assert_eq!(to_str(&Value::Int(-3)).as_deref(), Ok("-3"));
+    assert_eq!(to_str(&Value::Bool(false)).as_deref(), Ok("false"));
+    assert_eq!(to_str(&Value::Double(1.5)).as_deref(), Ok("1.5"));
+    assert_eq!(to_str(&Value::Null).map(|_| ()), Err(Error::Cast));
 }
 
 #[test]
 fn a_time_fills_its_own_place_from_itself_or_its_text() {
     let at = crate::time::timestamp_at(1_700_000_000, 5).unwrap();
     let span = crate::time::duration_at(1, 500_000_000).unwrap();
-    assert_eq!(to_timestamp(&Dyn::from(at)), Ok(at));
+    assert_eq!(to_timestamp(&Value::from(at)), Ok(at));
     assert_eq!(
         to_timestamp(&text(&crate::time::timestamp_text(at))),
         Ok(at)
     );
-    assert_eq!(to_duration(&Dyn::from(span)), Ok(span));
+    assert_eq!(to_duration(&Value::from(span)), Ok(span));
     assert_eq!(to_duration(&text("1.5s")), Ok(span));
-    assert_eq!(to_str(&Dyn::from(at)), Err(Error::Cast));
-    assert_eq!(to_timestamp(&Dyn::from(span)), Err(Error::Cast));
-    assert_eq!(to_duration(&Dyn::from(at)), Err(Error::Cast));
+    assert_eq!(to_str(&Value::from(at)), Err(Error::Cast));
+    assert_eq!(to_timestamp(&Value::from(span)), Err(Error::Cast));
+    assert_eq!(to_duration(&Value::from(at)), Err(Error::Cast));
 }
 
 #[test]
 fn a_time_casts_as_cel_does_and_equals_only_its_own_kind() {
     let at = crate::time::timestamp_at(1_700_000_000, 0).unwrap();
     let span = crate::time::duration_at(90, 0).unwrap();
-    assert_eq!(cast::to_int(&Dyn::from(at)), Ok(1_700_000_000));
+    assert_eq!(cast::to_int(&Value::from(at)), Ok(1_700_000_000));
     assert_eq!(
-        cast::to_str(&Dyn::from(at)).as_deref(),
+        cast::to_str(&Value::from(at)).as_deref(),
         Ok("2023-11-14T22:13:20Z")
     );
-    assert_eq!(cast::to_str(&Dyn::from(span)).as_deref(), Ok("90s"));
-    assert!(same(Dyn::from(at), Dyn::from(at)));
-    assert!(!same(Dyn::from(at), text("2023-11-14T22:13:20Z")));
-    assert!(!same(Dyn::from(span), text("90s")));
+    assert_eq!(cast::to_str(&Value::from(span)).as_deref(), Ok("90s"));
+    assert!(same(Value::from(at), Value::from(at)));
+    assert!(!same(Value::from(at), text("2023-11-14T22:13:20Z")));
+    assert!(!same(Value::from(span), text("90s")));
 }

@@ -1,35 +1,35 @@
-//! A [`Dyn`] written as compact JSON text: serde_json's formatter writes each token, and this
+//! A [`Value`] written as compact JSON text: serde_json's formatter writes each token, and this
 //! walk decides what to write and refuses what JSON can't hold. A serde `Serialize` could stop
 //! only with serde_json's text error, which links its message formatting into every program.
 
 use serde::Serializer as _;
 use serde_json::ser::{CompactFormatter, Formatter};
 
-use crate::dynamic::Dyn;
 use crate::time::{duration_text, timestamp_text};
+use crate::Value;
 use crate::{Error, Result};
 
 /// Writes `x` to `w`.
-pub(super) fn value(w: &mut Vec<u8>, x: &Dyn) -> Result<()> {
+pub(super) fn value(w: &mut Vec<u8>, x: &Value) -> Result<()> {
     let f = &mut CompactFormatter;
     match *x {
-        Dyn::Null => io(f.write_null(w)),
-        Dyn::Bool(b) => io(f.write_bool(w, b)),
-        Dyn::Int(i) => io(f.write_i64(w, i)),
-        Dyn::UInt(u) => io(f.write_u64(w, u)),
-        Dyn::Double(d) if d.is_finite() => io(f.write_f64(w, d)),
-        Dyn::Float32(x) if x.is_finite() => io(f.write_f32(w, x)),
-        Dyn::Double(_) | Dyn::Float32(_) => Err(Error::Range),
-        Dyn::Str(ref t) => string(w, t),
-        Dyn::Timestamp(t) => string(w, &timestamp_text(t)),
-        Dyn::Duration(d) => string(w, &duration_text(d)),
-        Dyn::List(ref xs) => list(w, f, xs),
-        Dyn::Map(ref m) => map(w, f, m),
+        Value::Null => io(f.write_null(w)),
+        Value::Bool(b) => io(f.write_bool(w, b)),
+        Value::Int(i) => io(f.write_i64(w, i)),
+        Value::UInt(u) => io(f.write_u64(w, u)),
+        Value::Double(d) if d.is_finite() => io(f.write_f64(w, d)),
+        Value::Float32(x) if x.is_finite() => io(f.write_f32(w, x)),
+        Value::Double(_) | Value::Float32(_) => Err(Error::Range),
+        Value::Str(ref t) => string(w, t),
+        Value::Timestamp(t) => string(w, &timestamp_text(t)),
+        Value::Duration(d) => string(w, &duration_text(d)),
+        Value::List(ref xs) => list(w, f, xs),
+        Value::Map(ref m) => map(w, f, m),
     }
 }
 
 /// Writes `xs` as an array.
-fn list(w: &mut Vec<u8>, f: &mut CompactFormatter, xs: &[Dyn]) -> Result<()> {
+fn list(w: &mut Vec<u8>, f: &mut CompactFormatter, xs: &[Value]) -> Result<()> {
     io(f.begin_array(w))?;
     for (i, x) in xs.iter().enumerate() {
         io(f.begin_array_value(w, i == 0))?;
@@ -40,7 +40,7 @@ fn list(w: &mut Vec<u8>, f: &mut CompactFormatter, xs: &[Dyn]) -> Result<()> {
 }
 
 /// Writes `m` as an object.
-fn map(w: &mut Vec<u8>, f: &mut CompactFormatter, m: &[(String, Dyn)]) -> Result<()> {
+fn map(w: &mut Vec<u8>, f: &mut CompactFormatter, m: &[(String, Value)]) -> Result<()> {
     io(f.begin_object(w))?;
     let mut first = true;
     for (k, v) in m {

@@ -157,7 +157,7 @@ fn dynamic(expression: &str) -> Result<String, String> {
     let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(NoMessages))?;
     let entry = Entry {
         decode: "s::json::decode(text).map_err(|e| format!(\"{e:?}\"))",
-        input: "s::dynamic::Dyn",
+        input: "s::Value",
     };
     source("", &items, &output, entry)
 }

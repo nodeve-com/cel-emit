@@ -84,7 +84,7 @@ impl Emitter {
             Type::Bytes => "Vec<u8>".into(),
             Type::Timestamp => format!("{STD}::DateTime<{STD}::Utc>"),
             Type::Duration => format!("{STD}::TimeDelta"),
-            Type::Dyn => format!("{STD}::Dyn"),
+            Type::Dyn => format!("{STD}::Value"),
             Type::Number => format!("{STD}::number::Number"),
             Type::List(t) => format!("Vec<{}>", self.rust(t)?),
             Type::Map(k, v) => format!("Vec<({}, {})>", self.rust(k)?, self.rust(v)?),

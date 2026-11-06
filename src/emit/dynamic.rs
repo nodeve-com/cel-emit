@@ -90,7 +90,7 @@ impl Emitter {
             (Type::List(_), _) => "dynamic::from_list",
             (Type::Map(k, _), _) if **k == Type::Dyn => "dynamic::from_keyed",
             (Type::Map(..), _) => "dynamic::from_map",
-            _ => return Ok(format!("{STD}::Dyn::from({inner})")),
+            _ => return Ok(format!("{STD}::Value::from({inner})")),
         };
         Ok(format!("{STD}::{f}({inner})?"))
     }
@@ -123,18 +123,18 @@ impl Emitter {
         Ok(match ty {
             Type::Nullable(t) => {
                 let held = self.dyn_of(&format!("v{d}"), t, w.next())?;
-                format!("match {x} {{ Some(v{d}) => {held}, None => {STD}::Dyn::Null }}")
+                format!("match {x} {{ Some(v{d}) => {held}, None => {STD}::Value::Null }}")
             }
             Type::List(t) => {
                 let each = self.dyn_of(&format!("e{d}"), t, w.next())?;
                 format!(
-                    "{STD}::Dyn::List({x}.into_iter().map(|e{d}| {STD}::ok({each})).collect::<{STD}::Result<Vec<_>>>()?)"
+                    "{STD}::Value::List({x}.into_iter().map(|e{d}| {STD}::ok({each})).collect::<{STD}::Result<Vec<_>>>()?)"
                 )
             }
             Type::Map(k, v) if **k == Type::String => {
                 let each = self.dyn_of(&format!("e{d}.1"), v, w.next())?;
                 format!(
-                    "{STD}::Dyn::Map({x}.into_iter().map(|e{d}| {STD}::ok((e{d}.0, {each}))).collect::<{STD}::Result<Vec<_>>>()?)"
+                    "{STD}::Value::Map({x}.into_iter().map(|e{d}| {STD}::ok((e{d}.0, {each}))).collect::<{STD}::Result<Vec<_>>>()?)"
                 )
             }
             Type::Message(fields) => self.dyn_message(x, fields, w)?,
@@ -163,7 +163,7 @@ impl Emitter {
         let d = w.depth;
         let entries = entries.join(", ");
         let map = if sparse {
-            format!("{STD}::Dyn::Map([{entries}].into_iter().flatten().collect())")
+            format!("{STD}::Value::Map([{entries}].into_iter().flatten().collect())")
         } else {
             format!("{STD}::dynamic::fields(Vec::from([{entries}]))")
         };
@@ -197,12 +197,12 @@ fn scalar_dyn(x: &str, ty: &Type, d: usize) -> Result<String, Error> {
         | Type::Bool
         | Type::String
         | Type::Timestamp
-        | Type::Duration => format!("{STD}::Dyn::from({x})"),
-        Type::Null => format!("{STD}::Dyn::Null"),
-        Type::Bytes => format!("{STD}::Dyn::Str({STD}::conversions::base64_encode(&{x})?)"),
-        Type::Narrow(Width::F32) => format!("{STD}::Dyn::Float32(({x}) as f32)"),
+        | Type::Duration => format!("{STD}::Value::from({x})"),
+        Type::Null => format!("{STD}::Value::Null"),
+        Type::Bytes => format!("{STD}::Value::Str({STD}::conversions::base64_encode(&{x})?)"),
+        Type::Narrow(Width::F32) => format!("{STD}::Value::Float32(({x}) as f32)"),
         Type::Narrow(_) => match narrow::convert(x, ty, narrow::To::Cel, d) {
-            Some(wide) => format!("{STD}::Dyn::from({wide}?)"),
+            Some(wide) => format!("{STD}::Value::from({wide}?)"),
             None => return Err(Error::Invalid("a width without a conversion".into())),
         },
         other => {

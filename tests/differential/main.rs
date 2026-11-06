@@ -107,22 +107,22 @@ fn function(n: usize, source: &str, emitter: &mut Emitter) -> Result<String, Str
 
 /// How the emitted program writes a dyn, as [`show`] writes the interpreter's value.
 const SHOW: &str = r#"
-fn show(v: s::Dyn) -> String {
+fn show(v: s::Value) -> String {
     match v {
-        s::Dyn::Null => "null".into(),
-        s::Dyn::Bool(b) => format!("{b}"),
-        s::Dyn::Int(i) => format!("{i}"),
-        s::Dyn::UInt(u) => format!("{u}u"),
-        s::Dyn::Double(d) => format!("{d:?}"),
-        s::Dyn::Float32(f) => format!("{:?}", f64::from(f)),
-        s::Dyn::Str(t) => format!("{t:?}"),
-        s::Dyn::Timestamp(t) => format!("{t:?}"),
-        s::Dyn::Duration(d) => format!("{d:?}"),
-        s::Dyn::List(xs) => {
+        s::Value::Null => "null".into(),
+        s::Value::Bool(b) => format!("{b}"),
+        s::Value::Int(i) => format!("{i}"),
+        s::Value::UInt(u) => format!("{u}u"),
+        s::Value::Double(d) => format!("{d:?}"),
+        s::Value::Float32(f) => format!("{:?}", f64::from(f)),
+        s::Value::Str(t) => format!("{t:?}"),
+        s::Value::Timestamp(t) => format!("{t:?}"),
+        s::Value::Duration(d) => format!("{d:?}"),
+        s::Value::List(xs) => {
             let xs: Vec<String> = xs.into_iter().map(show).collect();
             format!("[{}]", xs.join(","))
         }
-        s::Dyn::Map(m) => {
+        s::Value::Map(m) => {
             let mut e: Vec<String> = m
                 .into_iter()
                 .map(|(k, v)| format!("{k:?}:{}", show(v)))

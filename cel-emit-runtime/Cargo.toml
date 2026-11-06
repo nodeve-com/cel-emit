@@ -21,6 +21,8 @@ too_many_lines = "warn"
 civil = ["dep:chrono-tz", "dep:jiff"]
 
 [dependencies]
+# The value of any kind and null; its serde code reads and writes it, and its text forms.
+any-value = { path = "../../any-value", version = "0.1.0" }
 chrono-tz = { version = "0.10", optional = true }
 jiff = { version = "0.2", default-features = false, features = ["std"], optional = true }
 # RE2's syntax without Unicode tables: linear-time matching, small enough to link into each build.
@@ -32,8 +34,6 @@ libm = "0.2"
 # Timestamps and durations, and civil time from an instant and an offset; no clock, no zone
 # database (src/time.rs).
 chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"] }
-# A duration's text: an optional sign, then its units (src/time/parse.rs).
-humantime = "2"
 # `base64.encode` and `base64.decode`: no std, its `alloc` for the owned output.
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 # `json.decode` and `json.encode` (src/json.rs): the parser and writer, floats parsed to the

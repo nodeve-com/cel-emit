@@ -15,6 +15,7 @@ use crate::{Error, Result};
 pub mod civil;
 mod parse;
 
+pub use any_value::{duration_text, timestamp_text};
 pub use parse::{parse_duration, parse_timestamp};
 
 pub mod zone;
@@ -42,11 +43,6 @@ pub fn timestamp_millis(t: DateTime<Utc>) -> i64 {
     t.timestamp_millis()
 }
 
-/// `t` as RFC 3339 in UTC, with the fraction only where there is one.
-pub fn timestamp_text(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
-}
-
 fn timestamp_within(t: DateTime<Utc>) -> Result<DateTime<Utc>> {
     let ok = (MIN_SECONDS..=MAX_SECONDS).contains(&t.timestamp());
     crate::check(t, ok, Error::Overflow)
@@ -69,23 +65,6 @@ pub fn duration_from_millis(ms: i64) -> Result<TimeDelta> {
 /// `d` as ms, toward zero.
 pub fn duration_millis(d: TimeDelta) -> i64 {
     d.num_milliseconds()
-}
-
-/// `d` as seconds, with the fraction only where there is one: `1.5s`, `-7200s`.
-pub fn duration_text(d: TimeDelta) -> String {
-    let (secs, frac) = (d.num_seconds(), d.subsec_nanos());
-    let sign = if secs < 0 || frac < 0 { "-" } else { "" };
-    match frac {
-        0 => format!("{sign}{}s", secs.unsigned_abs()),
-        _ => {
-            let digits = format!("{:09}", frac.unsigned_abs());
-            format!(
-                "{sign}{}.{}s",
-                secs.unsigned_abs(),
-                digits.trim_end_matches('0')
-            )
-        }
-    }
 }
 
 fn duration_within(d: TimeDelta) -> Result<TimeDelta> {

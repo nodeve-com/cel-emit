@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::{DateTime, Dyn, Error, Null, Result, TimeDelta, Utc};
+use crate::{DateTime, Error, Null, Result, TimeDelta, Utc, Value};
 
 /// A type `==` compares.
 pub trait Equal {
@@ -61,19 +61,19 @@ impl<T: Order + ?Sized> Order for &T {
 /// Values of one kind order as that kind does, a float32 as a double; values of different kinds,
 /// and null, lists, and maps, are [`Error::Function`]. Only `sort` reads this: `<` over a dyn
 /// stays refused in lowering.
-impl Order for Dyn {
-    fn order(&self, other: &Dyn) -> Result<Option<Ordering>> {
+impl Order for Value {
+    fn order(&self, other: &Value) -> Result<Option<Ordering>> {
         match (self, other) {
-            (Dyn::Bool(a), Dyn::Bool(b)) => a.order(b),
-            (Dyn::Int(a), Dyn::Int(b)) => a.order(b),
-            (Dyn::UInt(a), Dyn::UInt(b)) => a.order(b),
-            (Dyn::Double(a), Dyn::Double(b)) => a.order(b),
-            (Dyn::Double(a), Dyn::Float32(b)) => a.order(&f64::from(*b)),
-            (Dyn::Float32(a), Dyn::Double(b)) => f64::from(*a).order(b),
-            (Dyn::Float32(a), Dyn::Float32(b)) => f64::from(*a).order(&f64::from(*b)),
-            (Dyn::Str(a), Dyn::Str(b)) => a.order(b),
-            (Dyn::Timestamp(a), Dyn::Timestamp(b)) => a.order(b),
-            (Dyn::Duration(a), Dyn::Duration(b)) => a.order(b),
+            (Value::Bool(a), Value::Bool(b)) => a.order(b),
+            (Value::Int(a), Value::Int(b)) => a.order(b),
+            (Value::UInt(a), Value::UInt(b)) => a.order(b),
+            (Value::Double(a), Value::Double(b)) => a.order(b),
+            (Value::Double(a), Value::Float32(b)) => a.order(&f64::from(*b)),
+            (Value::Float32(a), Value::Double(b)) => f64::from(*a).order(b),
+            (Value::Float32(a), Value::Float32(b)) => f64::from(*a).order(&f64::from(*b)),
+            (Value::Str(a), Value::Str(b)) => a.order(b),
+            (Value::Timestamp(a), Value::Timestamp(b)) => a.order(b),
+            (Value::Duration(a), Value::Duration(b)) => a.order(b),
             _ => Err(Error::Function),
         }
     }

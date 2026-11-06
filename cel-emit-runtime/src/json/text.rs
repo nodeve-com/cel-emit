@@ -3,8 +3,8 @@
 //! value forms for the object, and nothing writes twice.
 
 use super::write;
-use crate::dynamic::Dyn;
 use crate::Result;
+use crate::Value;
 
 /// Compact JSON text being written.
 #[derive(Default)]
@@ -80,7 +80,7 @@ impl Text {
     }
 
     /// Writes `x`, or `Error::Range` where it holds a NaN or an infinity.
-    pub fn value(&mut self, x: Dyn) -> Result<()> {
+    pub fn value(&mut self, x: Value) -> Result<()> {
         write::value(&mut self.0, &x)
     }
 
@@ -91,22 +91,22 @@ impl Text {
 
     /// Writes the int `x`.
     pub fn int(&mut self, x: i64) -> Result<()> {
-        write::value(&mut self.0, &Dyn::Int(x))
+        write::value(&mut self.0, &Value::Int(x))
     }
 
     /// Writes the uint `x`.
     pub fn uint(&mut self, x: u64) -> Result<()> {
-        write::value(&mut self.0, &Dyn::UInt(x))
+        write::value(&mut self.0, &Value::UInt(x))
     }
 
     /// Writes the double `x`, or `Error::Range` where it is NaN or infinite.
     pub fn double(&mut self, x: f64) -> Result<()> {
-        write::value(&mut self.0, &Dyn::Double(x))
+        write::value(&mut self.0, &Value::Double(x))
     }
 
     /// Writes the bool `x`.
     pub fn bool(&mut self, x: bool) -> Result<()> {
-        write::value(&mut self.0, &Dyn::Bool(x))
+        write::value(&mut self.0, &Value::Bool(x))
     }
 
     /// The text written.
