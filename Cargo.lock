@@ -14,6 +14,7 @@ dependencies = [
 [[package]]
 name = "any-value"
 version = "0.1.0"
+source = "git+https://github.com/nodeve-com/any-value?rev=9613b7f1b06773f110b9d9b9f9a1ba6a91f938d2#9613b7f1b06773f110b9d9b9f9a1ba6a91f938d2"
 dependencies = [
  "chrono",
  "humantime",
@@ -561,7 +562,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "schema-emit"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=203b67680ea888de58c59af2df5c728787109df3#203b67680ea888de58c59af2df5c728787109df3"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=0f2835590d6ac51bad837e72977de9aaca36769c#0f2835590d6ac51bad837e72977de9aaca36769c"
 dependencies = [
  "iri-string",
  "pattern-emit",
@@ -572,11 +573,11 @@ dependencies = [
 [[package]]
 name = "schema-emit-runtime"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=203b67680ea888de58c59af2df5c728787109df3#203b67680ea888de58c59af2df5c728787109df3"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=0f2835590d6ac51bad837e72977de9aaca36769c#0f2835590d6ac51bad837e72977de9aaca36769c"
 dependencies = [
+ "any-value",
  "base64",
  "chrono",
- "humantime",
  "pattern-emit",
  "serde",
  "serde_json",

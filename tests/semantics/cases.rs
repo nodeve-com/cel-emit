@@ -88,7 +88,7 @@ impl Cases {
     }
 
     /// `source` over `inputs`, returning `ty`, gives `want`.
-    pub fn gives_as(&mut self, source: &str, ty: Type, inputs: &[(&str, Value)], want: Got) {
+    pub fn gives_as(&mut self, (source, ty): (&str, Type), inputs: &[(&str, Value)], want: Got) {
         self.gives(source, inputs, want);
         if let Some(case) = self.0.last_mut() {
             case.result = Some(ty);
