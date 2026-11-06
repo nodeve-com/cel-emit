@@ -12,6 +12,8 @@ Given `temp` (v0) and `limit` (v1) as doubles, the CEL string `temp > limit ? "h
 
 A message is the caller's type: cel-emit type-checks its fields, and [`emit::Messages`] names its Rust. The caller writes each struct [`emit::Items::messages`] lists.
 
+A result type works the same way. A number's **width** is the Rust size that holds it, such as `i8`. CEL computes in `int64`, `uint64`, and `float64`, and a [`types::Type::Narrow`] holds any other. [`lower::lower_as`] takes the type an expression returns, and the translated code returns that type, holding each width as a message field does. A result type `int8` returns an `i8`; a value past `i8`'s range is cel-emit-runtime's `Error::Range`, and a `float32` rounds. A list, a map, an optional, or a nullable holds the width of each element or value it carries, by the same rule.
+
 Each `s::` piece is a ready-made CEL operation from **cel-emit-runtime**, cel-emit's companion library. **cel-core** is cel-emit's front end: it parses the text and type-checks it, and cel-emit translates the tree and types it gets back. A mistake such as `temp > "x"` stops there. cel-core runs only during translation, so the built program doesn't contain it; its interpreter runs only in cel-emit's tests.
 
 ## Why
