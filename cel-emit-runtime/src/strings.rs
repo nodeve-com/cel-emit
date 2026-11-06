@@ -129,31 +129,39 @@ pub fn matches_table(pattern: &'static Pattern, s: &str) -> Result<bool> {
 /// Patterns the cache holds at most.
 const SLOTS: usize = 8;
 
-/// Each pattern compiled; never freed.
-static CACHE: Mutex<[Option<Regex>; SLOTS]> = Mutex::new([const { None }; SLOTS]);
+/// Compiled patterns, each kept once while there is room; never freed.
+struct Cache(Mutex<[Option<Regex>; SLOTS]>);
+
+impl Cache {
+    const fn new() -> Self {
+        Cache(Mutex::new([const { None }; SLOTS]))
+    }
+
+    /// `re` from the cache, compiled into it where there is room; none where it isn't a pattern
+    /// or can't be cached.
+    fn get(&self, re: &str) -> Option<Regex> {
+        let mut cache = self.0.try_lock().ok()?;
+        if let Some(r) = cache.iter().flatten().find(|r| r.as_str() == re) {
+            return Some(r.clone());
+        }
+        let slot = cache.iter_mut().find(|e| e.is_none())?;
+        let r = Regex::new(re).ok()?;
+        *slot = Some(r.clone());
+        Some(r)
+    }
+}
+
+static CACHE: Cache = Cache::new();
 
 /// Whether `re`, RE2 syntax, matches anywhere in `s`: [`Error::Function`] when `re` isn't a
 /// pattern. A pattern compiles once while the cache has room; a cached one is only ever cloned,
 /// sharing its compiled program, its scratch from the call's heap.
 pub fn matches(s: &str, re: &str) -> Result<bool> {
-    let compiled = match cached(re) {
+    let compiled = match CACHE.get(re) {
         Some(r) => r,
         None => Regex::new(re).map_err(|_| Error::Function)?,
     };
     Ok(compiled.is_match(s))
-}
-
-/// `re` from the cache, compiled into it where there is room; none where it isn't a pattern or
-/// can't be cached.
-fn cached(re: &str) -> Option<Regex> {
-    let mut cache = CACHE.try_lock().ok()?;
-    if let Some(r) = cache.iter().flatten().find(|r| r.as_str() == re) {
-        return Some(r.clone());
-    }
-    let slot = cache.iter_mut().find(|e| e.is_none())?;
-    let r = Regex::new(re).ok()?;
-    *slot = Some(r.clone());
-    Some(r)
 }
 
 #[cfg(test)]
@@ -177,6 +185,23 @@ mod tests {
         assert_eq!(matches(s("the ACME"), s("ACME")), Ok(true));
         assert_eq!(matches(s("acme"), s("^ACME")), Ok(false));
         assert_eq!(matches(s("x"), s("(")), Err(Error::Function));
+    }
+
+    #[test]
+    fn a_pattern_compiles_once_while_the_cache_has_room() {
+        let cache = Cache::new();
+        assert!(cache.get("(").is_none());
+        for n in 0..SLOTS {
+            let re = format!("^p{n}$");
+            assert!(cache.get(&re).is_some());
+            assert!(cache.get(&re).is_some());
+        }
+        let held = cache.0.lock().unwrap();
+        let kept: Vec<_> = held.iter().flatten().map(Regex::as_str).collect();
+        let want: Vec<_> = (0..SLOTS).map(|n| format!("^p{n}$")).collect();
+        assert_eq!(kept, want);
+        drop(held);
+        assert!(cache.get("^full$").is_none());
     }
 
     #[test]
