@@ -48,7 +48,11 @@ impl Build {
             decls.names.insert(name.clone(), Name::var(ty.clone(), i));
         }
         let source = &case.source;
-        cel_emit::lower(source, &decls).unwrap_or_else(|e| panic!("{source}: {e}"))
+        let lowered = match &case.result {
+            Some(ty) => cel_emit::lower_as(source, &decls, ty),
+            None => cel_emit::lower(source, &decls),
+        };
+        lowered.unwrap_or_else(|e| panic!("{source}: {e}"))
     }
 
     /// The Rust arguments `message` gives a case's function, one per binding.

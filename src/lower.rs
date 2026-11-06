@@ -30,6 +30,7 @@ mod number;
 mod optional;
 mod parts;
 mod pattern;
+mod result;
 mod scope;
 mod select;
 mod share;
@@ -37,10 +38,20 @@ mod special;
 mod value;
 
 pub use calls::{literal, ms};
+pub use result::lower_as;
 
 /// `source`, checked against `decls` and lowered: one value, which a message is too.
 pub fn lower(source: &str, decls: &Decls) -> Result<Typed, Error> {
     lowered(source, decls).map(|l| l.tree)
+}
+
+/// How the root of an expression lowers.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Root {
+    /// A map literal of string keys is a message of its entries.
+    Value,
+    /// A map literal is a map.
+    Map,
 }
 
 /// An expression lowered, and what its tree no longer says.
@@ -54,6 +65,10 @@ pub struct Lowered {
 
 /// [`lower`], keeping what the tree drops.
 pub fn lowered(source: &str, decls: &Decls) -> Result<Lowered, Error> {
+    lowered_at(source, decls, Root::Value)
+}
+
+pub(crate) fn lowered_at(source: &str, decls: &Decls, at: Root) -> Result<Lowered, Error> {
     let env = environment(decls);
     let params = crate::functions::params(env.functions().values());
     let ast = crate::macros::compile(&env, source).map_err(|e| Error::Invalid(describe(e)))?;
@@ -78,7 +93,10 @@ pub fn lowered(source: &str, decls: &Decls) -> Result<Lowered, Error> {
         paths: crate::functions::Index::new(&decls.functions),
         params,
     };
-    let tree = lower.value(root)?;
+    let tree = match at {
+        Root::Value => lower.value(root)?,
+        Root::Map => lower.expr(root)?,
+    };
     let tree = lower.share(tree)?;
     let map = yields_map(root);
     Ok(Lowered { tree, map })

@@ -39,6 +39,8 @@ struct Case {
     source: String,
     /// The bindings' types, where their values don't say.
     types: Option<Vec<(String, Type)>>,
+    /// The type the expression returns, where the case gives one.
+    result: Option<Type>,
     /// One program run takes these in order, sharing what the emitted code keeps between calls.
     messages: Vec<Vec<(String, Value)>>,
     want: Want,
@@ -69,6 +71,7 @@ impl Cases {
         self.0.push(Case {
             source: source.into(),
             types: None,
+            result: None,
             messages,
             want,
         });
@@ -82,6 +85,14 @@ impl Cases {
     /// `source` over `inputs` gives `want`, where cel-emit follows cel-go over cel-core.
     pub fn gives(&mut self, source: &str, inputs: &[(&str, Value)], want: Got) {
         self.push(source, &[inputs.to_vec()], Want::Exactly(want));
+    }
+
+    /// `source` over `inputs`, returning `ty`, gives `want`.
+    pub fn gives_as(&mut self, source: &str, ty: Type, inputs: &[(&str, Value)], want: Got) {
+        self.gives(source, inputs, want);
+        if let Some(case) = self.0.last_mut() {
+            case.result = Some(ty);
+        }
     }
 
     /// `source` over `inputs` holds no value.

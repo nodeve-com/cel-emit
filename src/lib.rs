@@ -21,7 +21,7 @@ pub mod walk;
 pub mod zone;
 
 pub use decls::{Arg, At, Decl, Decls, Expand, Expansion, Mismatch, Name, Overload};
-pub use lower::{lower, lowered, Lowered};
+pub use lower::{lower, lower_as, lowered, Lowered};
 pub use tree::{split, unbound, Node, Part, Split, Typed};
 pub use types::{Field, Type, Width};
 
