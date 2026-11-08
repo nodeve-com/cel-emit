@@ -8,8 +8,8 @@ use crate::cases::{check, list, map, refusal, s, Cases, Got};
 
 /// Only here: a negative index errs in `xs[i]` and holds nothing in `xs[?i]`, where cel-core
 /// counts from the end; `math.pow` and `math.sum` over lists and maps match cel-core, a sum of
-/// an empty list is zero, and an int sum overflows; a fold of no values is absent; `math.mean`
-/// adds as doubles, and of no values is an error.
+/// an empty list is zero, and an int sum overflows; a fold of no values is absent; the other
+/// statistics read ints as doubles, and of too few values are an error.
 #[test]
 fn lists_follow_cel_go_where_cel_core_differs() {
     check(|cases| {
@@ -18,6 +18,8 @@ fn lists_follow_cel_go_where_cel_core_differs() {
         cases.absent("math.greatest(xs.map(x, x * 2.0))", &[("xs", list(vec![]))]);
         map_sums(cases);
         means(cases);
+        spreads(cases);
+        percentiles(cases);
     });
 }
 
@@ -92,6 +94,48 @@ fn means(cases: &mut Cases) {
     cases.gives("math.mean(xs.map(x, x * 2.0))", &empty, Got::Error);
     let big = (i64::MAX as f64 * 2.0 + 1.0) / 3.0;
     cases.gives("math.mean(xs)", &ints, Got::Value(D(big)));
+}
+
+fn spreads(cases: &mut Cases) {
+    let ints = [(
+        "xs",
+        list(vec![I(2), I(4), I(4), I(4), I(5), I(5), I(7), I(9)]),
+    )];
+    let one = [("xs", list(vec![D(5.0)]))];
+    cases.gives("math.variance(xs)", &ints, Got::Value(D(32.0 / 7.0)));
+    cases.gives("math.stddev([1.0, 3.0])", &[], Got::Value(D(2f64.sqrt())));
+    cases.gives(
+        "math.variance(xs.map(x, x * 2))",
+        &ints,
+        Got::Value(D(128.0 / 7.0)),
+    );
+    cases.gives(
+        "math.stddev(xs.filter(x, x > 5))",
+        &ints,
+        Got::Value(D(2f64.sqrt())),
+    );
+    cases.gives("math.variance(xs)", &one, Got::Error);
+    cases.gives("math.stddev(xs.map(x, x))", &one, Got::Error);
+}
+
+fn percentiles(cases: &mut Cases) {
+    let ints = [("xs", list(vec![I(5), I(1), I(4), I(2), I(3)]))];
+    let empty = [("xs", list(vec![]))];
+    cases.gives("math.median(xs)", &ints, Got::Value(D(3.0)));
+    cases.gives("math.median([4.0, 1.0, 3.0, 2.0])", &[], Got::Value(D(2.5)));
+    cases.gives(
+        "math.median(xs.filter(x, x > 1))",
+        &ints,
+        Got::Value(D(3.5)),
+    );
+    cases.gives("math.percentile(xs, 90)", &ints, Got::Value(D(4.6)));
+    cases.gives(
+        "math.percentile([10.0, 20.0], 25.0)",
+        &[],
+        Got::Value(D(12.5)),
+    );
+    cases.gives("math.percentile(xs, 101)", &ints, Got::Error);
+    cases.gives("math.median(xs.map(x, x * 2.0))", &empty, Got::Error);
 }
 
 /// Only here: compile refuses a `math` call whose operands no single declared type holds.

@@ -13,6 +13,10 @@ Beyond CEL's standard library, expressions get CEL's math, strings, optional-val
 - `json.encode(value)`: a value as JSON text; NaN or infinity an error. With `Decls.skip_failed`, it leaves out a failing field, unless none remains.
 - `list.first()` and `list.last()`: a list's first or last item, if it has one.
 - `math.mean(list)`: the average of a list of ints or doubles, as a double; an empty list is an error.
+- `math.median(list)`: the middle value of a list of ints or doubles, or the mean of the two in the middle, as a double; an empty list is an error.
+- `math.percentile(list, p)`: the value `p` percent of the way through a list of ints or doubles, sorted, `p` an int or double from 0 to 100, as a double: between two values, by a straight line between them, as spreadsheets and numpy give it. An empty list or `p` outside 0 to 100 is an error.
 - `math.pow(x, y)`: `x` to the power `y`.
+- `math.stddev(list)`: the square root of `math.variance`.
 - `math.sum(list)`: a list of numbers added up; an empty list sums to zero.
+- `math.variance(list)`: a sample's variance of a list of ints or doubles, as a double: the squared distances from the mean summed, over one fewer than the count. Fewer than two values is an error.
 - The lists extension is cel-go's, `sortBy` included, but `sort()` of a list of dyn orders one kind only and `flatten(depth)` takes a list of dyn.

@@ -1,19 +1,22 @@
 //! Int and double arithmetic, and CEL's math extension (`math.*`) as cel-go defines it, plus
-//! `math.pow`, `math.sum`, and `math.mean`. Int arithmetic is checked; a double's follows IEEE
+//! `math.pow` and the statistics of a list. Int arithmetic is checked; a double's follows IEEE
 //! 754. `math.pow` runs through `libm` on every target, so builds give identical results. Uint
-//! arithmetic is in `uint`, sums and means in `sum`.
+//! arithmetic is in `uint`, statistics in `stats`.
 
 use std::cmp::Ordering::{self, Greater, Less};
 
 use crate::{Error, Result};
 
-pub use sum::{mean_list, mean_of, sum_list, sum_of, Sum};
+pub use stats::{
+    mean_list, mean_of, median_list, percentile_list, stddev_list, stddev_of, sum_list, sum_of,
+    variance_list, variance_of, Sum,
+};
 pub use uint::{
     abs_uint, add_uint, bit_and_uint, bit_not_uint, bit_or_uint, bit_xor_uint, divide_uint,
     modulo_uint, multiply_uint, shift_left_uint, shift_right_uint, sign_uint, subtract_uint,
 };
 
-mod sum;
+mod stats;
 mod uint;
 
 pub fn add_int(a: i64, b: i64) -> Result<i64> {

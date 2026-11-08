@@ -6,8 +6,10 @@ pub use cel_emit_runtime::Error as Fail;
 
 use crate::types::Type;
 
+mod reduce;
 mod split;
 
+pub use reduce::Reduce;
 pub use split::{split, unbound, Split};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -120,47 +122,6 @@ pub enum Node {
 }
 
 /// An object [`Node::Encode`] writes: its members in order.
-/// What a [`Node::Reduce`] folds its items to, each by a cel-emit-runtime function over an
-/// iterator of results.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Reduce {
-    /// `math.greatest`: over none, absent.
-    Greatest,
-    /// `math.least`: over none, absent.
-    Least,
-    /// `math.sum`: over none, zero.
-    Sum,
-    /// `math.mean`: over none, an error.
-    Mean,
-    /// How many items it gives.
-    Count,
-}
-
-impl Reduce {
-    /// The fold a call to `name` with one list argument makes, if any.
-    pub fn named(name: &str) -> Option<Reduce> {
-        Some(match name {
-            "math.greatest" => Reduce::Greatest,
-            "math.least" => Reduce::Least,
-            "math.sum" => Reduce::Sum,
-            "math.mean" => Reduce::Mean,
-            "size" => Reduce::Count,
-            _ => return None,
-        })
-    }
-
-    /// Its function's path under cel-emit-runtime.
-    pub fn path(self) -> &'static str {
-        match self {
-            Reduce::Greatest => "math::greatest_of",
-            Reduce::Least => "math::least_of",
-            Reduce::Sum => "math::sum_of",
-            Reduce::Mean => "math::mean_of",
-            Reduce::Count => "collections::count",
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Object {
     /// Values its members read as locals, each computed once, first to last: one that fails

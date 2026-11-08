@@ -105,4 +105,17 @@ pub(super) const FUNCTIONS: &[Std] = &[
     Std::reads("math_sum_list_double", "math::sum_list"),
     Std::reads("math_mean_list_int", "math::mean_list"),
     Std::reads("math_mean_list_double", "math::mean_list"),
+    Std::reads("math_variance_list_int", "math::variance_list"),
+    Std::reads("math_variance_list_double", "math::variance_list"),
+    Std::reads("math_stddev_list_int", "math::stddev_list"),
+    Std::reads("math_stddev_list_double", "math::stddev_list"),
+    Std::reads("math_median_list_int", "math::median_list"),
+    Std::reads("math_median_list_double", "math::median_list"),
+    Std::reads("math_percentile_list_int_int", "math::percentile_list"),
+    Std::reads("math_percentile_list_int_double", "math::percentile_list"),
+    Std::reads("math_percentile_list_double_int", "math::percentile_list"),
+    Std::reads(
+        "math_percentile_list_double_double",
+        "math::percentile_list",
+    ),
 ];
