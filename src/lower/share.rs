@@ -88,7 +88,7 @@ fn parts(t: &mut Typed) -> (Vec<&mut Typed>, Vec<&mut Typed>) {
     match &mut t.node {
         thin!(x) | Node::Written(x) | Node::Matches(x, ..) => (vec![&mut **x], Vec::new()),
         // A fold's comprehension stays under it: only its parts can leave.
-        Node::Extreme(_, x) | Node::Sum(x) | Node::Mean(x) | Node::Count(x) => parts(x),
+        Node::Reduce(_, x) => parts(x),
         Node::Call(id, args) => call_parts(id, args),
         Node::List(items) => (items.iter_mut().collect(), Vec::new()),
         Node::ListOpt(items) => (items.iter_mut().map(|(x, _)| x).collect(), Vec::new()),

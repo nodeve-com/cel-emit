@@ -135,7 +135,12 @@ impl<'a> Lower<'a> {
         if !typed_scalar(&elem) {
             return unsupported(format!("a math extreme of {}", elem.display()));
         }
-        Ok(Typed::new(elem, Node::Extreme(greatest, list)))
+        let reduce = if greatest {
+            Reduce::Greatest
+        } else {
+            Reduce::Least
+        };
+        Ok(Typed::new(elem, Node::Reduce(reduce, list)))
     }
 
     /// `e`'s typed overload on `args`, giving `ty`.

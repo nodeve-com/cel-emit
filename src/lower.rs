@@ -7,7 +7,7 @@ use cel_core::{CelType, CheckResult};
 
 use crate::decls::{At, Decls, Name};
 use crate::env::{environment, register};
-use crate::tree::{Node, Part, Typed};
+use crate::tree::{Node, Part, Reduce, Typed};
 use crate::types::{of_cel, Type};
 use crate::Error;
 

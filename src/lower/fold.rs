@@ -95,7 +95,7 @@ fn fold_node(list: Box<Typed>, lowered: Lowered) -> Result<Node, Error> {
         (Fold::Map(Some(_)), Some(pred)) => Node::Keep(list, pred, body),
         (Fold::One, Some(pred)) => {
             let kept = Typed::new(Type::list(Type::Bool), Node::Keep(list, pred, body));
-            let count = Typed::new(Type::Int, Node::Count(Box::new(kept)));
+            let count = Typed::new(Type::Int, Node::Reduce(Reduce::Count, Box::new(kept)));
             Typed::binary("==", count, Typed::int(1))
                 .ok_or_else(|| Error::Invalid("exists_one's count".into()))?
                 .node

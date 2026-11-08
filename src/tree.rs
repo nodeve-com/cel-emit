@@ -85,7 +85,7 @@ pub enum Node {
     /// The index of comprehension `n`.
     Position(usize),
     /// `body` for each element of a list or map (`map`, `transformList`): laid out as a list,
-    /// or under [`Node::Extreme`], [`Node::Sum`], [`Node::Mean`], or [`Node::Count`], folded as it goes.
+    /// or under [`Node::Reduce`], folded as it goes.
     Map(Box<Typed>, Box<Typed>),
     /// `body` for each element of a list or map where `pred` holds (`filter`, `map` with a
     /// predicate), as [`Node::Map`] gives it.
@@ -96,15 +96,8 @@ pub enum Node {
     /// Whether `body` holds for every element (`true`: `all`) or some (`exists`), an element's
     /// error absorbed as `&&` and `||` absorb one.
     All(bool, Box<Typed>, Box<Typed>),
-    /// `math.greatest` (`true`) or `math.least` of a [`Node::Map`] or [`Node::Keep`]: over none,
-    /// absent.
-    Extreme(bool, Box<Typed>),
-    /// `math.sum` of a [`Node::Map`] or [`Node::Keep`]: over none, zero.
-    Sum(Box<Typed>),
-    /// `math.mean` of a [`Node::Map`] or [`Node::Keep`]: over none, an error.
-    Mean(Box<Typed>),
-    /// How many items a [`Node::Map`] or [`Node::Keep`] gives.
-    Count(Box<Typed>),
+    /// A [`Node::Map`] or [`Node::Keep`] folded to one value as it goes.
+    Reduce(Reduce, Box<Typed>),
     /// A struct literal: the message's fields it sets, each by its place in the message's type, and
     /// whether it is a flagged (`?`) entry, whose value is an optional that sets the field where
     /// it holds one. A field no entry sets reads its zero value, as proto3 gives it.
@@ -127,6 +120,47 @@ pub enum Node {
 }
 
 /// An object [`Node::Encode`] writes: its members in order.
+/// What a [`Node::Reduce`] folds its items to, each by a cel-emit-runtime function over an
+/// iterator of results.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reduce {
+    /// `math.greatest`: over none, absent.
+    Greatest,
+    /// `math.least`: over none, absent.
+    Least,
+    /// `math.sum`: over none, zero.
+    Sum,
+    /// `math.mean`: over none, an error.
+    Mean,
+    /// How many items it gives.
+    Count,
+}
+
+impl Reduce {
+    /// The fold a call to `name` with one list argument makes, if any.
+    pub fn named(name: &str) -> Option<Reduce> {
+        Some(match name {
+            "math.greatest" => Reduce::Greatest,
+            "math.least" => Reduce::Least,
+            "math.sum" => Reduce::Sum,
+            "math.mean" => Reduce::Mean,
+            "size" => Reduce::Count,
+            _ => return None,
+        })
+    }
+
+    /// Its function's path under cel-emit-runtime.
+    pub fn path(self) -> &'static str {
+        match self {
+            Reduce::Greatest => "math::greatest_of",
+            Reduce::Least => "math::least_of",
+            Reduce::Sum => "math::sum_of",
+            Reduce::Mean => "math::mean_of",
+            Reduce::Count => "collections::count",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Object {
     /// Values its members read as locals, each computed once, first to last: one that fails

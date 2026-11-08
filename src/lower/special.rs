@@ -48,16 +48,12 @@ impl<'a> Lower<'a> {
         args: &'a [SpannedExpr],
     ) -> Result<Option<Node>, Error> {
         let mapped = |l: &SpannedExpr| matches!(l.node, Expr::Comprehension(_));
-        match (name, receiver, args) {
-            ("math.greatest" | "math.least", None, [list]) if mapped(list) => {
-                let greatest = name == "math.greatest";
-                Ok(self.mapped(list)?.map(|l| Node::Extreme(greatest, l)))
-            }
-            ("math.sum", None, [list]) if mapped(list) => Ok(self.mapped(list)?.map(Node::Sum)),
-            ("math.mean", None, [list]) if mapped(list) => Ok(self.mapped(list)?.map(Node::Mean)),
-            ("size", Some(list), []) | ("size", None, [list]) if mapped(list) => {
-                Ok(self.mapped(list)?.map(Node::Count))
-            }
+        let list = match (receiver, args) {
+            (Some(list), []) | (None, [list]) if mapped(list) => Some(list),
+            _ => None,
+        };
+        match (list, Reduce::named(name)) {
+            (Some(list), Some(reduce)) => Ok(self.mapped(list)?.map(|l| Node::Reduce(reduce, l))),
             _ => self.optional_form(name, receiver, args),
         }
     }

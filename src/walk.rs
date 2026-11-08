@@ -90,13 +90,7 @@ pub(crate) use converting;
 /// A pattern for the comprehensions and the folds over them.
 macro_rules! iterating {
     () => {
-        Node::Map(..)
-            | Node::Keep(..)
-            | Node::All(..)
-            | Node::Extreme(..)
-            | Node::Sum(_)
-            | Node::Mean(_)
-            | Node::Count(_)
+        Node::Map(..) | Node::Keep(..) | Node::All(..) | Node::Reduce(..)
     };
 }
 pub(crate) use iterating;
@@ -177,13 +171,7 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
     f(t);
     match &t.node {
         leaf!() => {}
-        thin!(x)
-        | Node::Written(x)
-        | Node::Matches(x, ..)
-        | Node::Extreme(_, x)
-        | Node::Sum(x)
-        | Node::Mean(x)
-        | Node::Count(x) => nodes(x, f),
+        thin!(x) | Node::Written(x) | Node::Matches(x, ..) | Node::Reduce(_, x) => nodes(x, f),
         Node::ListOpt(items) => items.iter().for_each(|(a, _)| nodes(a, f)),
         Node::MapOpt(entries) => entries.iter().for_each(|(k, v, _)| each([k, v], f)),
         Node::And(a, b)

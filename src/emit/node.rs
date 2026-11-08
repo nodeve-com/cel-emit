@@ -141,14 +141,8 @@ impl Emitter {
                 let body = self.inside(body, vars)?;
                 format!("{STD}::collections::all({iter}, {every}, |{bind}| {STD}::ok({body}))?")
             }
-            Node::Extreme(greatest, map) => {
-                let f = if *greatest { "greatest_of" } else { "least_of" };
-                format!("{STD}::math::{f}({})?", self.mapped(map, vars)?)
-            }
-            Node::Sum(map) => format!("{STD}::math::sum_of({})?", self.mapped(map, vars)?),
-            Node::Mean(map) => format!("{STD}::math::mean_of({})?", self.mapped(map, vars)?),
-            Node::Count(map) => {
-                format!("{STD}::collections::count({})?", self.mapped(map, vars)?)
+            Node::Reduce(reduce, map) => {
+                format!("{STD}::{}({})?", reduce.path(), self.mapped(map, vars)?)
             }
             _ => return not_a("comprehension", t),
         })
