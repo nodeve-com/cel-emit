@@ -5,7 +5,7 @@ What cel-emit writes should cost about what a person would write for the same jo
 ## Layout
 
 - An example with a reference holds `<name>.rs` beside its `<name>.cel`: two public functions, in order, the shape of the generated program's `decode` and `expression`. The first reads the example's input text into the reference's own input type; the second takes that input and gives the output text. It measures the example, never runs it: the example still needs no Rust.
-- The harness takes every example holding both.
+- The harness takes every example holding both. A variant, `<name>-<variant>.cel`, does the same job another way and measures against the same `<name>.rs`; `<name>-<variant>.functions.json` beside it holds the functions it calls, as the CLI's `--functions` reads them.
 - The interpreter program runs cel-core at its best: the harness parses and checks the example's `.cel` ahead of time and saves the result as a `CheckedExpr` protobuf (`cel-core-proto`), the way cel-emit translates ahead of time. The program loads that saved expression, turns the input text into cel-core values, evaluates, and writes the output text. Its cost never includes parse or check.
 - Each program counts by phase, each phase its own `measured_<phase>` function that callgrind collects inside: `decode`, input text to the program's typed input (serde_json and schema-emit's decode, the reference's serde derive, or cel-core values); `expression`, that input to output text, its JSON encode included; and the interpreter's `load`, which an embedder pays once, where it pays decode and expression per record. Decode hands its value to expression, so neither phase's cost lands in the other.
 
@@ -15,7 +15,7 @@ Each program, generated, by hand, and interpreted, built with the same rustc and
 
 | Measure | What | Where |
 | - | - | - |
-| Source | lines and bytes of Rust, the generated program's own and the reference's | every test run |
+| Source | lines and bytes of Rust: the generated program's decode, schema-emit's, apart from its expression and the functions that calls, cel-emit's; and the reference's | every test run |
 | Compile effort | LLVM IR lines and defined functions, for the crate and for the expression's function alone, from `--emit=llvm-ir`; generated and by hand only | every test run |
 | Binary | bytes of each stripped release executable | every test run |
 | Allocations | calls and bytes per phase, counted by a `#[global_allocator]` the harness adds to each build, and a record's total, decode and expression | every test run |

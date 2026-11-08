@@ -4,7 +4,7 @@ What expressions get beyond CEL's standard library.
 
 An embedder also adds expansions, which rewrite a call as it lowers from an argument's name or literal text, as a CEL macro does. An embedder's function may take a message type as its last argument, as in `f(x, Message)`: the type picks the overload declared for that message and passes nothing at run time. An unknown type is an error. The function may share a name with one of cel-emit's, such as `json.decode`: the type argument tells them apart.
 
-An embedder may also write a function in CEL: its name, its parameters in order, each a name and a type, and a body that reads only them. cel-emit checks the body once and writes it as one Rust function returning the body's type, which every call checks its arguments against and runs. An error inside the body is the call's error. A body may call another written this way, never in a cycle.
+An embedder may also write a function in CEL: its name, its parameters in order, each a name and a type, and a body that reads only them. cel-emit checks the body once and writes it as one Rust function returning the body's type, which every call checks its arguments against and runs. An error inside the body is the call's error. A body whose value is a part of a parameter returns it by reference, so a call copies nothing. A body may call another written this way, never in a cycle.
 
 Beyond CEL's standard library, expressions get CEL's math, strings, optional-value, and lists extensions, plus:
 
