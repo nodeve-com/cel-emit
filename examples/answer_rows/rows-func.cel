@@ -1,0 +1,17 @@
+input.options.map(row, {
+  "origin": location(input.locations, row.legs[0].location.id).locode,
+  "dest": location(input.locations, row.legs[0].end_location.id).locode,
+  "depart_utc": to_utc(row.start_date + "T" + row.start_time, row.timezone),
+  "arrive_utc": arrival(row.end_date + "T" + row.end_time, row.legs[0].end_location.id, input.locations),
+  "depart_local": row.start_date + "T" + row.start_time,
+  "arrive_local": row.end_date + "T" + row.end_time,
+  "fare": input.products.filter(p, p.id == row.product_id)[0].title,
+  "vessel": has(row.venue) ? row.venue.title : null,
+  "currency": input.currency,
+  "total_minor": row.pricing.total,
+  "best_total_minor": row.pricing_potential_best != null ? row.pricing_potential_best.total : null,
+  "duration_min": (arrival(row.end_date + "T" + row.end_time, row.legs[0].end_location.id, input.locations) - to_utc(row.start_date + "T" + row.start_time, row.timezone)).getMinutes(),
+  "active_period_min": iso_duration(input.products.filter(p, p.id == row.product_id && p.multi_usage_rules.active_period.type == "period")[0].multi_usage_rules.active_period.period).getMinutes(),
+  "seats_available": row.capacities.available,
+  "bookable": row.status == "available",
+})

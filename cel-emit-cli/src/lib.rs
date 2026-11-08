@@ -2,7 +2,7 @@
 
 use cel_emit::emit::{Emitter, Messages, Vars};
 use cel_emit::functions::Function;
-use cel_emit::{lower, Decl, Decls, Error, Field, Name, Type, Written};
+use cel_emit::{lower, Body, Decl, Decls, Error, Field, Name, Type, Written};
 use schema_emit::emit::std_form::{self, names, StdForm};
 use schema_emit::ir::Schema;
 
@@ -58,11 +58,17 @@ fn function(name: &str, param: &[Type], result: Type) -> Function {
     }
 }
 
+/// What a program's expression checks against, and the functions written in CEL it calls,
+/// checked once.
+pub struct Declared {
+    pub decls: Decls,
+    pub bodies: Vec<Body>,
+}
+
 /// What every program declares: the functions, those `written` in CEL, and the one input `name`,
 /// of type `ty`.
-fn declarations(name: &str, ty: Type, written: Vec<Written>) -> Decls {
+fn declarations(name: &str, ty: Type, written: &[Written]) -> Result<Declared, String> {
     let mut decls = Decls {
-        written,
         functions: vec![
             function("to_utc", &[Type::String, Type::String], Type::Timestamp),
             function("iso_duration", &[Type::String], Type::Duration),
@@ -70,7 +76,9 @@ fn declarations(name: &str, ty: Type, written: Vec<Written>) -> Decls {
         ..Decls::default()
     };
     decls.names.insert(name.into(), Name::var(ty, 0));
-    decls
+    let bodies = cel_emit::written::check(written, &decls).map_err(|e| e.to_string())?;
+    decls.define(&bodies);
+    Ok(Declared { decls, bodies })
 }
 
 /// `source`, formatted.
@@ -96,13 +104,13 @@ pub fn program(
 /// `source`, CEL reading the one input `input`, as Rust: its expression and the items it uses.
 fn emitted(
     source: &str,
-    decls: &Decls,
+    declared: &Declared,
     input: &'static str,
     messages: Box<dyn Messages>,
 ) -> Result<(String, String), String> {
-    let tree = lower(source, decls).map_err(|e| e.to_string())?;
-    let mut emitter = Emitter::new(&decls.functions, messages);
-    emitter.define(decls).map_err(|e| e.to_string())?;
+    let tree = lower(source, &declared.decls).map_err(|e| e.to_string())?;
+    let mut emitter = Emitter::new(&declared.decls.functions, messages);
+    emitter.define(&declared.bodies);
     let output = emitter
         .expr(&tree, &Input(input))
         .map_err(|e| e.to_string())?;
@@ -150,7 +158,7 @@ pub fn encoded(expression: &str) -> String {
 
 /// What a program's expression checks against: the functions, and `input`, dynamic JSON or with
 /// `schema` the type it describes.
-pub fn declared(schema: Option<&str>, functions: Option<&str>) -> Result<Decls, String> {
+pub fn declared(schema: Option<&str>, functions: Option<&str>) -> Result<Declared, String> {
     let ty = match schema {
         Some(schema) => {
             let (ir, root) = lowered(schema)?;
@@ -158,8 +166,7 @@ pub fn declared(schema: Option<&str>, functions: Option<&str>) -> Result<Decls, 
         }
         None => Type::Dyn,
     };
-    let written = written(functions, schema)?;
-    Ok(declarations("input", ty, written))
+    declarations("input", ty, &written(functions, schema)?)
 }
 
 /// The functions a `--functions` file holds, none without one.
@@ -168,8 +175,9 @@ fn written(functions: Option<&str>, schema: Option<&str>) -> Result<Vec<Written>
 }
 
 fn dynamic(expression: &str, functions: Option<&str>) -> Result<String, String> {
-    let decls = declared(None, functions)?;
-    let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(NoMessages))?;
+    let declared = declared(None, functions)?;
+    let messages = Box::new(NoMessages);
+    let (output, items) = emitted(&encoded(expression), &declared, "input", messages)?;
     let entry = Entry {
         decode: "s::json::decode(text).map_err(|e| format!(\"{e:?}\"))",
         input: "s::Value",
@@ -197,7 +205,7 @@ fn lowered(schema: &str) -> Result<(Schema, usize), String> {
 fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<String, String> {
     let (ir, root) = lowered(schema)?;
     let ty = schema_types::record(&ir, root).map_err(|e| e.to_string())?;
-    let decls = declarations("input", ty, written(functions, Some(schema))?);
+    let declared = declarations("input", ty, &written(functions, Some(schema))?)?;
     let named = names(&ir);
     let name = |i: usize| named.get(i).cloned().unwrap_or_default();
     let types = StdForm::new(&ir, &name)
@@ -206,7 +214,7 @@ fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<Stri
     let messages = Models {
         records: records(&ir, &named),
     };
-    let (output, items) = emitted(&encoded(expression), &decls, "input", Box::new(messages))?;
+    let (output, items) = emitted(&encoded(expression), &declared, "input", Box::new(messages))?;
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as __s; {types} }}");
     let entry = Entry {

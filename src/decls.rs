@@ -103,21 +103,6 @@ pub struct Expansion {
     pub mismatch: Mismatch,
 }
 
-/// A function written in CEL: its name, its parameters in order, each a name and a type, and a
-/// body that reads only them. Its result is its body's type. One Rust function emits for it,
-/// taking each parameter not `Copy` by reference, and returning `cel_emit_runtime::Result` of its
-/// result.
-#[derive(Clone, Debug)]
-pub struct Written {
-    /// The name an expression calls it by.
-    pub name: String,
-    pub params: Vec<(String, Type)>,
-    /// The body, in CEL.
-    pub cel: String,
-    /// The Rust path of the function: a call writes it, and the function's name is its last part.
-    pub path: String,
-}
-
 /// An expression's declarations.
 #[derive(Clone, Default)]
 pub struct Decls {
@@ -134,8 +119,6 @@ pub struct Decls {
     pub enums: BTreeMap<String, BTreeMap<String, i32>>,
     /// Functions beyond CEL's and cel-emit's own.
     pub functions: Vec<Function>,
-    /// Functions written in CEL.
-    pub written: Vec<Written>,
     /// Calls rewritten as they lower.
     pub expansions: Vec<Expansion>,
     /// `json.encode` of a message, struct literal, or map literal leaves out a field whose value
@@ -150,5 +133,12 @@ impl Decls {
             names,
             ..Decls::default()
         }
+    }
+
+    /// Declares each checked written function ([`crate::written::check`]), so an expression
+    /// calling one lowers against it.
+    pub fn define(&mut self, bodies: &[crate::written::Body]) {
+        self.functions
+            .extend(bodies.iter().map(crate::written::Body::function));
     }
 }

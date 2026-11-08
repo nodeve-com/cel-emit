@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use cel_core::{Activation, Value};
 use cel_emit::emit::Emitter;
-use cel_emit::{Decls, Error, Name, Type, Written};
+use cel_emit::{Body, Decls, Error, Name, Type, Written};
 use cel_emit_runtime as s;
 
 mod build;
@@ -214,9 +214,12 @@ pub fn check(fill: impl FnOnce(&mut Cases)) {
     let mut cases = Cases::default();
     fill(&mut cases);
     let types: Vec<_> = cases.0.iter().map(declared).collect();
+    let mut base = Decls::default();
+    base.messages.clone_from(&cases.1);
+    let bodies = cel_emit::written::check(&cases.2, &base).unwrap_or_else(|e| panic!("{e}"));
     let mut build = Build {
         messages: cases.1.clone(),
-        written: cases.2.clone(),
+        bodies,
         em: Emitter::new(&[], Box::new(crate::common::Positional)),
     };
     build.define();

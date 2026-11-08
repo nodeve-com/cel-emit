@@ -3,12 +3,15 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
+use super::source::Source;
+
 /// One phase's allocation calls, bytes, and peak bytes live.
 pub(super) type Counts = [usize; 3];
 
-/// What one program costs. Source and IR are only a generated program's and a reference's.
+/// What one program costs. Source and IR are only a generated program's and a reference's; a
+/// source's split is a generated program's.
 pub(super) struct Cost {
-    pub(super) source: Option<[usize; 2]>,
+    pub(super) source: Option<Source>,
     pub(super) ir: Option<Ir>,
     pub(super) binary: usize,
     pub(super) phases: Vec<(String, Counts)>,
@@ -66,15 +69,24 @@ type Measure = (String, Of);
 type Whole = fn(&Cost) -> Option<usize>;
 
 /// The measures of the program as a whole.
-const WHOLE: [(&str, Whole); 7] = [
-    ("Lines", |c| c.source.map(|s| s[0])),
-    ("Bytes", |c| c.source.map(|s| s[1])),
+const WHOLE: [(&str, Whole); 11] = [
+    ("Lines, decode", |c| split(c, |s| s.decode, 0)),
+    ("Lines, expression", |c| split(c, |s| s.expression, 0)),
+    ("Lines, whole", |c| c.source.as_ref().map(|s| s.whole[0])),
+    ("Bytes, decode", |c| split(c, |s| s.decode, 1)),
+    ("Bytes, expression", |c| split(c, |s| s.expression, 1)),
+    ("Bytes, whole", |c| c.source.as_ref().map(|s| s.whole[1])),
     ("IR lines", |c| c.ir.as_ref().map(|i| i.lines)),
     ("IR functions", |c| c.ir.as_ref().map(|i| i.defines)),
     ("Own IR lines", |c| c.ir.as_ref().map(|i| i.own_lines)),
     ("Own IR functions", |c| c.ir.as_ref().map(|i| i.own_defines)),
     ("Binary", |c| Some(c.binary)),
 ];
+
+/// `cost`'s source `part`, lines (0) or bytes (1), where it is split.
+fn split(cost: &Cost, part: fn(&Source) -> Option<[usize; 2]>, at: usize) -> Option<usize> {
+    cost.source.as_ref().and_then(part).map(|s| s[at])
+}
 
 /// Each phase a program may count, in the order it runs.
 const PHASES: [&str; 3] = ["load", "decode", "expression"];

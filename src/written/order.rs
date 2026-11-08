@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use cel_core::types::{Expr, SpannedExpr};
 
-use crate::decls::Written;
+use super::Written;
 use crate::Error;
 
 /// `all`, each function after those its body calls; a cycle is an error naming it.

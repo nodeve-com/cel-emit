@@ -22,7 +22,7 @@ impl Emitter {
                     self.reference(subject, true, vars)?
                 )
             }
-            _ if t.ty.copied() && place::by_reference(t) => format!("*{}", self.place(t, vars)?),
+            _ if t.ty.copied() && self.by_reference(t) => format!("*{}", self.place(t, vars)?),
             _ => format!("{}.clone()", place::receiver(&self.place(t, vars)?)),
         })
     }
@@ -45,7 +45,7 @@ impl Emitter {
         if args.iter().any(|a| a.ty.narrow()) && !narrow::writes_stored(id) {
             return self.stored_call(id, args, vars);
         }
-        if place::by_reference(t) {
+        if self.by_reference(t) {
             return Ok(format!("{}.clone()", self.place(t, vars)?));
         }
         if place::lends_optional(id) {

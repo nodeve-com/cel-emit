@@ -17,28 +17,50 @@ pub(super) fn lends_optional(id: &str) -> bool {
     matches!(id, "dyn_optional_get" | "dyn_chain")
 }
 
-/// Whether `t` emits as a reference already, so a read through it needs no `&`.
-pub(super) fn by_reference(t: &Typed) -> bool {
-    match &t.node {
-        Node::Local(_) | Node::Item(_, Part::Whole) | Node::First(..) => true,
-        Node::Call(id, _) => lends(id),
-        Node::FromDyn(_, ty) => dyn_list(ty),
-        _ => false,
-    }
-}
-
 fn dyn_list(ty: &Type) -> bool {
     matches!(ty, Type::List(of) if **of == Type::Dyn)
 }
 
-/// Whether a reference to `t` outlives the statement reading it: what it reads is no temporary.
-pub(super) fn rooted(t: &Typed) -> bool {
-    match &t.node {
-        Node::Var(_) | Node::Local(_) | Node::Item(..) => true,
-        Node::Field(x, _) | Node::First(x, _) => rooted(x),
-        Node::FromDyn(x, ty) => dyn_list(ty) && rooted(x),
-        Node::Call(id, args) => lends(id) && args.first().is_some_and(rooted),
-        _ => false,
+impl Emitter {
+    /// Whether overload `id` gives a reference: into its first argument, or, for a written
+    /// function returning a borrowed part, into its by-reference arguments.
+    fn lends(&self, id: &str) -> bool {
+        lends(id) || self.lent.iter().any(|l| l == id)
+    }
+
+    /// Whether `t` emits as a reference already, so a read through it needs no `&`.
+    pub(super) fn by_reference(&self, t: &Typed) -> bool {
+        match &t.node {
+            Node::Local(_) | Node::Item(_, Part::Whole) | Node::First(..) => true,
+            Node::Call(id, _) => self.lends(id),
+            Node::FromDyn(_, ty) => dyn_list(ty),
+            Node::Cond(_, a, b) => self.rooted(a) && self.rooted(b),
+            _ => false,
+        }
+    }
+
+    /// Whether a reference to `t` outlives the statement reading it: what it reads is no temporary.
+    pub(super) fn rooted(&self, t: &Typed) -> bool {
+        match &t.node {
+            Node::Var(_) | Node::Local(_) | Node::Item(..) => true,
+            Node::Field(x, _) | Node::First(x, _) => self.rooted(x),
+            Node::FromDyn(x, ty) => dyn_list(ty) && self.rooted(x),
+            Node::Call(id, args) if lends(id) => args.first().is_some_and(|a| self.rooted(a)),
+            Node::Call(id, args) if self.lends(id) => args
+                .iter()
+                .filter(|a| !a.ty.copied())
+                .all(|a| self.rooted(a)),
+            Node::Cond(_, a, b) => self.rooted(a) && self.rooted(b),
+            _ => false,
+        }
+    }
+
+    /// Whether `body`, a written function's, is a part of its parameters: a reference to it
+    /// outlives the call, so the function returns it by reference. A copied value returns as is.
+    pub(super) fn borrowed(&self, body: &Typed) -> bool {
+        !body.ty.copied()
+            && !matches!(body.node, Node::Local(_) | Node::Item(..))
+            && self.rooted(body)
     }
 }
 
@@ -70,7 +92,7 @@ impl Emitter {
                 )
             }
             (_, Type::String) if plain => format!("{}.as_str()", receiver(&self.place(t, vars)?)),
-            _ if by_reference(t) => self.place(t, vars)?,
+            _ if self.by_reference(t) => self.place(t, vars)?,
             _ => format!("&{}", self.place(t, vars)?),
         })
     }
@@ -93,7 +115,15 @@ impl Emitter {
                     .ok_or_else(|| Error::Invalid("a field past its message".into()))?;
                 format!("{}.{name}", receiver(&self.place(x, vars)?))
             }
-            Node::Call(id, args) if lends(id) => self.call(id, args, vars)?,
+            Node::Call(id, args) if self.lends(id) => self.call(id, args, vars)?,
+            Node::Cond(c, a, b) if self.by_reference(t) => {
+                let (c, a, b) = (
+                    self.expr(c, vars)?,
+                    self.reference(a, false, vars)?,
+                    self.reference(b, false, vars)?,
+                );
+                format!("if {c} {{ {a} }} else {{ {b} }}")
+            }
             Node::FromDyn(x, ty) if dyn_list(ty) => {
                 let x = self.reference(x, false, vars)?;
                 format!("{STD}::dynamic::list_of({x})?")
@@ -136,7 +166,7 @@ impl Emitter {
     /// What `let` binds a local to, a reference to `value`: the value it reads where that
     /// outlives the statement, else a temporary the `let` keeps.
     pub(super) fn bound(&mut self, value: &Typed, vars: &dyn Vars) -> Result<String, Error> {
-        match rooted(value) {
+        match self.rooted(value) {
             true => self.reference(value, false, vars),
             false => Ok(format!("&{}", self.expr(value, vars)?)),
         }

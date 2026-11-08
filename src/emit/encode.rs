@@ -91,7 +91,7 @@ impl Block<'_> {
     fn lets(&mut self, object: &Object, held: &[usize]) -> Result<Vec<usize>, Error> {
         let mut held = held.to_vec();
         for (n, value) in &object.lets {
-            let code = match super::place::rooted(value) {
+            let code = match self.emitter.rooted(value) {
                 true => self.emitter.reference(value, false, self.vars)?,
                 false => self.expr(value)?,
             };

@@ -21,10 +21,11 @@ pub mod walk;
 pub mod written;
 pub mod zone;
 
-pub use decls::{Arg, At, Decl, Decls, Expand, Expansion, Mismatch, Name, Overload, Written};
+pub use decls::{Arg, At, Decl, Decls, Expand, Expansion, Mismatch, Name, Overload};
 pub use lower::{lower, lower_as, lowered, Lowered};
 pub use tree::{split, unbound, Node, Part, Split, Typed};
 pub use types::{Field, Type, Width};
+pub use written::{Body, Written};
 
 /// Why an expression doesn't lower or emit.
 #[derive(Clone, Debug, PartialEq, Eq)]

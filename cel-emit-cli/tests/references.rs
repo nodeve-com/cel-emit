@@ -5,17 +5,22 @@
 //! directory lists each executable, its phase, and its input.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use prost::Message as _;
 
 #[path = "references/cost.rs"]
 mod cost;
+#[path = "references/examples.rs"]
+mod examples;
 #[path = "references/functions.rs"]
 mod functions;
 mod programs;
+#[path = "references/source.rs"]
+mod source;
 
 use cost::{ir, llvm_ir, table, Cost, Counts};
+use examples::{examples_in, Example};
 
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
@@ -51,52 +56,6 @@ const REFERENCE: &str = "\n[dependencies]\n\
     chrono-tz = \"0.10\"\n\
     jiff = { version = \"0.2\", default-features = false, features = [\"std\"] }\n";
 
-/// An example holding a reference.
-struct Example {
-    name: String,
-    cel: String,
-    reference: String,
-    schema: Option<String>,
-    functions: Option<String>,
-    input: String,
-    input_path: PathBuf,
-    expect: String,
-}
-
-fn read(path: &Path) -> String {
-    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
-}
-
-/// The example in `dir`, if it holds a reference.
-fn example(dir: &Path) -> Option<Example> {
-    let files: Vec<PathBuf> = std::fs::read_dir(dir)
-        .ok()?
-        .map(|e| e.unwrap().path())
-        .collect();
-    let named = |p: &&PathBuf| p.file_name().unwrap().to_string_lossy().into_owned();
-    let cel = files
-        .iter()
-        .find(|p| p.extension().is_some_and(|e| e == "cel"))?;
-    let reference = cel.with_extension("rs");
-    let schema = files.iter().find(|p| named(p).ends_with(".schema.json"));
-    let functions = files.iter().find(|p| named(p) == "functions.json");
-    let input = files.iter().find(|p| {
-        let file = named(p);
-        let other = ["expect.json", "functions.json"].contains(&file.as_str());
-        file.ends_with(".json") && !other && !file.ends_with(".schema.json")
-    })?;
-    Some(Example {
-        name: named(&&dir.to_path_buf()),
-        cel: read(cel),
-        reference: std::fs::read_to_string(reference).ok()?,
-        schema: schema.map(|p| read(p)),
-        functions: functions.map(|p| read(p)),
-        input: read(input),
-        input_path: input.clone(),
-        expect: read(&dir.join("expect.json")),
-    })
-}
-
 /// A reference's two public functions, in order: its decode and its expression.
 fn public(reference: &str) -> [&str; 2] {
     let mut names = reference.split("pub fn ").skip(1);
@@ -118,7 +77,7 @@ fn interpreter_manifest(name: &str) -> String {
 }
 
 /// What `example`'s expression checks against.
-fn declared(example: &Example) -> cel_emit::Decls {
+fn declared(example: &Example) -> cel_emit_cli::Declared {
     let (schema, functions) = (example.schema.as_deref(), example.functions.as_deref());
     cel_emit_cli::declared(schema, functions).unwrap()
 }
@@ -126,8 +85,7 @@ fn declared(example: &Example) -> cel_emit::Decls {
 /// `example`'s expression, as its generated program computes it, parsed and checked against the
 /// same declarations, as a `CheckedExpr` protobuf.
 fn checked(example: &Example) -> Vec<u8> {
-    let decls = declared(example);
-    let env = cel_emit::env::environment(&functions::plain(&decls));
+    let env = cel_emit::env::environment(&functions::plain(&declared(example)));
     let source = cel_emit_cli::encoded(&example.cel);
     let ast = cel_emit::macros::compile(&env, &source).unwrap();
     let info = ast.type_info().unwrap();
@@ -224,19 +182,20 @@ fn measured(example: &Example, program: &Program, listed: &mut String) -> Cost {
         .unwrap();
     }
     Cost {
-        source: program.source.map(|s| [s.lines().count(), s.len()]),
+        source: program.source.map(|s| match program.kind {
+            "generated" => source::split(s),
+            _ => source::whole(s),
+        }),
         ir: program.source.map(|_| ir(&llvm_ir(&exe))),
         binary: usize::try_from(exe.metadata().unwrap().len()).unwrap(),
         phases,
     }
 }
 
-/// Every example holding a reference, by name.
+/// Every example holding a reference, and each variant of one, by name.
 fn examples() -> Vec<Example> {
-    let mut examples: Vec<Example> = std::fs::read_dir(EXAMPLES)
-        .unwrap()
-        .filter_map(|e| example(&e.unwrap().path()))
-        .collect();
+    let dirs = std::fs::read_dir(EXAMPLES).unwrap();
+    let mut examples: Vec<Example> = dirs.flat_map(|e| examples_in(&e.unwrap().path())).collect();
     examples.sort_by(|a, b| a.name.cmp(&b.name));
     assert!(!examples.is_empty(), "no example holds a reference");
     examples

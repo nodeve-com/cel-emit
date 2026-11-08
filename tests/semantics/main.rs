@@ -5,6 +5,7 @@
 // Helpers outside a `#[test]` fn panic as the tests do (clippy.toml).
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
+mod borrowed;
 mod calls;
 mod cases;
 #[path = "../common/mod.rs"]

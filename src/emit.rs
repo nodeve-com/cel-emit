@@ -46,6 +46,8 @@ pub struct Emitter {
     depth: usize,
     /// Each function written in CEL, emitted by [`Emitter::items`].
     defined: Vec<crate::written::Body>,
+    /// The ids of those returning a reference to a part of their arguments.
+    lent: Vec<String>,
 }
 
 impl Emitter {
@@ -66,6 +68,7 @@ impl Emitter {
             patterns: Vec::new(),
             depth: 0,
             defined: Vec::new(),
+            lent: Vec::new(),
         }
     }
 
@@ -145,7 +148,7 @@ impl Emitter {
                 .iter()
                 .any(|a| matches!(a.ty, Type::List(_) | Type::Map(..)));
         args.iter()
-            .map(|a| match (borrows, a.ty.copied(), place::by_reference(a)) {
+            .map(|a| match (borrows, a.ty.copied(), self.by_reference(a)) {
                 (_, true, true) => Ok(format!("*{}", self.place(a, vars)?)),
                 (true, false, _) => self.reference(a, plain, vars),
                 _ => self.expr(a, vars),

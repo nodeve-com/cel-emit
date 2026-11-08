@@ -3,15 +3,18 @@
 
 use cel_emit::functions::Function;
 use cel_emit::{Decl, Decls, Name, Type};
+use cel_emit_cli::Declared;
 use prost::Message as _;
 
-/// `decls`, each written function declared as a function of dyn arguments and result.
-pub fn plain(decls: &Decls) -> Decls {
-    let mut all = Decls {
-        written: Vec::new(),
-        ..decls.clone()
-    };
-    for w in &decls.written {
+/// `declared`'s declarations, each written function declared as a function of dyn arguments and
+/// result, in place of the checked one.
+pub fn plain(declared: &Declared) -> Decls {
+    let mut all = declared.decls.clone();
+    let written: Vec<&str> = declared.bodies.iter().map(|b| b.id.as_str()).collect();
+    all.functions
+        .retain(|f| !f.paths.iter().any(|(id, _)| written.contains(&id.as_str())));
+    for body in &declared.bodies {
+        let w = &body.written;
         let params = vec![Type::Dyn; w.params.len()];
         all.functions.push(Function {
             decl: Decl::new(w.name.clone()).with_overload(w.name.clone(), params, Type::Dyn),
@@ -23,11 +26,11 @@ pub fn plain(decls: &Decls) -> Decls {
 
 /// The interpreter's table, as a Rust expression: each written function's name, its params, and
 /// its checked body, each after those it calls.
-pub fn table(decls: &Decls) -> String {
-    let plain = plain(decls);
+pub fn table(declared: &Declared) -> String {
+    let plain = plain(declared);
     let mut out = String::from("&[");
-    for body in cel_emit::written::bodies(decls).unwrap() {
-        let w = body.written;
+    for body in &declared.bodies {
+        let w = &body.written;
         let mut within = plain.clone();
         within.names.clear();
         for (i, (name, _)) in w.params.iter().enumerate() {
