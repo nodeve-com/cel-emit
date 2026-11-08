@@ -94,7 +94,7 @@ Write a formula the expression repeats once, as a function in a JSON file:
 ```
 
 ```sh
-cargo run -p cel-emit-cli --bin cel-emit -- rows.cel target/rows --schema answer.schema.json --functions functions.json
+cargo run -p cel-emit-cli --bin cel-emit -- rows-func.cel target/rows-func --schema answer.schema.json --functions rows-func.functions.json
 ```
 
 The expression calls it by its key, `location(input.locations, row.legs[0].location.id)`, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. The program holds one Rust function for each, whatever number of places call it. A call still runs its body each time: `cel.bind` is what saves computing a value twice.
