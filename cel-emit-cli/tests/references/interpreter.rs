@@ -4,7 +4,9 @@
 
 mod count;
 
-use cel_core::{CelType, FunctionDecl, MapActivation, OverloadDecl, Program, Timestamp, Value};
+use cel_core::{
+    CelType, Env, FunctionDecl, MapActivation, OverloadDecl, Program, Timestamp, Value,
+};
 use cel_core_proto::{check_result_from_proto, from_parsed_expr, CheckedExpr, ParsedExpr};
 use cel_emit_runtime::time::civil;
 use prost::Message;
@@ -15,6 +17,10 @@ use std::sync::Arc;
 static COUNTING: count::Counting = count::Counting;
 
 const CHECKED: &[u8] = include_bytes!("checked.pb");
+
+/// Each function written in CEL: its name, its params, and its checked body, each after those it
+/// calls.
+const FUNCTIONS: &[(&str, &[&str], &[u8])] = include!("functions.rs");
 
 /// The two text arguments of a call.
 fn texts(args: &[Value]) -> Option<(String, String)> {
@@ -54,19 +60,42 @@ fn civil_time() -> [FunctionDecl; 2] {
     ]
 }
 
-/// The saved expression, decoded, and the program running it.
-#[inline(never)]
-fn measured_load() -> Result<Program, String> {
-    let checked = CheckedExpr::decode(CHECKED).map_err(|e| e.to_string())?;
+/// A saved checked expression, decoded.
+fn saved(bytes: &[u8]) -> Result<cel_core::Ast, String> {
+    let checked = CheckedExpr::decode(bytes).map_err(|e| e.to_string())?;
     let info = check_result_from_proto(&checked).map_err(|e| e.to_string())?;
     let parsed = ParsedExpr {
         expr: checked.expr,
         source_info: checked.source_info,
     };
     let expr = from_parsed_expr(&parsed).map_err(|e| e.to_string())?;
-    let ast = cel_core::Ast::new_checked(expr, "", info);
+    Ok(cel_core::Ast::new_checked(expr, "", info))
+}
+
+/// `env` with each written function: a call evaluates the function's body over the arguments.
+fn with_written(mut env: Env) -> Result<Env, String> {
+    for (name, params, body) in FUNCTIONS {
+        let program = Arc::new(env.program(&saved(body)?).map_err(|e| e.to_string())?);
+        let overload =
+            OverloadDecl::function(*name, vec![CelType::Dyn; params.len()], CelType::Dyn)
+                .with_impl(move |args| {
+                    let mut activation = MapActivation::new();
+                    for (param, arg) in params.iter().zip(args) {
+                        activation.insert(*param, arg.clone());
+                    }
+                    program.eval(&activation)
+                });
+        env = env.with_extension([FunctionDecl::new(*name).with_overload(overload)]);
+    }
+    Ok(env)
+}
+
+/// The saved expression, decoded, and the program running it.
+#[inline(never)]
+fn measured_load() -> Result<Program, String> {
+    let ast = saved(CHECKED)?;
     let env = cel_emit::env::environment(&cel_emit::Decls::default()).with_extension(civil_time());
-    env.program(&ast).map_err(|e| e.to_string())
+    with_written(env)?.program(&ast).map_err(|e| e.to_string())
 }
 
 /// `text` as cel-core values.

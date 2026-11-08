@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use cel_core::{Activation, Value};
 use cel_emit::emit::Emitter;
-use cel_emit::{Decls, Error, Name, Type};
+use cel_emit::{Decls, Error, Name, Type, Written};
 use cel_emit_runtime as s;
 
 mod build;
@@ -60,7 +60,7 @@ impl Stored {
 
 /// Cases to check together, and the messages they build; [`check`] builds and compares them.
 #[derive(Default)]
-pub struct Cases(Vec<Case>, BTreeMap<String, Type>);
+pub struct Cases(Vec<Case>, BTreeMap<String, Type>, Vec<Written>);
 
 impl Cases {
     fn push(&mut self, source: &str, messages: &[Vec<(&str, Value)>], want: Want) {
@@ -103,6 +103,11 @@ impl Cases {
     /// A message the cases may build or read by `name`.
     pub fn message(&mut self, name: &str, ty: Type) {
         self.1.insert(name.into(), ty);
+    }
+
+    /// A function the cases may call, written in CEL.
+    pub fn function(&mut self, w: Written) {
+        self.2.push(w);
     }
 
     /// `source` over `v`, a stored value, gives `want`.
@@ -211,8 +216,10 @@ pub fn check(fill: impl FnOnce(&mut Cases)) {
     let types: Vec<_> = cases.0.iter().map(declared).collect();
     let mut build = Build {
         messages: cases.1.clone(),
+        written: cases.2.clone(),
         em: Emitter::new(&[], Box::new(crate::common::Positional)),
     };
+    build.define();
     let fns: Vec<(usize, String)> = cases
         .0
         .iter()

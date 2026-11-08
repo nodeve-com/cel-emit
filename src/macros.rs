@@ -28,7 +28,7 @@ fn registry() -> MacroRegistry {
 }
 
 /// `source` parsed, its macros expanded.
-fn parse(source: &str) -> ParseResult {
+pub(crate) fn parse(source: &str) -> ParseResult {
     cel_core::parser::parse_with_options(source, ParseOptions::with_macros(registry()))
 }
 

@@ -69,6 +69,9 @@ pub fn lowered(source: &str, decls: &Decls) -> Result<Lowered, Error> {
 }
 
 pub(crate) fn lowered_at(source: &str, decls: &Decls, at: Root) -> Result<Lowered, Error> {
+    if !decls.written.is_empty() {
+        return lowered_at(source, &crate::written::resolved(decls)?, at);
+    }
     let env = environment(decls);
     let params = crate::functions::params(env.functions().values());
     let ast = crate::macros::compile(&env, source).map_err(|e| Error::Invalid(describe(e)))?;
@@ -117,7 +120,7 @@ fn yields_map(e: &SpannedExpr) -> bool {
 }
 
 /// A CEL compile error's messages, joined.
-fn describe(e: cel_core::CompileError) -> String {
+pub(crate) fn describe(e: cel_core::CompileError) -> String {
     match e {
         cel_core::CompileError::Parse(errs) => errs
             .iter()

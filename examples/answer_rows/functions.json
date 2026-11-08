@@ -1,0 +1,17 @@
+{
+  "location": {
+    "params": [
+      {"key": "locations", "schema": {"type": "array", "items": {"$ref": "#/$defs/Location"}}},
+      {"key": "id", "schema": {"type": "string"}}
+    ],
+    "cel": "locations.filter(l, l.id == id)[0]"
+  },
+  "arrival": {
+    "params": [
+      {"key": "local", "schema": {"type": "string"}},
+      {"key": "end_id", "schema": {"type": "string"}},
+      {"key": "locations", "schema": {"type": "array", "items": {"$ref": "#/$defs/Location"}}}
+    ],
+    "cel": "to_utc(local, location(locations, end_id).timezone)"
+  }
+}

@@ -102,6 +102,16 @@ impl Index {
         Index(map)
     }
 
+    /// Adds `f`'s Rust, beside the rest.
+    pub(crate) fn add(&mut self, f: &Function) {
+        for (id, path) in &f.paths {
+            self.0
+                .entry(id.clone())
+                .or_default()
+                .push(Entry::Own(path.clone()));
+        }
+    }
+
     /// The Rust path running overload `id` on arguments of `args`' types, if one does.
     pub(crate) fn path(&self, id: &str, args: &[Type]) -> Option<String> {
         self.0.get(id)?.iter().find_map(|e| match e {

@@ -18,9 +18,10 @@ pub mod stdlib;
 pub mod tree;
 pub mod types;
 pub mod walk;
+pub mod written;
 pub mod zone;
 
-pub use decls::{Arg, At, Decl, Decls, Expand, Expansion, Mismatch, Name, Overload};
+pub use decls::{Arg, At, Decl, Decls, Expand, Expansion, Mismatch, Name, Overload, Written};
 pub use lower::{lower, lower_as, lowered, Lowered};
 pub use tree::{split, unbound, Node, Part, Split, Typed};
 pub use types::{Field, Type, Width};

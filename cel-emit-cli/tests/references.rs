@@ -11,6 +11,8 @@ use prost::Message as _;
 
 #[path = "references/cost.rs"]
 mod cost;
+#[path = "references/functions.rs"]
+mod functions;
 mod programs;
 
 use cost::{ir, llvm_ir, table, Cost, Counts};
@@ -55,6 +57,7 @@ struct Example {
     cel: String,
     reference: String,
     schema: Option<String>,
+    functions: Option<String>,
     input: String,
     input_path: PathBuf,
     expect: String,
@@ -76,15 +79,18 @@ fn example(dir: &Path) -> Option<Example> {
         .find(|p| p.extension().is_some_and(|e| e == "cel"))?;
     let reference = cel.with_extension("rs");
     let schema = files.iter().find(|p| named(p).ends_with(".schema.json"));
+    let functions = files.iter().find(|p| named(p) == "functions.json");
     let input = files.iter().find(|p| {
         let file = named(p);
-        file.ends_with(".json") && file != "expect.json" && !file.ends_with(".schema.json")
+        let other = ["expect.json", "functions.json"].contains(&file.as_str());
+        file.ends_with(".json") && !other && !file.ends_with(".schema.json")
     })?;
     Some(Example {
         name: named(&&dir.to_path_buf()),
         cel: read(cel),
         reference: std::fs::read_to_string(reference).ok()?,
         schema: schema.map(|p| read(p)),
+        functions: functions.map(|p| read(p)),
         input: read(input),
         input_path: input.clone(),
         expect: read(&dir.join("expect.json")),
@@ -111,11 +117,17 @@ fn interpreter_manifest(name: &str) -> String {
     )
 }
 
+/// What `example`'s expression checks against.
+fn declared(example: &Example) -> cel_emit::Decls {
+    let (schema, functions) = (example.schema.as_deref(), example.functions.as_deref());
+    cel_emit_cli::declared(schema, functions).unwrap()
+}
+
 /// `example`'s expression, as its generated program computes it, parsed and checked against the
 /// same declarations, as a `CheckedExpr` protobuf.
 fn checked(example: &Example) -> Vec<u8> {
-    let decls = cel_emit_cli::declared(example.schema.as_deref()).unwrap();
-    let env = cel_emit::env::environment(&decls);
+    let decls = declared(example);
+    let env = cel_emit::env::environment(&functions::plain(&decls));
     let source = cel_emit_cli::encoded(&example.cel);
     let ast = cel_emit::macros::compile(&env, &source).unwrap();
     let info = ast.type_info().unwrap();
@@ -157,6 +169,10 @@ fn interpreted(example: &Example) -> Program<'static> {
     let files = vec![
         ("main.rs", INTERPRETER.as_bytes().to_vec()),
         ("checked.pb", checked(example)),
+        (
+            "functions.rs",
+            functions::table(&declared(example)).into_bytes(),
+        ),
         ("count.rs", COUNT.as_bytes().to_vec()),
     ];
     Program {
@@ -230,7 +246,8 @@ fn examples() -> Vec<Example> {
 fn each_reference_its_generated_program_and_the_interpreter_give_the_example_output() {
     let (mut tables, mut listed, mut over) = (String::new(), String::new(), Vec::new());
     for example in &examples() {
-        let program = cel_emit_cli::program(&example.cel, example.schema.as_deref()).unwrap();
+        let (schema, functions) = (example.schema.as_deref(), example.functions.as_deref());
+        let program = cel_emit_cli::program(&example.cel, schema, functions).unwrap();
         let name = format!("{}_generated", example.name);
         let manifest = cel_emit_cli::manifest(&name, &program);
         let generated = compiled("generated", manifest, &program, ["decode", "expression"]);

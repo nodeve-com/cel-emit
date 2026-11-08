@@ -18,6 +18,7 @@ mod node;
 mod optional;
 mod place;
 mod tables;
+mod written;
 
 use crate::functions::{Function, Index, Pass, STD};
 use crate::tree::{Node, Typed};
@@ -43,6 +44,8 @@ pub struct Emitter {
     patterns: Vec<(String, Vec<u8>)>,
     /// Comprehensions around what is emitting.
     depth: usize,
+    /// Each function written in CEL, emitted by [`Emitter::items`].
+    defined: Vec<crate::written::Body>,
 }
 
 impl Emitter {
@@ -62,13 +65,16 @@ impl Emitter {
             messages: Vec::new(),
             patterns: Vec::new(),
             depth: 0,
+            defined: Vec::new(),
         }
     }
 
     /// What the expressions need: each message's `==`, each pattern's table as a `static`, and
     /// `load_patterns`, which checks them all (only if there are any); and each message to declare.
     pub fn items(&mut self) -> Result<Items, Error> {
+        let functions = self.written_items()?;
         let mut code = self.pattern_items();
+        code.push_str(&functions);
         let messages = self.declared(&mut code)?;
         Ok(Items { code, messages })
     }
@@ -134,9 +140,10 @@ impl Emitter {
         let types: Vec<Type> = args.iter().map(|a| a.ty.clone()).collect();
         let borrows = self.paths.borrows(id, &types);
         // A list's or map's element type is the function's generic, so text there stays `String`.
-        let plain = !args
-            .iter()
-            .any(|a| matches!(a.ty, Type::List(_) | Type::Map(..)));
+        let plain = !self.defines(id)
+            && !args
+                .iter()
+                .any(|a| matches!(a.ty, Type::List(_) | Type::Map(..)));
         args.iter()
             .map(|a| match (borrows, a.ty.copied(), place::by_reference(a)) {
                 (_, true, true) => Ok(format!("*{}", self.place(a, vars)?)),

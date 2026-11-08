@@ -5,10 +5,19 @@ use super::*;
 /// The emitter that writes the cases, and the messages they build.
 pub(super) struct Build {
     pub(super) messages: BTreeMap<String, Type>,
+    pub(super) written: Vec<Written>,
     pub(super) em: Emitter,
 }
 
 impl Build {
+    /// Declares the written functions to the emitter.
+    pub(super) fn define(&mut self) {
+        let mut decls = Decls::default();
+        decls.messages.clone_from(&self.messages);
+        decls.written.clone_from(&self.written);
+        self.em.define(&decls).unwrap_or_else(|e| panic!("{e}"));
+    }
+
     /// The Rust of case `n`: a function `c{n}` writing what each message gives, joined by
     /// [`SEP`].
     pub(super) fn function(&mut self, n: usize, case: &Case, types: &[(String, Type)]) -> String {
@@ -44,6 +53,7 @@ impl Build {
     fn lower(&self, case: &Case, types: &[(String, Type)]) -> cel_emit::Typed {
         let mut decls = Decls::default();
         decls.messages.clone_from(&self.messages);
+        decls.written.clone_from(&self.written);
         for (i, (name, ty)) in types.iter().enumerate() {
             decls.names.insert(name.clone(), Name::var(ty.clone(), i));
         }
