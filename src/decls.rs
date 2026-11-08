@@ -109,9 +109,6 @@ pub struct Decls {
     /// Each name, dotted or not: a dotted name's prefixes are messages, so `a.?b.c` selects
     /// through them.
     pub names: BTreeMap<String, Name>,
-    /// Each name standing for a map of messages, key to message, given by column: each of its
-    /// fields a name of its own, a map by the same keys; and the field whose keys it loops over.
-    pub columns: BTreeMap<String, String>,
     /// A note on each name, for an [`Expansion`] to read.
     pub tags: BTreeMap<String, String>,
     /// Each message an expression may build (`Comfort{…}`) or read whole, by name. A field a

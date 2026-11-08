@@ -13,7 +13,6 @@ use crate::types::Type;
 /// name's prefixes are messages: `prev.?Smooth.watts` selects through them.
 pub fn environment(decls: &Decls) -> Env {
     let mut scope = Scope {
-        decls,
         messages: Messages {
             enums: decls.enums.keys().cloned().collect(),
             ..Messages::default()
@@ -36,7 +35,6 @@ pub fn environment(decls: &Decls) -> Env {
     let Scope {
         messages,
         mut roots,
-        ..
     } = scope;
     // A message's name is also a type value, a function's type argument, unless
     // a name in scope already takes it.
@@ -52,13 +50,12 @@ pub fn environment(decls: &Decls) -> Env {
 }
 
 /// What the declared names make: their messages, and the variables the environment holds.
-struct Scope<'a> {
-    decls: &'a Decls,
+struct Scope {
     messages: Messages,
     roots: BTreeMap<String, CelType>,
 }
 
-impl Scope<'_> {
+impl Scope {
     /// Declares the name `name` of type `ty`. A dotted name's first part is a variable holding a
     /// message, and each part before the last a message field of the one before.
     fn add(&mut self, name: &str, ty: &Type) {
@@ -69,19 +66,8 @@ impl Scope<'_> {
         };
         let message =
             (self.messages.names.get(root).cloned()).unwrap_or_else(|| format!("{MESSAGE}{root}"));
-        // A map of messages: each field's map is the message's field.
-        let leaf = match (ty, self.decls.columns.contains_key(root)) {
-            (Type::Map(_, ty), true) => {
-                let held = CelType::message(&message);
-                self.roots
-                    .insert(root.into(), CelType::map(CelType::String, held));
-                cel_type(ty, &mut self.messages)
-            }
-            (ty, _) => {
-                self.roots.insert(root.into(), CelType::message(&message));
-                cel_type(ty, &mut self.messages)
-            }
-        };
+        self.roots.insert(root.into(), CelType::message(&message));
+        let leaf = cel_type(ty, &mut self.messages);
         self.messages.path(message, rest, leaf);
     }
 }

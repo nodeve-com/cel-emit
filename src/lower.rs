@@ -163,8 +163,6 @@ pub(crate) enum Over {
     List(Type),
     /// A map of keys and values of these types, as stored.
     Map(Type, Type),
-    /// A map of messages by its name: it loops over the keys of its loop column.
-    Messages(String),
 }
 
 pub(crate) fn unsupported<T>(what: impl Into<String>) -> Result<T, Error> {

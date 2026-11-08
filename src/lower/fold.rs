@@ -27,10 +27,6 @@ impl<'a> Lower<'a> {
 
     /// What `c` loops over, and the shape of what it finds there.
     fn loop_range(&mut self, c: &'a ComprehensionData) -> Result<(Box<Typed>, Over), Error> {
-        if let Some(root) = self.messages(&c.iter_range) {
-            let column = self.column(&root, &self.loop_column(&root)?)?;
-            return Ok((Box::new(column), Over::Messages(root)));
-        }
         let list = self.expr_as(&c.iter_range, None)?;
         // A stored list is looped over as stored, each element widened as it is read.
         let list = match list.node {

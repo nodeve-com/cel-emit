@@ -35,15 +35,6 @@ impl<'a> Lower<'a> {
                     _ => Node::Call("logical_not".into(), vec![has]),
                 }
             }
-            Expr::Binary {
-                op: BinaryOp::In,
-                left,
-                right,
-            } if self.messages(right).is_some() => {
-                let root = self.messages(right).unwrap_or_default();
-                let column = self.column(&root, &self.loop_column(&root)?)?;
-                Node::Call("in_map".into(), vec![self.expr(left)?, column])
-            }
             _ => return Ok(None),
         }))
     }
@@ -70,16 +61,13 @@ impl<'a> Lower<'a> {
         ))
     }
 
-    /// `has(expr.field)`: a message column's key, a constant or variable, or a field.
+    /// `has(expr.field)`: a constant or variable, or a field.
     pub(super) fn test_only(
         &mut self,
         e: &'a SpannedExpr,
         expr: &'a SpannedExpr,
         field: &str,
     ) -> Result<Node, Error> {
-        if let Some((map, key)) = self.message_field(e)? {
-            return Ok(Node::Call("in_map".into(), vec![key, map]));
-        }
         match self.path(e).and_then(|p| self.found(&p)) {
             Some(At::Constant(_)) => Ok(Node::Bool(true)),
             Some(At::Var(v)) => Ok(Node::Has(v)),

@@ -54,11 +54,6 @@ impl<'a> Lower<'a> {
                 Ok(self.mapped(list)?.map(|l| Node::Extreme(greatest, l)))
             }
             ("math.sum", None, [list]) if mapped(list) => Ok(self.mapped(list)?.map(Node::Sum)),
-            ("size", Some(list), []) | ("size", None, [list]) if self.messages(list).is_some() => {
-                let root = self.messages(list).unwrap_or_default();
-                let column = self.column(&root, &self.loop_column(&root)?)?;
-                Ok(Some(Node::Call("size_map".into(), vec![column])))
-            }
             ("size", Some(list), []) | ("size", None, [list]) if mapped(list) => {
                 Ok(self.mapped(list)?.map(Node::Count))
             }

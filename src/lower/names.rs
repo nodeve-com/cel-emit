@@ -1,5 +1,4 @@
-//! Names: declared, constant, a comprehension's, a message's field by its address, or a map of
-//! messages' field.
+//! Names: declared, constant, a comprehension's, or a message's field by its address.
 
 use super::parts::is_fields;
 use super::scope::Scoped;
@@ -7,11 +6,8 @@ use super::*;
 
 impl<'a> Lower<'a> {
     /// A declared name, dotted or not; a constant; a comprehension's element, index, key, or
-    /// message field; a field of a map of messages' message; or a field of a message by its address.
+    /// message field; or a field of a message by its address.
     pub(crate) fn name(&mut self, e: &'a SpannedExpr) -> Result<Node, Error> {
-        if let Some((map, key)) = self.message_field(e)? {
-            return Ok(Node::Call("index_map".into(), vec![map, key]));
-        }
         let path = self.path(e);
         let root = path.iter().flat_map(|p| p.split('.')).next();
         let by_bind = matches!(root.map(|r| self.local(r)), Some(Some(Scoped::Bind(_))));
@@ -50,11 +46,10 @@ impl<'a> Lower<'a> {
                 return Ok(Some(match &l.over {
                     Over::List(_) => Node::Position(n),
                     Over::Map(key, _) => Typed::stored(key.clone(), Node::Item(n, Part::Key)).node,
-                    Over::Messages(_) => Node::Item(n, Part::Key),
                 }));
             }
             if root == l.item.as_deref() {
-                let (ty, part) = loop_item(&l.over)?;
+                let (ty, part) = loop_item(&l.over);
                 let item = Typed::stored(ty.clone(), Node::Item(n, part));
                 let rest: Vec<&str> = path.iter().flat_map(|p| p.split('.')).skip(1).collect();
                 return self.fields(item, &rest).map(Some);
@@ -120,98 +115,10 @@ impl<'a> Lower<'a> {
         self.fields(field, rest)
     }
 
-    /// `e` as a field of a map of messages' message, `<map>[<key>].<field>` or a comprehension's
-    /// message's: that field's map, and the key.
-    pub(crate) fn message_field(
-        &mut self,
-        e: &'a SpannedExpr,
-    ) -> Result<Option<(Typed, Typed)>, Error> {
-        let mut fields = Vec::new();
-        let mut base = e;
-        while let Expr::Member { expr, field, .. } | Expr::MemberTestOnly { expr, field } =
-            &base.node
-        {
-            fields.push(field.as_str());
-            base = expr;
-        }
-        fields.reverse();
-        let string = |node| Typed {
-            ty: Type::String,
-            node,
-        };
-        let (root, key) = match &base.node {
-            Expr::Index {
-                expr,
-                index,
-                optional: false,
-            } => match &expr.node {
-                Expr::Ident(root) if self.decls.columns.contains_key(root) => {
-                    (root.clone(), self.expr(index)?)
-                }
-                _ => return Ok(None),
-            },
-            Expr::Ident(name) => match self.looped_messages(name) {
-                Some((root, n)) => (root, string(Node::Item(n, Part::Key))),
-                None => return Ok(None),
-            },
-            _ => return Ok(None),
-        };
-        if fields.is_empty() {
-            return unsupported("a map of messages' message other than by its fields");
-        }
-        let map = self.column(&root, &fields.join("."))?;
-        Ok(Some((map, key)))
-    }
-
-    /// The map of messages that loop variable `name` runs over, and the loop's number.
-    fn looped_messages(&self, name: &str) -> Option<(String, usize)> {
-        match self.local(name)? {
-            Scoped::Loop(
-                n,
-                Loop {
-                    item,
-                    over: Over::Messages(root),
-                    ..
-                },
-            ) if item.as_deref() == Some(name) => Some((root.clone(), n)),
-            _ => None,
-        }
-    }
-
-    /// A map of messages' `field` of each message, a map.
-    pub(crate) fn column(&self, root: &str, field: &str) -> Result<Typed, Error> {
-        let name = self
-            .decls
-            .names
-            .get(&format!("{root}.{field}"))
-            .ok_or_else(|| Error::Invalid(format!("{root} has no field {field}")))?;
-        Ok(match &name.at {
-            At::Var(v) => Typed::stored(name.ty.clone(), Node::Var(*v)),
-            At::Constant(c) => c.clone(),
-        })
-    }
-
     /// The declared name `path`, variable `v`, read: widened where it is stored at a width.
     pub(crate) fn declared(&self, path: &str, v: usize) -> Typed {
         let ty = self.decls.names.get(path).map(|n| n.ty.clone());
         Typed::stored(ty.unwrap_or(Type::Int), Node::Var(v))
-    }
-
-    /// The field a map of messages loops over.
-    pub(crate) fn loop_column(&self, root: &str) -> Result<String, Error> {
-        self.decls
-            .columns
-            .get(root)
-            .cloned()
-            .ok_or_else(|| Error::Invalid(format!("{root} is no map of messages")))
-    }
-
-    /// `e` as a map of messages' name, if it is one.
-    pub(crate) fn messages(&self, e: &SpannedExpr) -> Option<String> {
-        match &e.node {
-            Expr::Ident(name) if self.decls.columns.contains_key(name) => Some(name.clone()),
-            _ => None,
-        }
     }
 
     /// `e` as a dotted name, `.?` read as `.`: `prev.?Smooth.watts` is `prev.Smooth.watts`.
@@ -232,10 +139,9 @@ impl<'a> Lower<'a> {
 }
 
 /// The type and part of a comprehension's element, of a list or map.
-fn loop_item(over: &Over) -> Result<(&Type, Part), Error> {
+fn loop_item(over: &Over) -> (&Type, Part) {
     match over {
-        Over::List(ty) => Ok((ty, Part::Whole)),
-        Over::Map(_, ty) => Ok((ty, Part::Value)),
-        Over::Messages(_) => unsupported("a map of messages' message other than by its fields"),
+        Over::List(ty) => (ty, Part::Whole),
+        Over::Map(_, ty) => (ty, Part::Value),
     }
 }

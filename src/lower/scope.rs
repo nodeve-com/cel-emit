@@ -17,8 +17,8 @@ pub(crate) struct Bind<'a> {
 
 /// What a name resolves to.
 pub(crate) enum Scoped<'s, 'a> {
-    /// A comprehension, by its place in `loops`.
-    Loop(usize, &'s Loop),
+    /// A comprehension's variable.
+    Loop,
     Bind(&'s Bind<'a>),
 }
 
@@ -35,15 +35,13 @@ pub(crate) fn wrap(t: Typed, lets: &[(usize, Typed)]) -> Typed {
 impl<'a> Lower<'a> {
     /// What `name` resolves to: a comprehension's variable or a bind, whichever is innermost.
     pub(crate) fn local(&self, name: &str) -> Option<Scoped<'_, 'a>> {
-        let looped =
-            self.loops.iter().enumerate().rfind(|(_, l)| {
-                l.index.as_deref() == Some(name) || l.item.as_deref() == Some(name)
-            });
+        let looped = (self.loops.iter())
+            .rposition(|l| l.index.as_deref() == Some(name) || l.item.as_deref() == Some(name));
         let bound = self.binds.iter().rfind(|b| b.name == name);
         match (looped, bound) {
-            (Some((n, l)), Some(b)) if b.depth <= n => Some(Scoped::Loop(n, l)),
+            (Some(n), Some(b)) if b.depth <= n => Some(Scoped::Loop),
             (_, Some(b)) => Some(Scoped::Bind(b)),
-            (Some((n, l)), None) => Some(Scoped::Loop(n, l)),
+            (Some(_), None) => Some(Scoped::Loop),
             (None, None) => None,
         }
     }
@@ -52,7 +50,7 @@ impl<'a> Lower<'a> {
     pub(crate) fn bound(&self, name: &str) -> Option<&Typed> {
         match self.local(name)? {
             Scoped::Bind(b) => Some(&b.what),
-            Scoped::Loop(..) => None,
+            Scoped::Loop => None,
         }
     }
 
@@ -60,7 +58,7 @@ impl<'a> Lower<'a> {
     pub(crate) fn bound_init(&self, name: &str) -> Option<&'a SpannedExpr> {
         match self.local(name)? {
             Scoped::Bind(b) => Some(b.init),
-            Scoped::Loop(..) => None,
+            Scoped::Loop => None,
         }
     }
 
