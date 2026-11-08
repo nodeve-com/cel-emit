@@ -1,12 +1,56 @@
-//! The statistics of a list: `math.sum`, `math.mean`, `math.variance`, `math.stddev`,
-//! `math.median`, and `math.percentile`.
+//! cel-emit's own math functions: `math.pow`, `math.sqrt` (cel-go's, which cel-core lacks), and
+//! the statistics of a list: `math.sum`, `math.mean`, `math.variance`, `math.stddev`,
+//! `math.median`, and `math.percentile`. Each interpreter runs the cel-emit-runtime function the
+//! Rust cel-emit writes calls.
 
 use cel_core::{CelType, FunctionDecl, OverloadDecl, Value};
+use cel_emit_runtime::math;
 
-/// The statistics of a list of ints or doubles. The interpreter runs the cel-emit-runtime
-/// function the Rust cel-emit writes calls.
+/// `math.pow`, `math.sqrt`, and the statistics.
 pub(super) fn declarations() -> Vec<FunctionDecl> {
-    use cel_emit_runtime::math;
+    let mut all = vec![pow(), sqrt()];
+    all.extend(statistics());
+    all
+}
+
+/// `math.pow(x, y)` of two doubles.
+fn pow() -> FunctionDecl {
+    let overload = OverloadDecl::function(
+        "math_pow_double_double",
+        vec![CelType::Double, CelType::Double],
+        CelType::Double,
+    )
+    .with_impl(|args| match args {
+        [Value::Double(x), Value::Double(y)] => value("pow", math::pow(*x, *y)),
+        _ => Value::error("math.pow takes two doubles"),
+    });
+    FunctionDecl::new("math.pow").with_overload(overload)
+}
+
+/// `math.sqrt(x)` of an int, uint, or double, as a double.
+fn sqrt() -> FunctionDecl {
+    let overloads = [CelType::Int, CelType::UInt, CelType::Double].map(|ty| {
+        let id = format!("math_sqrt_{}", ty.display_name());
+        OverloadDecl::function(id, vec![ty], CelType::Double).with_impl(|args| match args {
+            [Value::Int(x)] => value("sqrt", math::sqrt_int(*x)),
+            [Value::UInt(x)] => value("sqrt", math::sqrt_uint(*x)),
+            [Value::Double(x)] => value("sqrt", math::sqrt(*x)),
+            _ => Value::error("math.sqrt takes an int, uint, or double"),
+        })
+    });
+    FunctionDecl::new("math.sqrt").with_overloads(overloads)
+}
+
+/// `math.<name>`'s result as a CEL value, or its error.
+fn value(name: &str, result: cel_emit_runtime::Result<impl Into<Value>>) -> Value {
+    match result {
+        Ok(v) => v.into(),
+        Err(e) => Value::error(format!("math.{name}: {e:?}")),
+    }
+}
+
+/// The statistics of a list of ints or doubles.
+fn statistics() -> Vec<FunctionDecl> {
     let double = || Some(CelType::Double);
     vec![
         statistic("sum", None, &[], of_list!(math::sum_list)),
@@ -104,9 +148,8 @@ fn interpret(name: &str, doubles: bool, run: Run, args: &[Value]) -> Value {
             .collect::<Result<_, _>>()
             .map(Numbers::Ints)
     };
-    match numbers.map(|xs| run(xs, rest)) {
-        Ok(Ok(value)) => value,
-        Ok(Err(e)) => Value::error(format!("math.{name}: {e:?}")),
+    match numbers {
+        Ok(xs) => value(name, run(xs, rest)),
         Err(_) => Value::error(format!("math.{name} of other than ints or doubles")),
     }
 }

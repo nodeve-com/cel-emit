@@ -1,19 +1,21 @@
 //! The math extension where cel-emit follows cel-go over cel-core. The cel-spec suite (the
 //! conformance test) covers the rest of `math`.
 
-use cel_core::Value::{Double as D, Int as I, UInt};
+use cel_core::Value::{Bool as B, Double as D, Int as I, UInt};
 
 use crate::cases::{check, list, refusal, Cases, Got};
 
 /// Only here: `round` is exact where cel-core adds a half; `greatest` and `least` err on a NaN
 /// they must order, as cel-go does; a list of a thousand folds; a mixed int, uint, and double
-/// extreme compiles under a cast and compile refuses it bare.
+/// extreme compiles under a cast and compile refuses it bare; `sqrt`, which cel-core lacks, takes
+/// an int, uint, or double, and of a negative is NaN.
 #[test]
 fn math_follows_cel_go_where_cel_core_differs() {
     check(|cases| {
         rounding(cases);
         nan_extremes(cases);
         long_and_mixed_extremes(cases);
+        roots(cases);
     });
     for source in ["math.greatest(1.797693e308, 1)", "math.greatest(5u, -7)"] {
         assert!(
@@ -23,6 +25,16 @@ fn math_follows_cel_go_where_cel_core_differs() {
             ),
             "{source}"
         );
+    }
+}
+
+fn roots(cases: &mut Cases) {
+    cases.gives("math.sqrt(x)", &[("x", D(2.25))], Got::Value(D(1.5)));
+    cases.gives("math.sqrt(x)", &[("x", I(9))], Got::Value(D(3.0)));
+    cases.gives("math.sqrt(x)", &[("x", UInt(16))], Got::Value(D(4.0)));
+    cases.gives("math.sqrt(2)", &[], Got::Value(D(2f64.sqrt())));
+    for x in [D(-1.0), I(-4)] {
+        cases.gives("math.isNaN(math.sqrt(x))", &[("x", x)], Got::Value(B(true)));
     }
 }
 

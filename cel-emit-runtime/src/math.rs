@@ -1,7 +1,7 @@
 //! Int and double arithmetic, and CEL's math extension (`math.*`) as cel-go defines it, plus
 //! `math.pow` and the statistics of a list. Int arithmetic is checked; a double's follows IEEE
-//! 754. `math.pow` runs through `libm` on every target, so builds give identical results. Uint
-//! arithmetic is in `uint`, statistics in `stats`.
+//! 754. `math.pow` and `math.sqrt` run through `libm` on every target, so builds give identical
+//! results. Uint arithmetic is in `uint`, statistics in `stats`.
 
 use std::cmp::Ordering::{self, Greater, Less};
 
@@ -13,7 +13,8 @@ pub use stats::{
 };
 pub use uint::{
     abs_uint, add_uint, bit_and_uint, bit_not_uint, bit_or_uint, bit_xor_uint, divide_uint,
-    modulo_uint, multiply_uint, shift_left_uint, shift_right_uint, sign_uint, subtract_uint,
+    modulo_uint, multiply_uint, shift_left_uint, shift_right_uint, sign_uint, sqrt_uint,
+    subtract_uint,
 };
 
 mod stats;
@@ -157,6 +158,16 @@ pub fn pow(x: f64, y: f64) -> Result<f64> {
     Ok(libm::pow(x, y))
 }
 
+/// The square root of `x`, as libm computes it on every target: of a negative, NaN.
+pub fn sqrt(x: f64) -> Result<f64> {
+    Ok(libm::sqrt(x))
+}
+
+/// The square root of `x`, as a double.
+pub fn sqrt_int(x: i64) -> Result<f64> {
+    sqrt(x as f64)
+}
+
 /// The greatest of `xs` (`keep` is `Greater`) or the least (`Less`), the first of a tie: over
 /// none, `empty`; a NaN meeting another value a function error.
 fn extreme<T: PartialOrd + Copy>(
@@ -228,6 +239,17 @@ mod tests {
         assert!(pow(-8.0, 1.0 / 3.0).is_ok_and(f64::is_nan));
         assert_eq!(pow(f64::NAN, 0.0), Ok(1.0));
         assert_eq!(pow(0.0, -1.0), Ok(f64::INFINITY));
+    }
+
+    #[test]
+    fn sqrt_of_a_negative_is_nan() {
+        assert_eq!(sqrt(2.25), Ok(1.5));
+        assert_eq!(sqrt_int(9), Ok(3.0));
+        assert_eq!(sqrt_uint(u64::MAX), Ok(2f64.powi(32)));
+        assert!(sqrt(-1.0).is_ok_and(f64::is_nan));
+        assert!(sqrt_int(-4).is_ok_and(f64::is_nan));
+        assert!(sqrt(-0.0).is_ok_and(f64::is_sign_negative));
+        assert_eq!(sqrt(f64::INFINITY), Ok(f64::INFINITY));
     }
 
     #[test]

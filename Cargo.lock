@@ -109,7 +109,6 @@ dependencies = [
  "cel-emit-runtime",
  "chrono",
  "chrono-tz",
- "libm",
  "pattern-emit",
  "prost-reflect",
  "serde",

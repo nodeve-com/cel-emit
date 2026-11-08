@@ -1,19 +1,20 @@
 //! Functions an expression may call, each a CEL declaration and, per overload, the Rust running
 //! it: CEL's standard library and math and strings extensions (their Rust in [`crate::stdlib`]),
-//! the lists extension, cel-emit's own (`json`, a list's `first()` and `last()`, `math.pow`, the
-//! statistics of a list), and any an embedder adds through [`Function`] or [`crate::Expansion`].
+//! the lists extension, cel-emit's own (`json`, a list's `first()` and `last()`, `math.pow`,
+//! `math.sqrt`, the statistics of a list), and any an embedder adds through [`Function`] or
+//! [`crate::Expansion`].
 
 use std::collections::HashMap;
 
 use cel_core::ext::{encoders_extension, math_extension, optionals_extension, string_extension};
-use cel_core::{CelType, FunctionDecl, OverloadDecl, Value};
+use cel_core::{CelType, FunctionDecl, OverloadDecl};
 
 use crate::decls::Decl;
 use crate::types::Type;
 
 mod json;
 mod lists;
-mod stats;
+mod math;
 
 pub use json::decoded as json_value;
 
@@ -182,22 +183,13 @@ fn own() -> Vec<FunctionDecl> {
     all
 }
 
-/// The math extension without its `dyn` overloads, plus `math.pow` and the statistics. Where a `dyn`
+/// The math extension without its `dyn` overloads, plus cel-emit's own math ([`math`]). Where a `dyn`
 /// overload matches beside a typed one, the checker joins their results to `dyn`; without them,
 /// every call it accepts has one type. `math.greatest` and `math.least` keep theirs: a mixed call
 /// is a number that only a cast or comparison takes ([`crate::lower`]), and a call the checker
 /// joins to `dyn` but whose operands agree lowers as its typed overload.
 fn typed_math() -> Vec<FunctionDecl> {
     let dyn_free = |t: &CelType| !matches!(t, CelType::Dyn) && *t != CelType::list(CelType::Dyn);
-    let pow = OverloadDecl::function(
-        "math_pow_double_double",
-        vec![CelType::Double, CelType::Double],
-        CelType::Double,
-    )
-    .with_impl(|args| match args {
-        [Value::Double(x), Value::Double(y)] => Value::Double(libm::pow(*x, *y)),
-        _ => Value::error("math.pow takes two doubles"),
-    });
     math_extension()
         .into_iter()
         .map(|mut f| {
@@ -207,7 +199,6 @@ fn typed_math() -> Vec<FunctionDecl> {
             }
             f
         })
-        .chain([FunctionDecl::new("math.pow").with_overload(pow)])
-        .chain(stats::declarations())
+        .chain(math::declarations())
         .collect()
 }

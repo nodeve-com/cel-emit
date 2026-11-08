@@ -35,6 +35,11 @@ pub fn sign_uint(a: u64) -> Result<u64> {
     Ok(u64::from(a != 0))
 }
 
+/// The square root of `a`, as a double.
+pub fn sqrt_uint(a: u64) -> Result<f64> {
+    super::sqrt(a as f64)
+}
+
 pub fn bit_and_uint(a: u64, b: u64) -> Result<u64> {
     Ok(a & b)
 }

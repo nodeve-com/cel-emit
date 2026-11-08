@@ -29,9 +29,6 @@ cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
 cel-emit-runtime = { path = "cel-emit-runtime", version = "0.6.2" }
 # A constant `matches` pattern as a search table, built while translating.
 pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "1acab6a86e146143e8ab2ba5bde2dada963df88c", version = "0.6.2", features = ["build"] }
-# `math.pow`'s reference, as cel-emit-runtime computes it. One pure-Rust libm on every target, so
-# builds give identical results on every target.
-libm = "0.2"
 # A `timestamp()` literal; a zone a CEL accessor names, fixed as a table (src/zone.rs).
 chrono = { version = "0.4", default-features = false }
 chrono-tz = "0.10"

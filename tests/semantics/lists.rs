@@ -146,7 +146,6 @@ fn math_cel_emit_cant_type_is_rejected_at_compile() {
         "math.greatest(a, x)",
         "math.greatest(a, 2u)",
         "math.bitAnd(1u, 2)",
-        "math.sqrt(x)",
         "math.greatest(x, x, x, x, x, x, x)",
     ] {
         assert!(refusal(source, &names).is_some(), "{source}");
