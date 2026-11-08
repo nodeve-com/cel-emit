@@ -1,6 +1,7 @@
 //! Int and double arithmetic, and CEL's math extension (`math.*`) as cel-go defines it, plus
-//! `math.pow`, `math.sum`, and `math.mean`. Int arithmetic is checked; a double's follows IEEE 754. `math.pow`
-//! runs through `libm` on every target, so builds give identical results. Uint arithmetic is in `uint`.
+//! `math.pow`, `math.sum`, and `math.mean`. Int arithmetic is checked; a double's follows IEEE
+//! 754. `math.pow` runs through `libm` on every target, so builds give identical results. Uint
+//! arithmetic is in `uint`, sums and means in `sum`.
 
 use std::cmp::Ordering::{self, Greater, Less};
 
