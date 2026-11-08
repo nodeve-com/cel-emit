@@ -77,6 +77,28 @@ The same expression gives the same output. The program gains a struct for each o
 
 [`examples/answer_rows`](../examples/answer_rows) runs both ways: `answer.schema.json` names what `rows.cel` reads.
 
+## Your own functions
+
+Write a formula the expression repeats once, as a function in a JSON file:
+
+```json
+{
+  "location": {
+    "params": [
+      {"key": "locations", "schema": {"type": "array", "items": {"$ref": "#/$defs/Location"}}},
+      {"key": "id", "schema": {"type": "string"}}
+    ],
+    "cel": "locations.filter(l, l.id == id)[0]"
+  }
+}
+```
+
+```sh
+cargo run -p cel-emit-cli --bin cel-emit -- rows.cel target/rows --schema answer.schema.json --functions functions.json
+```
+
+The expression calls it by its key, `location(input.locations, row.legs[0].location.id)`, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. The program holds one Rust function for each, whatever number of places call it. A call still runs its body each time: `cel.bind` is what saves computing a value twice.
+
 ## Limits
 
 - **Without a schema, JSON values have no declared types**, so CEL can't tell which JSON values hold numbers. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which translation refuses.

@@ -32,7 +32,7 @@ A benchmark timed Rust written by hand the way cel-emit writes it, on a 1 GHz si
 - **No guessing while it runs.** The type check settles what kind every value is before the program starts: a number stays a plain number, text stays plain text ([`types::Type`]).
 - **Small output.** Each CEL operation is its own small function in cel-emit-runtime, so a program includes only the ones its expressions use.
 - **Same answer everywhere.** The program never reads the clock: an expression that needs the current time takes it as an input. It never reads the machine's time zones either. A zone written in the expression, such as `"America/New_York"`, becomes that zone's UTC offsets from 1970 to 2100, daylight saving included; `"+05:30"` becomes one offset. All math goes through one library, `libm`, so every machine agrees to the last digit.
-- **Add your own functions.** A new function is its CEL signature plus the Rust that runs it ([`functions::Function`]).
+- **Add your own functions.** A new function is its CEL signature plus the Rust that runs it ([`functions::Function`]), or its typed parameters and a CEL body ([`extras`]).
 
 What it doesn't translate yet, largest gap first: [`missing`]. Functions beyond CEL's standard library: [`extras`]. Where it departs from CEL, and its conformance test: [`conformance`].
 
