@@ -1,7 +1,7 @@
 //! Functions an expression may call, each a CEL declaration and, per overload, the Rust running
 //! it: CEL's standard library and math and strings extensions (their Rust in [`crate::stdlib`]),
 //! the lists extension, cel-emit's own (`json`, a list's `first()` and `last()`, `math.pow`,
-//! `math.sum`), and any an embedder adds through [`Function`] or [`crate::Expansion`].
+//! `math.sum`, `math.mean`), and any an embedder adds through [`Function`] or [`crate::Expansion`].
 
 use std::collections::HashMap;
 
@@ -181,7 +181,7 @@ fn own() -> Vec<FunctionDecl> {
     all
 }
 
-/// The math extension without its `dyn` overloads, plus `math.pow` and `math.sum`. Where a `dyn`
+/// The math extension without its `dyn` overloads, plus `math.pow`, `math.sum`, and `math.mean`. Where a `dyn`
 /// overload matches beside a typed one, the checker joins their results to `dyn`; without them,
 /// every call it accepts has one type. `math.greatest` and `math.least` keep theirs: a mixed call
 /// is a number that only a cast or comparison takes ([`crate::lower`]), and a call the checker
@@ -209,6 +209,8 @@ fn typed_math() -> Vec<FunctionDecl> {
         .chain([
             FunctionDecl::new("math.pow").with_overload(pow),
             FunctionDecl::new("math.sum").with_overloads([sum(CelType::Int), sum(CelType::Double)]),
+            FunctionDecl::new("math.mean")
+                .with_overloads([mean(CelType::Int), mean(CelType::Double)]),
         ])
         .collect()
 }
@@ -237,5 +239,27 @@ fn sum(ty: CelType) -> OverloadDecl {
             };
         }
         total
+    })
+}
+
+/// `math.mean` of a list of `ty`, int or double, each added as a double: over none, an error.
+fn mean(ty: CelType) -> OverloadDecl {
+    let id = format!("math_mean_list_{}", ty.display_name());
+    OverloadDecl::function(id, vec![CelType::list(ty)], CelType::Double).with_impl(|args| {
+        let [Value::List(items)] = args else {
+            return Value::error("math.mean takes a list");
+        };
+        let mut total = 0.0;
+        for item in items.iter() {
+            total += match item {
+                Value::Int(x) => *x as f64,
+                Value::Double(x) => *x,
+                _ => return Value::error("math.mean of other than ints or doubles"),
+            };
+        }
+        match items.len() {
+            0 => Value::error("math.mean of an empty list"),
+            n => Value::Double(total / n as f64),
+        }
     })
 }

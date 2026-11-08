@@ -146,6 +146,7 @@ impl Emitter {
                 format!("{STD}::math::{f}({})?", self.mapped(map, vars)?)
             }
             Node::Sum(map) => format!("{STD}::math::sum_of({})?", self.mapped(map, vars)?),
+            Node::Mean(map) => format!("{STD}::math::mean_of({})?", self.mapped(map, vars)?),
             Node::Count(map) => {
                 format!("{STD}::collections::count({})?", self.mapped(map, vars)?)
             }

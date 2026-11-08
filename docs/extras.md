@@ -12,6 +12,7 @@ Beyond CEL's standard library, expressions get CEL's math, strings, optional-val
 - `json.decode(text)`: JSON text as an [any-value](https://github.com/nodeve-com/any-value) `Value`, which owns how numbers and repeated keys build; malformed text is an error. A dynamic value fills a typed place by any-value's `to` rule, in any-value's README: a wrong kind or a fraction in a whole-number place is a cast error, and a number past the place's width a range error. It fills an expression's result type the same way ([`lower::lower_as`](crate::lower::lower_as)), as cel-emit's README says. A dynamic value fills a message field, or a list of messages, through the type's own `serde::Deserialize` where the embedder's `Messages::deserializes` says it has one.
 - `json.encode(value)`: a value as JSON text; NaN or infinity an error. With `Decls.skip_failed`, it leaves out a failing field, unless none remains.
 - `list.first()` and `list.last()`: a list's first or last item, if it has one.
+- `math.mean(list)`: the average of a list of ints or doubles, as a double; an empty list is an error.
 - `math.pow(x, y)`: `x` to the power `y`.
 - `math.sum(list)`: a list of numbers added up; an empty list sums to zero.
 - The lists extension is cel-go's, `sortBy` included, but `sort()` of a list of dyn orders one kind only and `flatten(depth)` takes a list of dyn.

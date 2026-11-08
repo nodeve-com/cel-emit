@@ -1,16 +1,18 @@
 //! Int and double arithmetic, and CEL's math extension (`math.*`) as cel-go defines it, plus
-//! `math.pow` and `math.sum`. Int arithmetic is checked; a double's follows IEEE 754. `math.pow`
+//! `math.pow`, `math.sum`, and `math.mean`. Int arithmetic is checked; a double's follows IEEE 754. `math.pow`
 //! runs through `libm` on every target, so builds give identical results. Uint arithmetic is in `uint`.
 
 use std::cmp::Ordering::{self, Greater, Less};
 
 use crate::{Error, Result};
 
+pub use sum::{mean_list, mean_of, sum_list, sum_of, Sum};
 pub use uint::{
     abs_uint, add_uint, bit_and_uint, bit_not_uint, bit_or_uint, bit_xor_uint, divide_uint,
     modulo_uint, multiply_uint, shift_left_uint, shift_right_uint, sign_uint, subtract_uint,
 };
 
+mod sum;
 mod uint;
 
 pub fn add_int(a: i64, b: i64) -> Result<i64> {
@@ -199,35 +201,6 @@ pub fn least<T: PartialOrd + Copy, const N: usize>(xs: [T; N]) -> Result<T> {
     extreme(xs.into_iter().map(Ok), Less, Error::Function)
 }
 
-/// A number `math.sum` adds: an int checked, a double as IEEE 754 does.
-pub trait Sum: Copy {
-    const ZERO: Self;
-    fn plus(self, other: Self) -> Result<Self>;
-}
-
-impl Sum for i64 {
-    const ZERO: i64 = 0;
-    fn plus(self, other: i64) -> Result<i64> {
-        add_int(self, other)
-    }
-}
-
-impl Sum for f64 {
-    const ZERO: f64 = 0.0;
-    fn plus(self, other: f64) -> Result<f64> {
-        Ok(self + other)
-    }
-}
-
-/// `math.sum` of what a comprehension gives, in order: over none, zero.
-pub fn sum_of<T: Sum>(xs: impl IntoIterator<Item = Result<T>>) -> Result<T> {
-    xs.into_iter().try_fold(T::ZERO, |total, x| total.plus(x?))
-}
-
-pub fn sum_list<T: Sum>(xs: &[T]) -> Result<T> {
-    sum_of(xs.iter().copied().map(Ok))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,7 +250,5 @@ mod tests {
         assert_eq!(divide_int(1, 0), Err(Error::Division));
         assert_eq!(divide_int(i64::MIN, -1), Err(Error::Overflow));
         assert_eq!(modulo_int(-7, 2), Ok(-1));
-        assert_eq!(sum_of([Ok(i64::MAX), Ok(1)]), Err(Error::Overflow));
-        assert_eq!(sum_of(Vec::<Result<f64>>::new()), Ok(0.0));
     }
 }

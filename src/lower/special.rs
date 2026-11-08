@@ -54,6 +54,7 @@ impl<'a> Lower<'a> {
                 Ok(self.mapped(list)?.map(|l| Node::Extreme(greatest, l)))
             }
             ("math.sum", None, [list]) if mapped(list) => Ok(self.mapped(list)?.map(Node::Sum)),
+            ("math.mean", None, [list]) if mapped(list) => Ok(self.mapped(list)?.map(Node::Mean)),
             ("size", Some(list), []) | ("size", None, [list]) if mapped(list) => {
                 Ok(self.mapped(list)?.map(Node::Count))
             }

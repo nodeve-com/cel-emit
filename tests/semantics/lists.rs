@@ -8,7 +8,8 @@ use crate::cases::{check, list, map, refusal, s, Cases, Got};
 
 /// Only here: a negative index errs in `xs[i]` and holds nothing in `xs[?i]`, where cel-core
 /// counts from the end; `math.pow` and `math.sum` over lists and maps match cel-core, a sum of
-/// an empty list is zero, and an int sum overflows; a fold of no values is absent.
+/// an empty list is zero, and an int sum overflows; a fold of no values is absent; `math.mean`
+/// adds as doubles, and of no values is an error.
 #[test]
 fn lists_follow_cel_go_where_cel_core_differs() {
     check(|cases| {
@@ -16,6 +17,7 @@ fn lists_follow_cel_go_where_cel_core_differs() {
         powers(cases);
         cases.absent("math.greatest(xs.map(x, x * 2.0))", &[("xs", list(vec![]))]);
         map_sums(cases);
+        means(cases);
     });
 }
 
@@ -69,6 +71,27 @@ fn map_sums(cases: &mut Cases) {
     let ints = [("m", map(&[("a", I(i64::MAX)), ("b", I(1))]))];
     cases.agrees("math.sum(m.transformList(k, v, v))", &ints);
     cases.gives("math.sum(m.map(k, m[k]))", &ints, Got::Error);
+}
+
+fn means(cases: &mut Cases) {
+    let ints = [("xs", list(vec![I(i64::MAX), I(i64::MAX), I(1)]))];
+    let doubles = [("xs", list(vec![D(0.5), D(-1.5), D(4.0)]))];
+    let empty = [("xs", list(vec![]))];
+    cases.gives("math.mean([1, 2])", &[], Got::Value(D(1.5)));
+    cases.gives("math.mean(xs)", &doubles, Got::Value(D(1.0)));
+    cases.gives(
+        "math.mean(xs.map(x, x * 2.0))",
+        &doubles,
+        Got::Value(D(2.0)),
+    );
+    cases.gives(
+        "math.mean(xs.filter(x, x > 0.0))",
+        &doubles,
+        Got::Value(D(2.25)),
+    );
+    cases.gives("math.mean(xs.map(x, x * 2.0))", &empty, Got::Error);
+    let big = (i64::MAX as f64 * 2.0 + 1.0) / 3.0;
+    cases.gives("math.mean(xs)", &ints, Got::Value(D(big)));
 }
 
 /// Only here: compile refuses a `math` call whose operands no single declared type holds.

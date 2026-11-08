@@ -85,7 +85,7 @@ pub enum Node {
     /// The index of comprehension `n`.
     Position(usize),
     /// `body` for each element of a list or map (`map`, `transformList`): laid out as a list,
-    /// or under [`Node::Extreme`], [`Node::Sum`], or [`Node::Count`], folded as it goes.
+    /// or under [`Node::Extreme`], [`Node::Sum`], [`Node::Mean`], or [`Node::Count`], folded as it goes.
     Map(Box<Typed>, Box<Typed>),
     /// `body` for each element of a list or map where `pred` holds (`filter`, `map` with a
     /// predicate), as [`Node::Map`] gives it.
@@ -101,6 +101,8 @@ pub enum Node {
     Extreme(bool, Box<Typed>),
     /// `math.sum` of a [`Node::Map`] or [`Node::Keep`]: over none, zero.
     Sum(Box<Typed>),
+    /// `math.mean` of a [`Node::Map`] or [`Node::Keep`]: over none, an error.
+    Mean(Box<Typed>),
     /// How many items a [`Node::Map`] or [`Node::Keep`] gives.
     Count(Box<Typed>),
     /// A struct literal: the message's fields it sets, each by its place in the message's type, and

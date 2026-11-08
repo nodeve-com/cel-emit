@@ -95,6 +95,7 @@ macro_rules! iterating {
             | Node::All(..)
             | Node::Extreme(..)
             | Node::Sum(_)
+            | Node::Mean(_)
             | Node::Count(_)
     };
 }
@@ -181,6 +182,7 @@ pub fn nodes(t: &Typed, f: &mut impl FnMut(&Typed)) {
         | Node::Matches(x, ..)
         | Node::Extreme(_, x)
         | Node::Sum(x)
+        | Node::Mean(x)
         | Node::Count(x) => nodes(x, f),
         Node::ListOpt(items) => items.iter().for_each(|(a, _)| nodes(a, f)),
         Node::MapOpt(entries) => entries.iter().for_each(|(k, v, _)| each([k, v], f)),

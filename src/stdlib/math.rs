@@ -103,4 +103,6 @@ pub(super) const FUNCTIONS: &[Std] = &[
     Std::reads("math_least_number_list", "math::least_list"),
     Std::reads("math_sum_list_int", "math::sum_list"),
     Std::reads("math_sum_list_double", "math::sum_list"),
+    Std::reads("math_mean_list_int", "math::mean_list"),
+    Std::reads("math_mean_list_double", "math::mean_list"),
 ];
