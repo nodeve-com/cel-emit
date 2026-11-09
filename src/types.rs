@@ -2,7 +2,11 @@
 
 use cel_core::CelType;
 
-/// A value's type. A message is a [`Type::Message`]: its fields in order.
+mod message;
+
+pub use message::{Field, Message};
+
+/// A value's type. A message is a [`Type::Message`]: its fields in order, and perhaps a name.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Type {
     Int,
@@ -23,7 +27,7 @@ pub enum Type {
     Number,
     List(Box<Type>),
     Map(Box<Type>, Box<Type>),
-    Message(Vec<Field>),
+    Message(Message),
     /// Absent, or a value of the type: an `Option` in the emitted Rust, never a message's field
     /// ([`crate::emit`]).
     Optional(Box<Type>),
@@ -79,14 +83,6 @@ impl Width {
     }
 }
 
-/// A message's field, and whether building the message must give it.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Field {
-    pub name: String,
-    pub ty: Type,
-    pub required: bool,
-}
-
 impl Type {
     pub fn list(of: Type) -> Type {
         Type::List(Box::new(of))
@@ -100,7 +96,7 @@ impl Type {
     /// Its fields: none but a message's.
     pub fn fields(&self) -> &[Field] {
         match self {
-            Type::Message(fields) => fields,
+            Type::Message(m) => &m.fields,
             _ => &[],
         }
     }
@@ -251,12 +247,12 @@ impl Type {
             Type::Optional(t) => format!("optional({})", t.display()),
             Type::Nullable(t) => format!("nullable({})", t.display()),
             Type::Narrow(w) => w.rust().into(),
-            Type::Message(fields) => {
-                let fields: Vec<String> = fields
-                    .iter()
+            Type::Message(m) => {
+                let fields: Vec<String> = (m.fields.iter())
                     .map(|f| format!("{}: {}", f.name, f.ty.display()))
                     .collect();
-                format!("message{{{}}}", fields.join(", "))
+                let name = m.name.as_deref().map_or(String::new(), |n| format!(" {n}"));
+                format!("message{name}{{{}}}", fields.join(", "))
             }
         }
     }

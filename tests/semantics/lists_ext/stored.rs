@@ -74,7 +74,7 @@ fn stored_methods(cases: &mut Cases) {
         field("xs", narrow.clone()),
         field("fs", Type::list(Type::Narrow(Width::F32))),
     ];
-    cases.message("M", Type::Message(fields));
+    cases.message("M", Type::message(fields));
     let m = "M{xs: [3, -1, 2, 3], fs: [2.5, 0.5]}";
     gives(
         cases,
@@ -145,7 +145,7 @@ fn stored_values(cases: &mut Cases) {
 /// Only here: what lowering refuses stays refused, with its reason.
 #[test]
 fn what_the_methods_cannot_take_is_refused() {
-    let message = Type::Message(vec![field("a", Type::Int)]);
+    let message = Type::message(vec![field("a", Type::Int)]);
     let names = [
         ("rs", Type::list(message)),
         ("xss", Type::list(Type::list(Type::list(Type::Int)))),

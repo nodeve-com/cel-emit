@@ -3,7 +3,7 @@
 use super::{narrow, Emitter, Vars};
 use crate::functions::STD;
 use crate::tree::Typed;
-use crate::types::{Field, Type, Width};
+use crate::types::{Field, Message, Type, Width};
 use crate::Error;
 
 impl Emitter {
@@ -64,7 +64,7 @@ impl Emitter {
     /// Whether every message in `ty` reads itself and `ty` has no map, whose Rust is not a serde map.
     fn reads_itself(&self, ty: &Type) -> bool {
         match ty {
-            Type::Message(fields) => self.declare.deserializes(fields),
+            Type::Message(message) => self.declare.deserializes(message),
             Type::List(t) | Type::Optional(t) | Type::Nullable(t) => self.reads_itself(t),
             Type::Map(..) | Type::Duration | Type::Bytes | Type::Number => false,
             _ => true,
@@ -137,19 +137,20 @@ impl Emitter {
                     "{STD}::Value::Map({x}.into_iter().map(|e{d}| {STD}::ok((e{d}.0, {each}))).collect::<{STD}::Result<Vec<_>>>()?)"
                 )
             }
-            Type::Message(fields) => self.dyn_message(x, fields, w)?,
+            Type::Message(message) => self.dyn_message(x, message, w)?,
             _ => scalar_dyn(x, ty, d)?,
         })
     }
 
-    /// The Rust giving message `x` of `fields` as a dyn map.
-    fn dyn_message(&self, x: &str, fields: &[Field], w: Writing) -> Result<String, Error> {
+    /// The Rust giving message `x` of type `message` as a dyn map.
+    fn dyn_message(&self, x: &str, message: &Message, w: Writing) -> Result<String, Error> {
         // An optional field holding nothing has no key, so entries may be left out.
-        if self.declare.serializes(fields) {
+        let fields = &message.fields;
+        if self.declare.serializes(message) {
             return Ok(format!("{STD}::json::serialized(&({x}))?"));
         }
         let sparse = fields.iter().any(|f| matches!(f.ty, Type::Optional(_)));
-        let names = self.declare.fields(fields);
+        let names = self.declare.fields(message);
         let mut entries = Vec::with_capacity(fields.len());
         for (name, f) in names.iter().zip(fields) {
             let entry = self.dyn_entry(name, f, w)?;

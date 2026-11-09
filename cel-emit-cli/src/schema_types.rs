@@ -53,7 +53,7 @@ fn model(schema: &Schema, at: usize, open: &mut Vec<usize>) -> Result<Type, Erro
         });
     }
     open.pop();
-    Ok(Type::Message(fields))
+    Ok(Type::message(fields))
 }
 
 /// The type, a number at its stored width wherever it sits.

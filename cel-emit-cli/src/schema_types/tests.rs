@@ -101,7 +101,7 @@ fn nested_model() {
     let ty = map(json!({"type": "object", "required": ["in"], "properties": {
         "in": {"type": "object", "properties": {"x": {"type": "integer", "format": "int16"}}}}}))
     .unwrap();
-    let inner = Type::Message(vec![Field {
+    let inner = Type::message(vec![Field {
         name: "x".into(),
         ty: Type::Optional(Box::new(Type::Narrow(Width::I16))),
         required: false,

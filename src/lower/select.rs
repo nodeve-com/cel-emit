@@ -165,9 +165,9 @@ pub(super) fn is_literal(n: &Node) -> bool {
 fn zero(ty: &Type) -> Result<Typed, Error> {
     let ty = &ty.cel();
     let t = match ty {
-        Type::Message(fields) => {
-            let mut made = Vec::with_capacity(fields.len());
-            for f in fields {
+        Type::Message(m) => {
+            let mut made = Vec::with_capacity(m.fields.len());
+            for f in &m.fields {
                 made.push((f.name.clone(), zero(&f.ty)?));
             }
             return rebuild(ty, made);
@@ -214,7 +214,7 @@ mod tests {
             field("other", Type::Int),
             field("third", Type::Int),
         ];
-        d.messages.insert("M".into(), Type::Message(fields));
+        d.messages.insert("M".into(), Type::message(fields));
         lower(source, &d).unwrap().node
     }
 

@@ -106,7 +106,7 @@ fn message(msg: &MessageDescriptor, open: &mut Vec<String>) -> Option<Type> {
         return None;
     }
     open.push(full);
-    let fields = msg
+    let fields: Vec<Field> = msg
         .fields()
         // An unset field reads zero; one with a declared default (proto2's) would read that
         // instead, so it is left out and a case reading it is refused.
@@ -120,7 +120,7 @@ fn message(msg: &MessageDescriptor, open: &mut Vec<String>) -> Option<Type> {
         })
         .collect();
     open.pop();
-    Some(Type::Message(fields))
+    Some(Type::message(fields))
 }
 
 /// `f` as a field's type: a list, a map, or one value, each number at its proto width.

@@ -2,7 +2,7 @@
 
 use cel_emit::emit::{Emitter, Messages, Vars};
 use cel_emit::functions::Function;
-use cel_emit::{lower, Body, Decl, Decls, Error, Field, Name, Type, Written};
+use cel_emit::{lower, Body, Decl, Decls, Error, Message, Name, Type, Written};
 use schema_emit::emit::std_form::{self, names, StdForm};
 use schema_emit::ir::Schema;
 
@@ -13,28 +13,28 @@ pub mod schema_types;
 struct NoMessages;
 
 impl Messages for NoMessages {
-    fn path(&mut self, i: usize, _: &[Field]) -> String {
+    fn path(&mut self, i: usize, _: &Message) -> String {
         format!("Message{i}")
     }
 
-    fn fields(&self, fields: &[Field]) -> Vec<String> {
-        fields.iter().map(|f| f.name.clone()).collect()
+    fn fields(&self, message: &Message) -> Vec<String> {
+        message.fields.iter().map(|f| f.name.clone()).collect()
     }
 }
 
 /// Each message is the struct schema-emit writes for its model.
 struct Models {
-    records: Vec<(Vec<Field>, String)>,
+    records: Vec<(Message, String)>,
 }
 
 impl Messages for Models {
-    fn path(&mut self, _: usize, fields: &[Field]) -> String {
-        let found = self.records.iter().find(|(held, _)| held == fields);
+    fn path(&mut self, _: usize, message: &Message) -> String {
+        let found = self.records.iter().find(|(held, _)| held == message);
         found.map_or_else(String::new, |(_, name)| format!("types::{name}"))
     }
 
-    fn fields(&self, fields: &[Field]) -> Vec<String> {
-        std_form::fields(fields.iter().map(|f| f.name.as_str()))
+    fn fields(&self, message: &Message) -> Vec<String> {
+        std_form::fields(message.fields.iter().map(|f| f.name.as_str()))
     }
 }
 
@@ -182,10 +182,10 @@ fn dynamic(expression: &str, functions: Option<&str>) -> Result<String, String> 
 }
 
 /// Each model of `schema` a record names, as its fields and struct.
-fn records(schema: &Schema, named: &[String]) -> Vec<(Vec<Field>, String)> {
+fn records(schema: &Schema, named: &[String]) -> Vec<(Message, String)> {
     let each = (0..schema.models.len()).zip(named);
     let found = each.filter_map(|(i, name)| match schema_types::record(schema, i) {
-        Ok(Type::Message(fields)) => Some((fields, name.clone())),
+        Ok(Type::Message(message)) => Some((message, name.clone())),
         _ => None,
     });
     found.collect()

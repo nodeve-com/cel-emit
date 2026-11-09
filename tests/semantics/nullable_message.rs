@@ -16,8 +16,8 @@ fn field(name: &str, ty: Type, required: bool) -> Field {
 
 /// The type of `M`: a nullable message field `o` of an int `f`, always present.
 fn outer() -> Type {
-    let inner = Type::Message(vec![field("f", Type::Int, true)]);
-    Type::Message(vec![field("o", Type::Nullable(Box::new(inner)), true)])
+    let inner = Type::message(vec![field("f", Type::Int, true)]);
+    Type::message(vec![field("o", Type::Nullable(Box::new(inner)), true)])
 }
 
 #[test]

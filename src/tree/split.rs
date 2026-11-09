@@ -76,7 +76,7 @@ mod tests {
             ty: Type::Int,
             required: false,
         };
-        Type::Message(vec![field("a"), field("b")])
+        Type::message(vec![field("a"), field("b")])
     }
 
     #[test]

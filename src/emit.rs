@@ -22,7 +22,7 @@ mod written;
 
 use crate::functions::{Function, Index, Pass, STD};
 use crate::tree::{Node, Typed};
-use crate::types::{Field, Type};
+use crate::types::{Message, Type};
 use crate::{walk, Error};
 
 pub use messages::{Declared, Items, Messages};
@@ -38,7 +38,7 @@ pub struct Emitter {
     paths: Index,
     declare: Box<dyn Messages>,
     /// Each message type met, with its Rust.
-    messages: Vec<(Vec<Field>, String)>,
+    messages: Vec<(Message, String)>,
     /// Each constant `matches` pattern, once, with its table; `static P{n}`.
     patterns: Vec<(String, Vec<u8>)>,
     /// Comprehensions around what is emitting.
@@ -48,7 +48,7 @@ pub struct Emitter {
     /// The ids of those returning a reference to a part of their arguments.
     lent: Vec<String>,
     /// Each message type an expression compares, and those nested in it: each gets `==`.
-    compared: Vec<Vec<Field>>,
+    compared: Vec<Message>,
 }
 
 impl Emitter {
@@ -99,11 +99,11 @@ impl Emitter {
             Type::Number => format!("{STD}::number::Number"),
             Type::List(t) => format!("Vec<{}>", self.rust(t)?),
             Type::Map(k, v) => format!("Vec<({}, {})>", self.rust(k)?, self.rust(v)?),
-            Type::Message(fields) => match self.messages.iter().find(|(f, _)| f == fields) {
+            Type::Message(m) => match self.messages.iter().find(|(f, _)| f == m) {
                 Some((_, rust)) => rust.clone(),
                 None => {
-                    let rust = self.declare.path(self.messages.len(), fields);
-                    self.messages.push((fields.clone(), rust.clone()));
+                    let rust = self.declare.path(self.messages.len(), m);
+                    self.messages.push((m.clone(), rust.clone()));
                     rust
                 }
             },

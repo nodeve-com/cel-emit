@@ -63,10 +63,10 @@ impl Emitter {
         else {
             return None;
         };
-        let Type::Message(fields) = &x.ty else {
+        let Type::Message(message) = &x.ty else {
             return None;
         };
-        (id == "json_encode" && self.declare.serializes(fields)).then_some(&**x)
+        (id == "json_encode" && self.declare.serializes(message)).then_some(&**x)
     }
 
     /// `&&`, `||`, a conditional, a binding, and a failure.

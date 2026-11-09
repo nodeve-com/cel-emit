@@ -231,7 +231,7 @@ fn stored(cases: &mut Cases) {
         field("xs", Type::list(Type::Narrow(Width::I32))),
         field("fs", Type::list(Type::Narrow(Width::F32))),
     ];
-    cases.message("M", Type::Message(fields));
+    cases.message("M", Type::message(fields));
 }
 
 /// Only here: a list stored at a narrow width, as elements and as a key.

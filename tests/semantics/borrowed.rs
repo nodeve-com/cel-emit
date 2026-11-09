@@ -11,7 +11,7 @@ fn place() -> Type {
         ty: Type::String,
         required: true,
     };
-    Type::Message(vec![field("id"), field("name")])
+    Type::message(vec![field("id"), field("name")])
 }
 
 fn places() -> Type {

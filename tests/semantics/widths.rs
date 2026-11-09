@@ -35,7 +35,7 @@ fn message(cases: &mut Cases) {
         field("fs", Type::list(narrow(Width::F32))),
         field("m", bytes_by_int()),
     ];
-    cases.message("M", Type::Message(fields));
+    cases.message("M", Type::message(fields));
 }
 
 fn value(v: Value) -> Got {

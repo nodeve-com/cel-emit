@@ -7,12 +7,12 @@ use crate::cases::{check, map, Got, Stored};
 
 /// The type of `M`: a required message field `o` of an int `f` its message may leave out.
 fn outer() -> Type {
-    let inner = Type::Message(vec![Field {
+    let inner = Type::message(vec![Field {
         name: "f".into(),
         ty: Type::Int,
         required: false,
     }]);
-    Type::Message(vec![Field {
+    Type::message(vec![Field {
         name: "o".into(),
         ty: inner,
         required: true,

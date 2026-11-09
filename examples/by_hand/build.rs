@@ -1,7 +1,7 @@
 //! Translates one CEL expression into a Rust function, `status`, for `src/main.rs` to include.
 
 use cel_emit::emit::{Emitter, Messages, Vars};
-use cel_emit::{lower, Decls, Error, Field, Name, Type};
+use cel_emit::{lower, Decls, Error, Field, Message, Name, Type};
 
 const EXPRESSION: &str = r#"sensor.temp > sensor.limit ? "hot" : "ok""#;
 
@@ -9,11 +9,11 @@ const EXPRESSION: &str = r#"sensor.temp > sensor.limit ? "hot" : "ok""#;
 struct OurStructs;
 
 impl Messages for OurStructs {
-    fn path(&mut self, _: usize, _: &[Field]) -> String {
+    fn path(&mut self, _: usize, _: &Message) -> String {
         "crate::Sensor".into()
     }
 
-    fn fields(&self, fields: &[Field]) -> Vec<String> {
+    fn fields(&self, fields: &Message) -> Vec<String> {
         fields.iter().map(|f| f.name.clone()).collect()
     }
 }
@@ -37,7 +37,7 @@ fn number(name: &str) -> Field {
 
 fn translate() -> Result<String, Error> {
     // What the expression may read, matching `struct Sensor` in `src/main.rs`.
-    let sensor = Type::Message(vec![number("temp"), number("limit")]);
+    let sensor = Type::message(vec![number("temp"), number("limit")]);
     let decls = Decls::new([("sensor".to_string(), Name::var(sensor, 0))].into());
 
     // Check the CEL, then write it as Rust.

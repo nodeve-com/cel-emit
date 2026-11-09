@@ -16,8 +16,8 @@ fn field(name: &str, ty: Type) -> Field {
 
 /// The type of `M`: an int `n`, and an optional message field `o` of an int `f`.
 fn outer() -> Type {
-    let inner = Type::Message(vec![field("f", Type::Int)]);
-    Type::Message(vec![
+    let inner = Type::message(vec![field("f", Type::Int)]);
+    Type::message(vec![
         field("n", Type::Int),
         field("o", Type::Optional(Box::new(inner))),
     ])
@@ -76,8 +76,8 @@ fn an_absent_optional_message_field_has_nothing_in_it() {
 /// the list type the optional holds.
 #[test]
 fn an_empty_list_falls_back_for_an_optional_list_of_messages() {
-    let sample = Type::Message(vec![field("f", Type::Int)]);
-    let ty = Type::Message(vec![field("w", Type::list(sample))]);
+    let sample = Type::message(vec![field("f", Type::Int)]);
+    let ty = Type::message(vec![field("w", Type::list(sample))]);
     let items = list(vec![map(&[("f", I(5))])]);
     check(|cases| {
         let source = "v.?w.orValue([]).size()";

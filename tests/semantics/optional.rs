@@ -24,7 +24,7 @@ fn message(cases: &mut Cases) {
         field("q", optional(Type::Narrow(Width::I32))),
         field("w", optional(Type::Narrow(Width::F32))),
     ];
-    cases.message("O", Type::Message(fields));
+    cases.message("O", Type::message(fields));
 }
 
 /// Only here: a value fills an optional field as set, even a zero, and a field the literal

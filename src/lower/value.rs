@@ -111,7 +111,7 @@ mod tests {
             ty: Type::Int,
             required: false,
         };
-        decls.messages.insert("M".into(), Type::Message(vec![n]));
+        decls.messages.insert("M".into(), Type::message(vec![n]));
         let map = |cel| lowered(cel, &decls).unwrap().map;
         assert!(map(r#"{"n": 1}"#));
         assert!(map(r#"cel.bind(x, 1, {"n": x})"#));

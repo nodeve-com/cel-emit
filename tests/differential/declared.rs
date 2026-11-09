@@ -8,7 +8,7 @@ fn required_q(field: impl Fn(&str, Type) -> Field) -> Type {
         required: true,
         ..field("q", Type::Int)
     };
-    Type::Message(vec![
+    Type::message(vec![
         required,
         field("r", Type::Nullable(Box::new(Type::Int))),
     ])
@@ -21,13 +21,13 @@ pub fn declared() -> Decls {
         ty,
         required: false,
     };
-    let m = Type::Message(vec![
+    let m = Type::message(vec![
         field("f", Type::Nullable(Box::new(Type::Int))),
         field("n", Type::Int),
         field("s", Type::String),
     ]);
-    let n = Type::Message(vec![field("k", Type::Int), field("t", Type::String)]);
-    let p = Type::Message(vec![
+    let n = Type::message(vec![field("k", Type::Int), field("t", Type::String)]);
+    let p = Type::message(vec![
         field("i", Type::Int),
         field("u", Type::Uint),
         field("d", Type::Double),

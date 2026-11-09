@@ -169,11 +169,11 @@ mod tests {
         let field = field_of;
         let mut d = Decls::default();
         let narrow = vec![field("n", Type::Int), field("w", Type::Narrow(Width::I32))];
-        d.messages.insert("Narrow".into(), Type::Message(narrow));
+        d.messages.insert("Narrow".into(), Type::message(narrow));
         let plain = vec![field("n", Type::Int)];
-        d.messages.insert("M".into(), Type::Message(plain));
+        d.messages.insert("M".into(), Type::message(plain));
         let absent = vec![field("l", Type::list(Type::Nullable(Box::new(Type::Int))))];
-        d.messages.insert("Absent".into(), Type::Message(absent));
+        d.messages.insert("Absent".into(), Type::message(absent));
         d
     }
 
@@ -205,7 +205,7 @@ mod tests {
             ty: Type::Double,
             required: true,
         }];
-        d.messages.insert("Tagged".into(), Type::Message(tagged));
+        d.messages.insert("Tagged".into(), Type::message(tagged));
         d.tags.insert("Tagged.t".into(), "b".into());
         d
     }
@@ -249,7 +249,7 @@ mod tests {
             field_of("l", list.clone()),
             field_of("o", Type::list(Type::Narrow(Width::I16))),
         ];
-        d.messages.insert("L".into(), Type::Message(fields));
+        d.messages.insert("L".into(), Type::message(fields));
         d.names.insert("x".into(), crate::Name::var(list, 0));
         let entry = |source: &str| {
             let Node::Message(made) = lower(source, &d).unwrap().node else {
@@ -272,7 +272,7 @@ mod tests {
         let mut d = decls();
         let nested = Type::Optional(Box::new(Type::Nullable(Box::new(Type::Int))));
         d.messages
-            .insert("Deep".into(), Type::Message(vec![field_of("o", nested)]));
+            .insert("Deep".into(), Type::message(vec![field_of("o", nested)]));
         for source in ["Deep{?o: optional.of(1)}.o", "Deep{o: 1}.o"] {
             assert!(lower(source, &d).is_err(), "{source}");
         }

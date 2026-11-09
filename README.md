@@ -10,7 +10,7 @@ Given `temp` (v0) and `limit` (v1) as doubles, the CEL string `temp > limit ? "h
 (if s::cmp::gt(v0, v1)? { String::from("hot") } else { String::from("ok") })
 ```
 
-A message is the caller's type: cel-emit type-checks its fields, and [`emit::Messages`] names its Rust. The caller writes each struct [`emit::Items::messages`] lists.
+A message is the caller's type: cel-emit type-checks its fields, and [`emit::Messages`] names its Rust. A message may carry a name, an opaque string the caller chooses. The name is part of its identity: messages with equal fields and different names are different types, each with its own Rust. The caller writes each struct [`emit::Items::messages`] lists.
 
 A result type works the same way. A number's **width** is the Rust size that holds it, such as `i8`. CEL computes in `int64`, `uint64`, and `float64`, and a [`types::Type::Narrow`] holds any other. [`lower::lower_as`] takes the type an expression returns, and the translated code returns that type, holding each width as a message field does. A result type `int8` returns an `i8`; a value past `i8`'s range is cel-emit-runtime's `Error::Range`, and a `float32` rounds. A list, a map, an optional, or a nullable holds the width of each element or value it carries, by the same rule.
 

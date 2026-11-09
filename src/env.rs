@@ -232,7 +232,8 @@ fn cel_type(ty: &Type, messages: &mut Messages) -> CelType {
     }
 }
 
-/// A message type's CEL name: its fields and their types, so equal messages share one.
+/// A message type's CEL name: its name and its fields with their types, so equal messages share
+/// one.
 fn message_name(ty: &Type) -> String {
     let fields: Vec<String> = ty
         .fields()
@@ -242,14 +243,21 @@ fn message_name(ty: &Type) -> String {
             t => format!("{}:{}", f.name, t.display()),
         })
         .collect();
-    format!("{MESSAGE}message<{}>", fields.join(","))
+    let name = match ty {
+        Type::Message(m) => m
+            .name
+            .as_deref()
+            .map_or(String::new(), |n| format!("[{n}]")),
+        _ => String::new(),
+    };
+    format!("{MESSAGE}message{name}<{}>", fields.join(","))
 }
 
 /// Each message type in `ty`, by its CEL name, into `messages`.
 pub(crate) fn register(ty: &Type, messages: &mut BTreeMap<String, Type>) {
     match ty {
-        Type::Message(fields) => {
-            for f in fields {
+        Type::Message(m) => {
+            for f in &m.fields {
                 register(&f.ty, messages);
             }
             messages.insert(message_name(ty), ty.clone());

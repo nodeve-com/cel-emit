@@ -8,7 +8,7 @@ use crate::cases::refusal;
 /// Only here: what lowering refuses stays refused, and a bad first argument is a parse error.
 #[test]
 fn sort_by_refuses_what_it_cannot_order() {
-    let message = Type::Message(vec![field("a", Type::Int)]);
+    let message = Type::message(vec![field("a", Type::Int)]);
     let names = [
         ("rs", Type::list(message)),
         ("ls", Type::list(Type::list(Type::Int))),

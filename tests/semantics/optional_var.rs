@@ -18,7 +18,7 @@ fn field(name: &str, ty: Type) -> Field {
 /// `optional(M)`: `M` an int `n`, a bool `b`, and a map `m` of string to int.
 fn ty() -> Type {
     let m = Type::Map(Box::new(Type::String), Box::new(Type::Int));
-    Type::Optional(Box::new(Type::Message(vec![
+    Type::Optional(Box::new(Type::message(vec![
         field("n", Type::Int),
         field("b", Type::Bool),
         field("m", m),

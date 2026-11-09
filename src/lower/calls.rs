@@ -92,17 +92,17 @@ mod tests {
     use crate::decls::Decl;
     use crate::emit::{Emitter, Messages, Vars};
     use crate::functions::Function;
-    use crate::types::{Field, Type};
+    use crate::types::{Field, Message, Type};
     use crate::{lower, Decls, Error, Name};
 
     struct Named;
 
     impl Messages for Named {
-        fn path(&mut self, i: usize, _: &[Field]) -> String {
+        fn path(&mut self, i: usize, _: &Message) -> String {
             format!("Declared{i}")
         }
 
-        fn fields(&self, fields: &[Field]) -> Vec<String> {
+        fn fields(&self, fields: &Message) -> Vec<String> {
             (0..fields.len()).map(|n| format!("f{n}")).collect()
         }
     }
@@ -111,19 +111,19 @@ mod tests {
     struct Opts(bool, bool);
 
     impl Messages for Opts {
-        fn path(&mut self, i: usize, fields: &[Field]) -> String {
+        fn path(&mut self, i: usize, fields: &Message) -> String {
             Named.path(i, fields)
         }
 
-        fn fields(&self, fields: &[Field]) -> Vec<String> {
+        fn fields(&self, fields: &Message) -> Vec<String> {
             Named.fields(fields)
         }
 
-        fn serializes(&self, _: &[Field]) -> bool {
+        fn serializes(&self, _: &Message) -> bool {
             self.0
         }
 
-        fn deserializes(&self, _: &[Field]) -> bool {
+        fn deserializes(&self, _: &Message) -> bool {
             self.1
         }
     }
@@ -137,7 +137,7 @@ mod tests {
     }
 
     fn message(field: &str, ty: Type) -> Type {
-        Type::Message(vec![Field {
+        Type::message(vec![Field {
             name: field.into(),
             ty,
             required: false,

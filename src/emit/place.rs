@@ -109,7 +109,10 @@ impl Emitter {
                 Part::Key => format!("x{n}.0"),
             },
             Node::Field(x, i) => {
-                let names = self.declare.fields(x.ty.fields());
+                let Type::Message(message) = &x.ty else {
+                    return Err(Error::Invalid("a field of a non-message".into()));
+                };
+                let names = self.declare.fields(message);
                 let name = names
                     .get(*i)
                     .ok_or_else(|| Error::Invalid("a field past its message".into()))?;

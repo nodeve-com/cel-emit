@@ -12,11 +12,11 @@ pub mod values;
 pub struct Positional;
 
 impl cel_emit::emit::Messages for Positional {
-    fn path(&mut self, i: usize, _: &[cel_emit::Field]) -> String {
+    fn path(&mut self, i: usize, _: &cel_emit::Message) -> String {
         format!("Declared{i}")
     }
 
-    fn fields(&self, fields: &[cel_emit::Field]) -> Vec<String> {
+    fn fields(&self, fields: &cel_emit::Message) -> Vec<String> {
         (0..fields.len()).map(|n| format!("f{n}")).collect()
     }
 }

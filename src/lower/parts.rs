@@ -68,7 +68,7 @@ pub(crate) fn literal_map(fields: Vec<(String, Typed, bool)>) -> Result<Typed, E
 
 /// A message of these fields, each typed as its value.
 pub(crate) fn anonymous(fields: Vec<(String, Typed)>) -> Result<Typed, Error> {
-    let declared = fields
+    let declared: Vec<Field> = fields
         .iter()
         .map(|(name, v)| Field {
             name: name.clone(),
@@ -76,5 +76,5 @@ pub(crate) fn anonymous(fields: Vec<(String, Typed)>) -> Result<Typed, Error> {
             required: false,
         })
         .collect();
-    rebuild(&Type::Message(declared), fields)
+    rebuild(&Type::message(declared), fields)
 }

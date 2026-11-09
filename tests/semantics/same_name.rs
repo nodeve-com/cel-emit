@@ -16,7 +16,7 @@ fn field(name: &str, ty: Type) -> Field {
 /// Only here: one identifier, a variable of message `M` and also message `M`.
 #[test]
 fn a_value_and_a_literal_share_a_name() {
-    let ty = Type::Message(vec![
+    let ty = Type::message(vec![
         field("n", Type::Int),
         field("o", Type::Optional(Box::new(Type::Int))),
     ]);
@@ -38,8 +38,8 @@ fn a_value_and_a_literal_share_a_name() {
 /// Only here: a variable of a message with an optional message field reads through it.
 #[test]
 fn a_value_reads_through_an_optional_message_field() {
-    let inner = Type::Message(vec![field("f", Type::Int)]);
-    let ty = Type::Message(vec![field("o", Type::Optional(Box::new(inner)))]);
+    let inner = Type::message(vec![field("f", Type::Int)]);
+    let ty = Type::message(vec![field("o", Type::Optional(Box::new(inner)))]);
     let mut decls = Decls::default();
     decls.names.insert("M".into(), Name { ty, at: At::Var(0) });
     for (source, want) in [("M.o.f + 1", Type::Int), ("has(M.o.f)", Type::Bool)] {
@@ -55,8 +55,8 @@ fn var(ty: Type, v: usize) -> Name {
 /// Only here: a variable's message, unnamed, and two declared messages of the same fields, one
 /// also a field of another.
 fn decls() -> (Decls, Type) {
-    let m = Type::Message(vec![field("n", Type::Int)]);
-    let outer = Type::Message(vec![field("inner", m.clone())]);
+    let m = Type::message(vec![field("n", Type::Int)]);
+    let outer = Type::message(vec![field("inner", m.clone())]);
     let mut decls = Decls::default();
     decls.messages.insert("M".into(), m.clone());
     decls.messages.insert("N".into(), m.clone());
