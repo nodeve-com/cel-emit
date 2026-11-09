@@ -1,4 +1,5 @@
-//! A message field its message must hold: `has()` and `.?` see it present, and read through it.
+//! A field its message must hold: `has()` and `.?` see it present, a message read through, a
+//! scalar at its zero value too.
 
 use cel_core::Value::{Bool as B, Int as I};
 use cel_emit::{Field, Type};
@@ -33,6 +34,39 @@ fn a_required_message_field_is_present() {
         ];
         for (source, want) in sources {
             cases.stored(source, Stored::new(outer(), v.clone()), Got::Value(want));
+        }
+    });
+}
+
+/// The type of `M`: a required bool `on` and a required int `n`.
+fn scalars() -> Type {
+    Type::message(vec![
+        Field {
+            name: "on".into(),
+            ty: Type::Bool,
+            required: true,
+        },
+        Field {
+            name: "n".into(),
+            ty: Type::Int,
+            required: true,
+        },
+    ])
+}
+
+/// A required scalar at its zero value is present: `has()` is true and `.?` yields it.
+#[test]
+fn a_required_scalar_at_zero_is_present() {
+    check(|cases| {
+        let v = map(&[("on", B(false)), ("n", I(0))]);
+        let sources = [
+            ("has(v.on)", B(true)),
+            ("v.?on.orValue(true)", B(false)),
+            ("has(v.n)", B(true)),
+            ("v.?n.orValue(7)", I(0)),
+        ];
+        for (source, want) in sources {
+            cases.stored(source, Stored::new(scalars(), v.clone()), Got::Value(want));
         }
     });
 }

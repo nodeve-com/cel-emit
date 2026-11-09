@@ -90,8 +90,8 @@ pub(crate) fn select_field(base: Typed, fields: &[Field], field: &str) -> Result
     Ok(Typed::stored(ty, Node::Field(Box::new(base), i)))
 }
 
-/// `base.field` of a message's `fields`, and whether it is a message its message must hold, so
-/// always present.
+/// `base.field` of a message's `fields`, and whether its message must hold it, so it is always
+/// present: a required field other than a nullable, whose presence is its value's.
 pub(crate) fn select_set(
     base: Typed,
     fields: &[Field],
@@ -99,7 +99,7 @@ pub(crate) fn select_set(
 ) -> Result<(Typed, bool), Error> {
     let set = fields
         .iter()
-        .any(|f| f.name == field && f.required && matches!(f.ty, Type::Message(_)));
+        .any(|f| f.name == field && f.required && !matches!(f.ty, Type::Nullable(_)));
     Ok((select_field(base, fields, field)?, set))
 }
 
