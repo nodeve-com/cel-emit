@@ -561,7 +561,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "schema-emit"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=4b8edc59008579fcd73fa62c7b6dfaf92d2f742c#4b8edc59008579fcd73fa62c7b6dfaf92d2f742c"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=192aea73f32b0c5034bf66b93ce3513221c26500#192aea73f32b0c5034bf66b93ce3513221c26500"
 dependencies = [
  "iri-string",
  "pattern-emit",
@@ -572,7 +572,7 @@ dependencies = [
 [[package]]
 name = "schema-emit-runtime"
 version = "0.6.2"
-source = "git+https://github.com/nodeve-com/schema-emit?rev=4b8edc59008579fcd73fa62c7b6dfaf92d2f742c#4b8edc59008579fcd73fa62c7b6dfaf92d2f742c"
+source = "git+https://github.com/nodeve-com/schema-emit?rev=192aea73f32b0c5034bf66b93ce3513221c26500#192aea73f32b0c5034bf66b93ce3513221c26500"
 dependencies = [
  "any-value",
  "base64",
