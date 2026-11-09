@@ -8,11 +8,10 @@ pub(crate) fn equal(ty: &Type) -> bool {
     match ty {
         Type::Int | Type::Uint | Type::Double | Type::Bool | Type::String | Type::Bytes => true,
         Type::Number | Type::Null | Type::Dyn => true,
-        Type::Timestamp | Type::Duration => true,
+        Type::Timestamp | Type::Duration | Type::Narrow(_) => true,
         Type::List(t) | Type::Optional(t) | Type::Nullable(t) => equal(t),
         Type::Map(k, v) => equal(k) && equal(v),
         Type::Message(fields) => fields.iter().all(|f| equal(&f.ty)),
-        _ => false,
     }
 }
 

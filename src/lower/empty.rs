@@ -141,7 +141,7 @@ impl<'a> Lower<'a> {
         }
         let node = match made.iter().any(|(_, optional)| *optional) {
             true => Node::ListOpt(made),
-            false => Node::List(made.into_iter().map(|(x, _)| x).collect()),
+            false => super::literal::stored_list(made.into_iter().map(|(x, _)| x).collect()),
         };
         Ok(Some(Typed::new(ty, node)))
     }

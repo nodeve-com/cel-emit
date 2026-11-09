@@ -149,3 +149,30 @@ fn a_function_called_twice_is_emitted_once() {
     assert!(calls.iter().all(|c| c.contains("twice(")), "{calls:?}");
     assert_eq!(items.matches("fn twice(").count(), 1, "{items}");
 }
+
+/// Only here: a stored float32 or int32 passes to a parameter of its width as it is; a CEL value
+/// narrows to it, past the width the call's Range status.
+#[test]
+fn a_stored_width_passes_to_a_parameter_of_its_width() {
+    use crate::cases::Stored;
+    use cel_emit::Width;
+    check(|cases| {
+        cases.function(written(
+            "half",
+            &[("f", Type::Narrow(Width::F32))],
+            "f / 2.0",
+        ));
+        cases.function(written("next", &[("a", Type::Narrow(Width::I32))], "a + 1"));
+        let f = Stored::new(Type::Narrow(Width::F32), Value::Double(0.5));
+        cases.stored("half(v)", f, Got::Value(Value::Double(0.25)));
+        let a = Stored::new(Type::Narrow(Width::I32), Value::Int(7));
+        cases.stored("next(v)", a, Got::Value(Value::Int(8)));
+        cases.gives("next(7)", &[], Got::Value(Value::Int(8)));
+        cases.gives("next(2147483648)", &[], Got::Status(Fail::Range));
+        cases.gives(
+            "half(0.1)",
+            &[],
+            Got::Value(Value::Double(f64::from(0.1f32) / 2.0)),
+        );
+    });
+}

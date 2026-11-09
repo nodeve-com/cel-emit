@@ -8,6 +8,7 @@ use crate::types::Type;
 
 mod reduce;
 mod split;
+mod stored;
 
 pub use reduce::Reduce;
 pub use split::{split, unbound, Split};
@@ -169,23 +170,6 @@ impl Typed {
         Typed { ty, node }
     }
 
-    /// A read of a value stored as `ty`, as CEL computes it: widened where `ty` holds a width.
-    pub fn stored(ty: Type, node: Node) -> Typed {
-        if ty.narrow() {
-            Typed::new(ty.cel(), Node::Widen(Box::new(Typed::new(ty, node))))
-        } else {
-            Typed::new(ty, node)
-        }
-    }
-
-    /// What this reads, where that is stored as `ty`, so a place of `ty` takes it as it is.
-    pub fn read_as(&self, ty: &Type) -> Option<&Typed> {
-        match &self.node {
-            Node::Widen(stored) if stored.ty == *ty => Some(stored),
-            _ => None,
-        }
-    }
-
     pub fn int(v: i64) -> Typed {
         Typed::new(Type::Int, Node::Int(v))
     }
@@ -215,11 +199,15 @@ impl Typed {
         Typed::new(Type::Bool, Node::Or(Box::new(a), Box::new(b)))
     }
 
+    /// `c ? a : b`; branches reading one stored type choose it as stored, widened once.
     pub fn cond(c: Typed, a: Typed, b: Typed) -> Typed {
-        Typed::new(
-            a.ty.clone(),
-            Node::Cond(Box::new(c), Box::new(a), Box::new(b)),
-        )
+        let ty = a.ty.clone();
+        let node = Typed::over_stored(
+            [a, b],
+            |t| t,
+            |[a, b]| Node::Cond(Box::new(c), Box::new(a), Box::new(b)),
+        );
+        Typed::new(ty, node)
     }
 
     /// `a op b`, `op` CEL's (`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`), both sides

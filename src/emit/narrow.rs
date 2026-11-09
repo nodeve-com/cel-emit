@@ -64,9 +64,22 @@ fn closure(ty: &Type, to: To, d: usize) -> String {
     }
 }
 
-/// Whether `id` takes a stored float32 as it is, to write it in its own digits.
-pub(super) fn writes_stored(id: &str) -> bool {
-    matches!(id, "float32_to_string" | "string_format")
+/// Whether `id` on a stored collection or optional widens what it reads ([`Emitter::stored_call`]);
+/// any other call takes a stored value as it is.
+pub(super) fn widens_each(id: &str) -> bool {
+    matches!(
+        id,
+        "size_list"
+            | "list_size"
+            | "size_map"
+            | "map_size"
+            | "index_list"
+            | "index_map"
+            | "in_list"
+            | "in_map"
+            | "optional_has_value"
+            | "optional_value"
+    )
 }
 
 impl Emitter {

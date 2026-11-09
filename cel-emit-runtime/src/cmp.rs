@@ -32,6 +32,9 @@ macro_rules! natively {
 
 natively!(i64, u64, f64, bool, String, DateTime<Utc>, TimeDelta);
 
+// Stored widths, compared at their own width: the answer is the widened one's.
+natively!(i8, i16, i32, i128, u16, u32, u128, f32);
+
 /// Text compares by code point, as `String` does.
 impl Equal for str {
     fn equal(&self, other: &str) -> Result<bool> {
@@ -90,6 +93,12 @@ impl Equal for Null {
 impl Equal for u8 {
     fn equal(&self, other: &u8) -> Result<bool> {
         Ok(self == other)
+    }
+}
+
+impl Order for u8 {
+    fn order(&self, other: &u8) -> Result<Option<Ordering>> {
+        Ok(Some(self.cmp(other)))
     }
 }
 

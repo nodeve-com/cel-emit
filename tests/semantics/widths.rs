@@ -85,6 +85,36 @@ fn a_write_outside_its_width_is_a_range_status() {
     });
 }
 
+/// Only here: a stored value passed on at its width, through a ternary, a comparison, a list, an
+/// optional, `orValue`, a field, or a message's `==`, gives CEL's answer.
+#[test]
+fn a_value_passed_on_at_its_width_gives_cels_answer() {
+    let rounded = || value(D(f64::from(0.1f32)));
+    check(|cases| {
+        message(cases);
+        for (source, want) in [
+            ("1 < 2 ? M{f: 0.1}.f : M{f: 0.2}.f", rounded()),
+            ("M{a: 1 < 2 ? M{a: 7}.a : M{a: 8}.a}.a", value(I(7))),
+            ("M{f: 0.1}.f == M{f: 0.1}.f", value(B(true))),
+            ("M{f: 0.1}.f == 0.1", value(B(false))),
+            ("M{a: 1}.a < M{a: 2}.a", value(B(true))),
+            ("M{a: 1}.a != M{a: 1}.a", value(B(false))),
+            ("M{f: 0.2}.f >= M{f: 0.1}.f", value(B(true))),
+            ("[M{a: 1}.a, M{a: 2}.a][1]", value(I(2))),
+            (
+                "M{xs: [M{a: 1}.a, M{b: 5}.b]}.xs",
+                value(list(vec![I(1), I(5)])),
+            ),
+            ("optional.of(M{f: 0.1}.f).value()", rounded()),
+            ("optional.of(M{a: 1}.a).orValue(M{a: 2}.a)", value(I(1))),
+            ("M{a: 7} == M{a: 7}", value(B(true))),
+            ("M{f: 0.1} == M{f: 0.2}", value(B(false))),
+        ] {
+            cases.gives(source, &[], want);
+        }
+    });
+}
+
 /// Only here: a stored map of int32 to uint8 widens each key and value it reads, and its
 /// size, membership, and comprehensions see the widened keys.
 #[test]

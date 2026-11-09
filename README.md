@@ -14,6 +14,16 @@ A message is the caller's type: cel-emit type-checks its fields, and [`emit::Mes
 
 A result type works the same way. A number's **width** is the Rust size that holds it, such as `i8`. CEL computes in `int64`, `uint64`, and `float64`, and a [`types::Type::Narrow`] holds any other. [`lower::lower_as`] takes the type an expression returns, and the translated code returns that type, holding each width as a message field does. A result type `int8` returns an `i8`; a value past `i8`'s range is cel-emit-runtime's `Error::Range`, and a `float32` rounds. A list, a map, an optional, or a nullable holds the width of each element or value it carries, by the same rule.
 
+A stored value keeps its width through anything whose answer doesn't depend on the width it computes in:
+
+- passing it to a parameter or field of its width
+- a ternary's branch
+- `==` or `<` against the same width
+- wrapping it in an optional or a list
+- `orValue`
+
+It widens to CEL's 64 bits at arithmetic, at a mix of widths, and at a call whose parameter is CEL's type. Widening a `float32` to a double is exact, so the answer is still CEL's. A 128-bit value past 64 bits fails `Range` only where it widens. A written function's parameter of a width takes its argument the way a field of that width does.
+
 Each `s::` piece is a ready-made CEL operation from **cel-emit-runtime**, cel-emit's companion library. **cel-core** is cel-emit's front end: it parses the text and type-checks it, and cel-emit translates the tree and types it gets back. A mistake such as `temp > "x"` stops there. cel-core runs only during translation, so the built program doesn't contain it; its interpreter runs only in cel-emit's tests.
 
 ## Why

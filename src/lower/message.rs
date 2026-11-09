@@ -236,16 +236,9 @@ mod tests {
 
     #[test]
     fn what_has_no_equality_is_refused_when_lowered() {
-        for source in [
-            "Narrow{n: 1} == Narrow{}",
-            "optional.ofNonZeroValue(M{n: 1}).hasValue()",
-        ] {
-            let err = lower(source, &decls()).unwrap_err();
-            assert!(
-                err.to_string().starts_with("unsupported"),
-                "{source}: {err}"
-            );
-        }
+        let source = "optional.ofNonZeroValue(M{n: 1}).hasValue()";
+        let err = lower(source, &decls()).unwrap_err();
+        assert!(err.to_string().starts_with("unsupported"), "{err}");
     }
 
     #[test]

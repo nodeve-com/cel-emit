@@ -42,7 +42,7 @@ impl Emitter {
         let Node::Call(id, args) = &t.node else {
             return not_a("call", t);
         };
-        if args.iter().any(|a| a.ty.narrow()) && !narrow::writes_stored(id) {
+        if narrow::widens_each(id) && args.iter().any(|a| a.ty.narrow()) {
             return self.stored_call(id, args, vars);
         }
         if self.by_reference(t) {

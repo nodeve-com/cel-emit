@@ -16,7 +16,11 @@ impl<'a> Lower<'a> {
         args: &'a [SpannedExpr],
     ) -> Result<Option<Node>, Error> {
         let node = match (name, receiver, args) {
-            ("optional.of", None, [x]) => Node::Call("optional_of".into(), vec![self.expr(x)?]),
+            ("optional.of", None, [x]) => Typed::over_stored(
+                [self.expr(x)?],
+                |t| Type::Optional(Box::new(t)),
+                |x| Node::Call("optional_of".into(), x.into()),
+            ),
             ("optional.ofNonZeroValue", None, [x]) => self.of_non_zero(x)?,
             ("optional.none", None, []) => Node::None,
             ("hasValue", Some(o), []) if self.optional_type(o) => {
@@ -68,7 +72,7 @@ impl<'a> Lower<'a> {
         if !matches!(&o.ty, Type::Optional(held) if **held == or.ty) {
             return unsupported("orValue across a dyn and another type");
         }
-        Ok(Node::Call("optional_or_value".into(), vec![o, or]))
+        Ok(stored_or_value(o, or))
     }
 
     pub(crate) fn optional_type(&self, e: &SpannedExpr) -> bool {
@@ -271,4 +275,22 @@ fn some_if(present: Typed, value: Typed) -> Node {
         Box::new(Typed::new(ty.clone(), Node::Some(Box::new(value)))),
         Box::new(Typed::new(ty, Node::None)),
     )
+}
+
+/// `o.orValue(or)`; an optional of a stored type with a fallback reading that type gives it as
+/// stored, widened once.
+fn stored_or_value(o: Typed, or: Typed) -> Node {
+    let call = |o, or| Node::Call("optional_or_value".into(), vec![o, or]);
+    match (&o.node, &or.node) {
+        (Node::Widen(held), Node::Widen(fallback))
+            if held.ty == Type::Optional(Box::new(fallback.ty.clone())) =>
+        {
+            let ty = fallback.ty.clone();
+            Node::Widen(Box::new(Typed::new(
+                ty,
+                call(o.unwidened(), or.unwidened()),
+            )))
+        }
+        _ => call(o, or),
+    }
 }

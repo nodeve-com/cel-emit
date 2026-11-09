@@ -134,7 +134,11 @@ impl<'a> Lower<'a> {
             super::nullable::compare(&mut operands);
         }
         self.settle(id, &mut operands)?;
-        widen_lazily(id, &mut operands);
+        self.declared_widths(id, &mut operands)?;
+        if super::widths::compares(id) && Typed::read_alike(&operands).is_some() {
+            operands = operands.into_iter().map(Typed::unwidened).collect();
+        }
+        super::widths::widen_lazily(id, &mut operands);
         let id = super::digits::own_digits(id, &mut operands);
         let types: Vec<Type> = operands.iter().map(|o| o.ty.clone()).collect();
         if self.paths.path(id, &types).is_none() {
@@ -262,22 +266,6 @@ fn joined(a: Typed, b: Typed) -> Result<(Typed, Typed), Error> {
         return Ok((fits(a, &Type::Dyn)?, fits(b, &Type::Dyn)?));
     }
     Ok((a, b))
-}
-
-/// A stored list or map `id` reads one element of, or the size of, left as stored: the call
-/// widens what it reads ([`crate::emit`]) rather than a copy of the whole collection.
-fn widen_lazily(id: &str, operands: &mut [Typed]) {
-    let at = match id {
-        "size_list" | "list_size" | "size_map" | "map_size" | "index_list" | "index_map" => 0,
-        "in_list" | "in_map" => 1,
-        _ => return,
-    };
-    if let Some(operand) = operands.get_mut(at) {
-        if let Node::Widen(stored) = &mut operand.node {
-            let stored = std::mem::replace(&mut **stored, Typed::bool(false));
-            *operand = stored;
-        }
-    }
 }
 
 /// The node of a literal with no child.

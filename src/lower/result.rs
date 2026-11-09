@@ -49,4 +49,64 @@ mod tests {
         let int8 = Type::Narrow(Width::I8);
         assert!(lower_as("'a'", &Decls::default(), &int8).is_err());
     }
+
+    /// `c`, a bool, and `x`, `y`, `f`, `g`, `o` stored as int32, int32, float32, float32, and an
+    /// optional float32; `half` takes a float32.
+    fn stored() -> Decls {
+        let f32 = Type::Narrow(Width::F32);
+        let mut d = Decls::default();
+        let names = [
+            ("c", Type::Bool),
+            ("x", Type::Narrow(Width::I32)),
+            ("y", Type::Narrow(Width::I32)),
+            ("f", f32.clone()),
+            ("g", f32.clone()),
+            ("o", Type::Optional(Box::new(f32.clone()))),
+        ];
+        for (i, (name, ty)) in names.into_iter().enumerate() {
+            d.names.insert(name.into(), crate::Name::var(ty, i));
+        }
+        d.functions.push(crate::functions::Function {
+            decl: crate::Decl::new("half").with_overload("half_f32", vec![f32], Type::Double),
+            paths: vec![("half_f32".into(), "half".into())],
+        });
+        d
+    }
+
+    /// Whether `t` widens, narrows, or holds a value to a width anywhere.
+    fn converts(t: &Typed) -> bool {
+        crate::walk::any(t, |n| {
+            matches!(n, Node::Widen(_) | Node::Store(_) | Node::Within(..))
+        })
+    }
+
+    #[test]
+    fn a_stored_value_passes_through_at_its_width() {
+        let d = stored();
+        let f32 = Type::Narrow(Width::F32);
+        let i32 = Type::Narrow(Width::I32);
+        for (source, ty) in [
+            ("f", f32.clone()),
+            ("c ? f : g", f32.clone()),
+            ("c ? x : y", i32.clone()),
+            ("o.orValue(f)", f32.clone()),
+            ("optional.of(f)", Type::Optional(Box::new(f32.clone()))),
+            ("[x, y]", Type::list(i32.clone())),
+            ("x == y", Type::Bool),
+            ("f < g", Type::Bool),
+            ("x >= y", Type::Bool),
+            ("half(c ? f : g)", Type::Double),
+        ] {
+            let t = lower_as(source, &d, &ty).unwrap();
+            assert!(!converts(&t), "{source}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn arithmetic_and_mixed_widths_widen() {
+        let d = stored();
+        for source in ["x + y", "x == 1", "f < 0.5", "c ? f : 0.5", "[x, 1]"] {
+            assert!(converts(&crate::lower(source, &d).unwrap()), "{source}");
+        }
+    }
 }

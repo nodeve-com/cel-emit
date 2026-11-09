@@ -110,8 +110,12 @@ macro_rules! collecting {
 pub(crate) use collecting;
 
 /// A node of type `to` from `x`, as a declared type casts a result: an int to a double, a value
-/// to the stored type of its CEL type; any other change is a mistake in the declarations.
+/// to the stored type of its CEL type, a read of that stored type as it is; any other change is a
+/// mistake in the declarations.
 pub fn cast(x: Typed, to: &Type) -> Result<Typed, Error> {
+    if let Some(stored) = x.read_as(to) {
+        return Ok(stored.clone());
+    }
     match (&x.ty, to) {
         (from, to) if from == to => Ok(x),
         (Type::Int, Type::Double) => Ok(Typed::call("int_to_double", vec![x], Type::Double)),

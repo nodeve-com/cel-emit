@@ -32,12 +32,14 @@ pub enum Type {
     Nullable(Box<Type>),
     /// A number stored at a width CEL does not compute in, wherever it sits: a field, a list's
     /// element, a map's key or value. CEL sees [`Width::cel`] ([`Type::cel`]); only a stored
-    /// type, a message's field or what a read of one widens ([`crate::tree::Node::Widen`]), holds it.
+    /// type holds it: a message's field, a parameter of its width, what a read of one widens
+    /// ([`crate::tree::Node::Widen`]), or both sides of a comparison at one width.
     Narrow(Width),
 }
 
 /// A number's width where it is not CEL's own (`int64`, `uint64`, `float64`): it is stored as
-/// that Rust type, a write outside it is an error, and a read widens to [`Width::cel`].
+/// that Rust type, a write outside it is an error, and a read widens to [`Width::cel`] where what
+/// takes it computes in CEL's width.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Width {
     I8,

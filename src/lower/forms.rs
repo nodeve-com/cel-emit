@@ -54,11 +54,8 @@ impl<'a> Lower<'a> {
             Node::Null if matches!(ty, Type::Nullable(_)) => Typed::new(ty.clone(), Node::None),
             _ => super::message::held(t, ty),
         };
-        Ok(Node::Cond(
-            self.sub_bool(cond)?,
-            Box::new(branch(then)),
-            Box::new(branch(other)),
-        ))
+        let c = *self.sub_bool(cond)?;
+        Ok(Typed::cond(c, branch(then), branch(other)).node)
     }
 
     /// `has(expr.field)`: a constant or variable, or a field.

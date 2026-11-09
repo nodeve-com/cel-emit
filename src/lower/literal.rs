@@ -39,7 +39,7 @@ impl<'a> Lower<'a> {
             return super::optional::list(made, elem).map(Some);
         }
         let made = made.into_iter().map(|(x, _)| fits(x, elem));
-        let node = Node::List(made.collect::<Result<_, _>>()?);
+        let node = stored_list(made.collect::<Result<_, _>>()?);
         Ok(Some(self.finish(ty.clone(), node)))
     }
 
@@ -60,5 +60,16 @@ impl<'a> Lower<'a> {
             Node::MapOf(made.into_iter().map(|(k, v, _)| (k, v)).collect())
         };
         Ok(Some(self.finish(ty.clone(), node)))
+    }
+}
+
+/// A list literal of `items`; items reading one stored type make a list of it, widened once.
+pub(super) fn stored_list(items: Vec<Typed>) -> Node {
+    match Typed::read_alike(&items) {
+        Some(t) => {
+            let stored = items.into_iter().map(Typed::unwidened).collect();
+            Node::Widen(Box::new(Typed::new(Type::list(t), Node::List(stored))))
+        }
+        None => Node::List(items),
     }
 }

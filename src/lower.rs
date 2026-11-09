@@ -36,6 +36,7 @@ mod select;
 mod share;
 mod special;
 mod value;
+mod widths;
 
 pub use calls::{literal, ms};
 pub use result::lower_as;
