@@ -96,8 +96,13 @@ impl<'a> Lower<'a> {
                 index,
                 optional: true,
             } => self.optional_index(expr, index),
-            // A selection after a `.?` is optional too: `a.?b.c` is present where `a.b` is.
-            Expr::Member { .. } if matches!(ty, Type::Optional(_)) => self.optional_chain(e),
+            // A selection or index on an optional is optional too: `a.?b.c` reads as `a.?b.?c`.
+            Expr::Member { expr, field, .. } if matches!(ty, Type::Optional(_)) => {
+                self.optional_chain(e, expr, field)
+            }
+            Expr::Index { expr, index, .. } if self.optional_type(expr) => {
+                self.optional_index(expr, index)
+            }
             Expr::Ident(_) | Expr::Member { .. } => self.name(e),
             Expr::Ternary { .. } => self.ternary(e, ty),
             Expr::Call { expr, args } => self.call(e, expr, args),

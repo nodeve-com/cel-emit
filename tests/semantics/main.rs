@@ -16,6 +16,7 @@ mod math;
 mod nullable_message;
 mod optional;
 mod optional_message;
+mod optional_var;
 mod results;
 mod same_name;
 mod share;

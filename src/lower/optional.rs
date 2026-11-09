@@ -129,15 +129,9 @@ impl<'a> Lower<'a> {
     fn select_optional(&self, base: Typed, field: &str, held: Type) -> Result<Node, Error> {
         match base.ty.clone() {
             Type::Optional(inner) if matches!(*inner, Type::Message(_) | Type::Map(..)) => {
-                let has = Typed::call("optional_has_value", vec![base.clone()], Type::Bool);
-                let value = Typed::call("optional_value", vec![base], *inner);
-                let ty = Type::Optional(Box::new(held.clone()));
-                let some = Typed::new(ty.clone(), self.select_optional(value, field, held)?);
-                Ok(Node::Cond(
-                    Box::new(has),
-                    Box::new(some),
-                    Box::new(Typed::new(ty, Node::None)),
-                ))
+                through(base, *inner, held.clone(), |v| {
+                    self.select_optional(v, field, held)
+                })
             }
             Type::Map(k, _) => {
                 let key = super::dynamic::field_key(&k, field)?;
@@ -156,10 +150,15 @@ impl<'a> Lower<'a> {
         }
     }
 
-    /// `a.?b.c`: a selection the checker types optional because a `.?` before it did. Only a
-    /// name the embedder reads answers, present where the variable holds a value, or a dotted
-    /// constant the embedder declares optional.
-    pub(crate) fn optional_chain(&mut self, e: &'a SpannedExpr) -> Result<Node, Error> {
+    /// `a.c` where `a` is an optional, such as `x.?b`: the checker types it optional, and it
+    /// reads as `a.?c`. A name the embedder reads answers itself, present where the variable
+    /// holds a value, as does a dotted constant the embedder declares optional.
+    pub(crate) fn optional_chain(
+        &mut self,
+        e: &'a SpannedExpr,
+        base: &'a SpannedExpr,
+        field: &str,
+    ) -> Result<Node, Error> {
         let held = self.held(e)?;
         let path = self.path(e);
         match path.as_deref().and_then(|p| self.found(p)) {
@@ -168,29 +167,24 @@ impl<'a> Lower<'a> {
                 self.read_var(path.as_deref().unwrap_or_default(), v, held),
             )),
             // A dotted name declared optional is itself.
-            Some(At::Constant(c)) if c.ty == Type::Optional(Box::new(held)) => Ok(c.node),
-            _ => unsupported("a selection after `.?` other than a name"),
+            Some(At::Constant(c)) if c.ty == Type::Optional(Box::new(held.clone())) => Ok(c.node),
+            _ if self.optional_type(base) => {
+                let base = self.expr(base)?;
+                self.select_optional(base, field, held)
+            }
+            _ => unsupported("a selection typed optional on other than an optional or a name"),
         }
     }
 
-    /// `base[?index]`: the element or entry where the index holds one, else absent.
+    /// `base[?index]`, or `base[index]` on an optional `base`: the element or entry where the
+    /// index holds one, else absent.
     pub(crate) fn optional_index(
         &mut self,
         base: &'a SpannedExpr,
         index: &'a SpannedExpr,
     ) -> Result<Node, Error> {
         let (base, index) = (self.expr(base)?, self.expr(index)?);
-        match base.ty.clone() {
-            Type::List(_) => Ok(Node::Call("optional_index_list".into(), vec![base, index])),
-            Type::Map(k, _) => {
-                let index = super::dynamic::fits(index, &k)?;
-                Ok(Node::Call("optional_index_map".into(), vec![base, index]))
-            }
-            Type::Dyn if index.ty == Type::String => {
-                Ok(Node::Call("dyn_optional_get".into(), vec![base, index]))
-            }
-            _ => unsupported("`[?]` on other than a list or map"),
-        }
+        index_optional(base, index)
     }
 
     /// `value` as an optional holding it where proto3 says it is present.
@@ -201,6 +195,48 @@ impl<'a> Lower<'a> {
         }
         let present = Typed::new(Type::Bool, presence(value.clone())?);
         Ok(some_if(present, value))
+    }
+}
+
+/// `then` of the value the optional `base`, of `inner`, holds where it holds one, else absent:
+/// an optional of `held`.
+fn through(
+    base: Typed,
+    inner: Type,
+    held: Type,
+    then: impl FnOnce(Typed) -> Result<Node, Error>,
+) -> Result<Node, Error> {
+    let has = Typed::call("optional_has_value", vec![base.clone()], Type::Bool);
+    let value = Typed::call("optional_value", vec![base], inner);
+    let ty = Type::Optional(Box::new(held));
+    let some = Typed::new(ty.clone(), then(value)?);
+    Ok(Node::Cond(
+        Box::new(has),
+        Box::new(some),
+        Box::new(Typed::new(ty, Node::None)),
+    ))
+}
+
+/// `base[?index]` on a lowered `base`: on an optional list or map, its value's where it holds
+/// one, else absent.
+fn index_optional(base: Typed, index: Typed) -> Result<Node, Error> {
+    match base.ty.clone() {
+        Type::Optional(inner) => {
+            let held = match &*inner {
+                Type::List(t) | Type::Map(_, t) => (**t).clone(),
+                _ => return unsupported("`[?]` on an optional of other than a list or map"),
+            };
+            through(base, *inner, held, |v| index_optional(v, index))
+        }
+        Type::List(_) => Ok(Node::Call("optional_index_list".into(), vec![base, index])),
+        Type::Map(k, _) => {
+            let index = super::dynamic::fits(index, &k)?;
+            Ok(Node::Call("optional_index_map".into(), vec![base, index]))
+        }
+        Type::Dyn if index.ty == Type::String => {
+            Ok(Node::Call("dyn_optional_get".into(), vec![base, index]))
+        }
+        _ => unsupported("`[?]` on other than a list or map"),
     }
 }
 

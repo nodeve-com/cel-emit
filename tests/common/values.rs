@@ -1,7 +1,7 @@
 //! A value as the Rust that supplies it, and as a native program writes its own results, so a
 //! CEL value and a run's answer compare as text.
 
-use cel_core::{MapKey, Value, ValueMap};
+use cel_core::{MapKey, OptionalValue, Value, ValueMap};
 use cel_emit::emit::Emitter;
 use cel_emit::{Field, Type, Width};
 
@@ -90,6 +90,7 @@ pub fn fits(v: &Value, ty: &Type) -> bool {
         (Type::Duration, v) => span(v).is_some(),
         (Type::List(t), Value::List(items)) => items.iter().all(|i| fits(i, t)),
         (Type::Narrow(w), v) => fits(v, &w.cel()),
+        (Type::Optional(t), Value::Optional(o)) => o.as_value().is_none_or(|v| fits(v, t)),
         (Type::Map(k, t), Value::Map(m)) => m
             .iter()
             .all(|(key, v)| fits(&key_value(key), k) && fits(v, t)),
@@ -126,6 +127,10 @@ pub fn rust(v: &Value, ty: &Type, em: &mut Emitter) -> String {
         (Type::List(t), Value::List(items)) => list(items, t, em),
         (Type::Map(..), Value::Map(m)) => map(m, ty, em),
         (Type::Message(fields), Value::Map(m)) => message(m, fields, ty, em),
+        (Type::Optional(t), Value::Optional(OptionalValue::Some(v))) => {
+            format!("Some({})", rust(v, t, em))
+        }
+        (Type::Optional(_), Value::Optional(OptionalValue::None)) => "None".into(),
         _ => scalar(v, ty).unwrap_or_else(|| unreachable!("{v:?} as {ty:?}")),
     }
 }
