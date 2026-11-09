@@ -2,7 +2,7 @@
 //! `none`, and the methods on one are calls cel-emit-runtime runs; `.?` and `[?]` select an optional
 //! where a field, key, or index may hold nothing.
 
-use super::has::{presence, select_field};
+use super::has::{presence, select_set};
 use super::parts::is_fields;
 use super::*;
 
@@ -145,7 +145,13 @@ impl<'a> Lower<'a> {
                 "dyn_chain".into(),
                 vec![base, Typed::string(field)],
             )),
-            Type::Message(fields) => self.present(select_field(base, &fields, field)?),
+            Type::Message(fields) => {
+                let (value, set) = select_set(base, &fields, field)?;
+                if set {
+                    return Ok(Node::Some(Box::new(value)));
+                }
+                self.present(value)
+            }
             _ => unsupported("`.?` on other than a name, a map, a message, or an optional of one"),
         }
     }

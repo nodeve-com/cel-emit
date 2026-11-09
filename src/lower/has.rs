@@ -1,7 +1,7 @@
 //! `has()` of a field or a map key: proto3 presence, which a message can tell. A scalar is present
-//! when nonzero, a list or map when nonempty. A message's presence needs a bit a message doesn't
-//! carry, so a message field read from a value is refused; a message literal says which fields it
-//! sets.
+//! when nonzero, a list or map when nonempty. A message field its message must hold is always
+//! present. One its message may leave out needs a bit a message doesn't carry, so it is refused
+//! where read from a value; a message literal says which fields it sets.
 
 use super::parts::{is_fields, is_message, parts};
 use super::*;
@@ -59,6 +59,18 @@ fn has_in(base: Typed, field: &str) -> Result<Node, Error> {
                 Box::new(Typed::bool(false)),
             ))
         }
+        Type::Message(fields) => {
+            let (value, set) = select_set(base, &fields, field)?;
+            if set {
+                // Read whole, so the base's error is the result's.
+                let some = Typed::new(
+                    Type::Optional(Box::new(value.ty.clone())),
+                    Node::Some(Box::new(value)),
+                );
+                return Ok(Node::Call("optional_has_value".into(), vec![some]));
+            }
+            presence(value)
+        }
         Type::Map(k, _) => Ok(Node::Call(
             "in_map".into(),
             vec![super::dynamic::field_key(&k, field)?, base],
@@ -67,7 +79,6 @@ fn has_in(base: Typed, field: &str) -> Result<Node, Error> {
             "dyn_has".into(),
             vec![base, Typed::string(field)],
         )),
-        Type::Message(fields) => presence(select_field(base, &fields, field)?),
         _ => unsupported("has() of other than a field or key"),
     }
 }
@@ -77,6 +88,19 @@ pub(crate) fn select_field(base: Typed, fields: &[Field], field: &str) -> Result
     let i = field_index(fields, field)?;
     let ty = fields.get(i).map(|f| f.ty.clone()).unwrap_or(Type::Int);
     Ok(Typed::stored(ty, Node::Field(Box::new(base), i)))
+}
+
+/// `base.field` of a message's `fields`, and whether it is a message its message must hold, so
+/// always present.
+pub(crate) fn select_set(
+    base: Typed,
+    fields: &[Field],
+    field: &str,
+) -> Result<(Typed, bool), Error> {
+    let set = fields
+        .iter()
+        .any(|f| f.name == field && f.required && matches!(f.ty, Type::Message(_)));
+    Ok((select_field(base, fields, field)?, set))
 }
 
 /// The index of `field` among `fields`, or refused: a field cel-emit has no type for.
