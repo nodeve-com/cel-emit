@@ -48,7 +48,10 @@ impl Build {
 
     /// `case` lowered over its bindings `types` and the messages.
     fn lower(&self, case: &Case, types: &[(String, Type)]) -> cel_emit::Typed {
-        let mut decls = Decls::default();
+        let mut decls = Decls {
+            skip_failed: case.skip_failed,
+            ..Decls::default()
+        };
         decls.messages.clone_from(&self.messages);
         decls.define(&self.bodies);
         for (i, (name, ty)) in types.iter().enumerate() {

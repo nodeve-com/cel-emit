@@ -44,6 +44,8 @@ struct Case {
     /// One program run takes these in order, sharing what the emitted code keeps between calls.
     messages: Vec<Vec<(String, Value)>>,
     want: Want,
+    /// Lowered with [`Decls::skip_failed`].
+    skip_failed: bool,
 }
 
 /// A value of a stored type.
@@ -74,6 +76,7 @@ impl Cases {
             result: None,
             messages,
             want,
+            skip_failed: false,
         });
     }
 
@@ -92,6 +95,14 @@ impl Cases {
         self.gives(source, inputs, want);
         if let Some(case) = self.0.last_mut() {
             case.result = Some(ty);
+        }
+    }
+
+    /// `source` over `inputs`, lowered with [`Decls::skip_failed`], gives `want`.
+    pub fn gives_skipping(&mut self, source: &str, inputs: &[(&str, Value)], want: Got) {
+        self.gives(source, inputs, want);
+        if let Some(case) = self.0.last_mut() {
+            case.skip_failed = true;
         }
     }
 

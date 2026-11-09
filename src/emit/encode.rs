@@ -126,9 +126,10 @@ impl Block<'_> {
         match out {
             Out::Value(..) | Out::Optional { .. } => self.scalar(out, key, held)?,
             Out::Object(o) => {
-                let _ = write!(self.body, "{{ let jm = json.key({key}); json.open(); ");
+                // Its own mark: each member left out on failure marks `jm` in this block.
+                let _ = write!(self.body, "{{ let jo = json.key({key}); json.open(); ");
                 self.members(o, d.saturating_add(1), held)?;
-                self.body.push_str("json.close_or_cut(jm); } ");
+                self.body.push_str("json.close_or_cut(jo); } ");
             }
         }
         Ok(())
