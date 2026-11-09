@@ -57,8 +57,24 @@ impl Emitter {
         Ok(declared)
     }
 
-    /// One message of `fields` as Rust type `rust`, adding its `==` to `out` where CEL compares
-    /// its fields.
+    /// Notes each message type in `ty`, and in its fields, as compared: it gets `==`.
+    pub(super) fn compares(&mut self, ty: &Type) {
+        match ty {
+            Type::Message(fields) if !self.compared.contains(fields) => {
+                self.compared.push(fields.clone());
+                fields.iter().for_each(|f| self.compares(&f.ty));
+            }
+            Type::List(t) | Type::Optional(t) | Type::Nullable(t) => self.compares(t),
+            Type::Map(k, v) => {
+                self.compares(k);
+                self.compares(v);
+            }
+            _ => {}
+        }
+    }
+
+    /// One message of `fields` as Rust type `rust`, adding its `==` to `out` where an expression
+    /// compares it and CEL compares its fields.
     fn declare_one(
         &mut self,
         fields: Vec<Field>,
@@ -82,7 +98,7 @@ impl Emitter {
             );
             held_fields.push((name, self.rust(&f.ty)?));
         }
-        if crate::stdlib::equal(&Type::Message(fields)) {
+        if self.compared.contains(&fields) && crate::stdlib::equal(&Type::Message(fields)) {
             let _ = writeln!(
                 out,
                 "impl {STD}::cmp::Equal for {rust} {{ fn equal(&self, other: &Self) -> {STD}::Result<bool> {{ Ok(true {same}) }} }}"

@@ -10,6 +10,7 @@ mod calls;
 mod cases;
 #[path = "../common/mod.rs"]
 mod common;
+mod equality;
 mod lists;
 mod lists_ext;
 mod math;

@@ -15,6 +15,14 @@ pub(crate) fn equal(ty: &Type) -> bool {
     }
 }
 
+/// Whether overload `id` compares values for equality: a message it takes needs its `==`.
+pub(crate) fn uses_equality(id: &str) -> bool {
+    matches!(
+        id,
+        "equals" | "not_equals" | "in_list" | "list_distinct" | "optional_of_non_zero_value"
+    )
+}
+
 /// Whether `sort` orders values of `ty`: a scalar the orderings compare, or a dyn, whose values
 /// order only among their own kind. `<` over a dyn stays refused.
 pub(crate) fn ordered(ty: &Type) -> bool {

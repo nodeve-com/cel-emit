@@ -48,6 +48,8 @@ pub struct Emitter {
     defined: Vec<crate::written::Body>,
     /// The ids of those returning a reference to a part of their arguments.
     lent: Vec<String>,
+    /// Each message type an expression compares, and those nested in it: each gets `==`.
+    compared: Vec<Vec<Field>>,
 }
 
 impl Emitter {
@@ -69,6 +71,7 @@ impl Emitter {
             depth: 0,
             defined: Vec::new(),
             lent: Vec::new(),
+            compared: Vec::new(),
         }
     }
 
@@ -125,6 +128,9 @@ impl Emitter {
 
     /// The call of overload `id`.
     fn call(&mut self, id: &str, args: &[Typed], vars: &dyn Vars) -> Result<String, Error> {
+        if crate::stdlib::uses_equality(id) {
+            args.iter().for_each(|a| self.compares(&a.ty));
+        }
         if let Some(x) = self.own_text(id, args) {
             return Ok(format!("{STD}::json::own(&({}))?", self.expr(x, vars)?));
         }

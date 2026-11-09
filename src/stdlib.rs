@@ -16,7 +16,7 @@ mod optional;
 mod strings;
 mod time;
 
-pub(crate) use cmp::equal;
+pub(crate) use cmp::{equal, uses_equality};
 pub(crate) use collections::literal;
 
 pub(crate) const ALL: &[&[Std]] = &[
