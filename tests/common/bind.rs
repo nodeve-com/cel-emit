@@ -14,9 +14,6 @@ impl Vars for Bound {
             .cloned()
             .ok_or_else(|| Error::Invalid("no such input".into()))
     }
-    fn has(&self, _: usize) -> Result<String, Error> {
-        Ok("true".into())
-    }
 }
 
 /// A Rust expression of type `String` writing `v`, a value of `ty`, as `values::show` writes it,

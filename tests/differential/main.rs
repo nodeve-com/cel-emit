@@ -25,9 +25,6 @@ impl Vars for NoVars {
     fn read(&self, _: usize) -> Result<String, Error> {
         Err(Error::Invalid("no inputs".into()))
     }
-    fn has(&self, _: usize) -> Result<String, Error> {
-        Err(Error::Invalid("no inputs".into()))
-    }
 }
 
 /// What the interpreter says: `err`, or the value as the emitted program writes it. A list is

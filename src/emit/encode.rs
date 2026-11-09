@@ -118,15 +118,7 @@ impl Block<'_> {
     fn member(&mut self, m: &Member, d: usize, held: &[usize]) -> Result<(), Error> {
         let key = serde_json::to_string(&m.key).map_err(|e| Error::Invalid(e.to_string()))?;
         let key = format!("{:?}", format!("{key}:"));
-        if let Some(present) = &m.present {
-            let present = self.expr(present)?;
-            let _ = write!(self.body, "if {present} {{ ");
-        }
-        self.out(&m.out, &key, (d, held))?;
-        if m.present.is_some() {
-            self.body.push_str("} ");
-        }
-        Ok(())
+        self.out(&m.out, &key, (d, held))
     }
 
     /// Writes what a member gives under `key`.

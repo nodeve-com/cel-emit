@@ -88,7 +88,7 @@ impl<'a> Lower<'a> {
     }
 
     /// `base.?field`: the field's value where it is present by proto3's rule, else absent. A
-    /// name bound to a variable reads its presence from the embedder; a map's key from the map.
+    /// map's key is present where the map has it.
     pub(crate) fn optional_field(
         &mut self,
         e: &'a SpannedExpr,
@@ -99,10 +99,7 @@ impl<'a> Lower<'a> {
         if let Some(p) = self.path(e) {
             match self.found(&p) {
                 Some(At::Constant(_)) => return unsupported("`.?` on a constant"),
-                Some(At::Var(v)) => {
-                    let present = Typed::new(Type::Bool, Node::Has(v));
-                    return Ok(some_if(present, self.read_var(&p, v, held)));
-                }
+                Some(At::Var(_)) => return unsupported("`.?` on a variable"),
                 None => {}
             }
         }
@@ -117,15 +114,6 @@ impl<'a> Lower<'a> {
         }
         let base = self.expr(base)?;
         self.select_optional(base, field, held)
-    }
-
-    /// Variable `v`, the declared name `path`, read as `held`: widened where it is stored at a
-    /// width.
-    fn read_var(&self, path: &str, v: usize, held: Type) -> Typed {
-        match self.decls.names.get(path) {
-            Some(name) if name.ty.narrow() => self.declared(path, v),
-            _ => Typed::new(held, Node::Var(v)),
-        }
     }
 
     /// `base.?field` on a lowered `base`, giving an optional of `held`: on an optional, its
@@ -161,8 +149,7 @@ impl<'a> Lower<'a> {
     }
 
     /// `a.c` where `a` is an optional, such as `x.?b`: the checker types it optional, and it
-    /// reads as `a.?c`. A name the embedder reads answers itself, present where the variable
-    /// holds a value, as does a dotted constant the embedder declares optional.
+    /// reads as `a.?c`. A dotted constant the embedder declares optional answers itself.
     pub(crate) fn optional_chain(
         &mut self,
         e: &'a SpannedExpr,
@@ -172,10 +159,7 @@ impl<'a> Lower<'a> {
         let held = self.held(e)?;
         let path = self.path(e);
         match path.as_deref().and_then(|p| self.found(p)) {
-            Some(At::Var(v)) => Ok(some_if(
-                Typed::new(Type::Bool, Node::Has(v)),
-                self.read_var(path.as_deref().unwrap_or_default(), v, held),
-            )),
+            Some(At::Var(_)) => unsupported("`.?` on a variable"),
             // A dotted name declared optional is itself.
             Some(At::Constant(c)) if c.ty == Type::Optional(Box::new(held.clone())) => Ok(c.node),
             _ if self.optional_type(base) => {

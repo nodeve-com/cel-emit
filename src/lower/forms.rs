@@ -58,7 +58,8 @@ impl<'a> Lower<'a> {
         Ok(Typed::cond(c, branch(then), branch(other)).node)
     }
 
-    /// `has(expr.field)`: a constant or variable, or a field.
+    /// `has(expr.field)`: a constant (always there), or a field. A variable is always there or
+    /// declared optional, so `has` of one is refused.
     pub(super) fn test_only(
         &mut self,
         e: &'a SpannedExpr,
@@ -67,7 +68,7 @@ impl<'a> Lower<'a> {
     ) -> Result<Node, Error> {
         match self.path(e).and_then(|p| self.found(&p)) {
             Some(At::Constant(_)) => Ok(Node::Bool(true)),
-            Some(At::Var(v)) => Ok(Node::Has(v)),
+            Some(At::Var(_)) => unsupported("`has()` of a variable, which is always there"),
             None => self.has_field(expr, field),
         }
     }

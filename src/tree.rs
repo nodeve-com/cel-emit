@@ -40,8 +40,6 @@ pub enum Node {
     Duration(i64, i32),
     /// The variable the embedder numbers so ([`crate::decls::At::Var`]).
     Var(usize),
-    /// Whether that variable holds a value: an expression testing one computes without it.
-    Has(usize),
     /// The function an overload id names, on its arguments, a method's receiver first.
     Call(String, Vec<Typed>),
     /// Whether the string matches anywhere, by a pattern table ([`pattern_emit::build`]): a
@@ -131,11 +129,10 @@ pub struct Object {
     pub members: Vec<Member>,
 }
 
-/// A member of an [`Object`]: written only where `present`, a `bool`, holds.
+/// A member of an [`Object`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct Member {
     pub key: String,
-    pub present: Option<Typed>,
     pub out: Out,
 }
 

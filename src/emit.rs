@@ -28,10 +28,9 @@ use crate::{walk, Error};
 pub use messages::{Declared, Items, Messages};
 
 /// How the embedder reads each variable: as a Rust place of its type, which may raise an error
-/// by `?`, and whether it holds a value, a `bool` expression.
+/// by `?`.
 pub trait Vars {
     fn read(&self, var: usize) -> Result<String, Error>;
-    fn has(&self, var: usize) -> Result<String, Error>;
 }
 
 /// Emits the trees of one crate: each message type once.

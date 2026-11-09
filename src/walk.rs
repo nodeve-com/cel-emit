@@ -27,7 +27,6 @@ macro_rules! leaf {
         $crate::walk::literal!()
             | Node::None
             | Node::Var(_)
-            | Node::Has(_)
             | Node::Item(..)
             | Node::Local(_)
             | Node::Fail(_)
@@ -57,7 +56,6 @@ macro_rules! access {
             | Node::Item(..)
             | Node::Field(..)
             | Node::First(..)
-            | Node::Has(_)
             | Node::Call(..)
             | Node::Matches(..)
     };
@@ -134,18 +132,7 @@ pub fn cast(x: Typed, to: &Type) -> Result<Typed, Error> {
 pub fn vars(t: &Typed) -> Vec<usize> {
     let mut out = Vec::new();
     nodes(t, &mut |n| {
-        if let Node::Var(v) | Node::Has(v) = n.node {
-            out.push(v)
-        }
-    });
-    out
-}
-
-/// Every variable `t` tests with [`Node::Has`]: it computes without them.
-pub fn tested(t: &Typed) -> Vec<usize> {
-    let mut out = Vec::new();
-    nodes(t, &mut |n| {
-        if let Node::Has(v) = n.node {
+        if let Node::Var(v) = n.node {
             out.push(v)
         }
     });
@@ -208,9 +195,6 @@ fn members(object: &Object, f: &mut impl FnMut(&Typed)) {
         nodes(value, f);
     }
     for m in &object.members {
-        if let Some(present) = &m.present {
-            nodes(present, f);
-        }
         match &m.out {
             Out::Value(x, _) => nodes(x, f),
             Out::Optional {

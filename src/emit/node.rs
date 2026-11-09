@@ -13,7 +13,6 @@ impl Emitter {
         Ok(match &t.node {
             // A field reads as a value, so one of a copied type needs no clone.
             Node::Field(..) if t.ty.copied() => place::receiver(&self.place(t, vars)?),
-            Node::Has(v) => vars.has(*v)?,
             Node::Call(..) => self.call_node(t, vars)?,
             Node::Matches(subject, table, source) => {
                 let n = self.pattern(table, source);

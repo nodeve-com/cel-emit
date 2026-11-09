@@ -5,7 +5,7 @@ use cel_core::Value::{Bool as B, Double as D, Int as I};
 use cel_emit::{Field, Type, Width};
 use cel_emit_runtime::Error;
 
-use crate::cases::{check, Cases, Got};
+use crate::cases::{check, refusal, Cases, Got};
 
 fn field(name: &str, ty: Type) -> Field {
     Field {
@@ -81,4 +81,14 @@ fn an_optional_field_of_a_stored_width_is_held_to_it() {
             cases.gives(source, &[], want);
         }
     });
+}
+
+/// A variable is always there or declared optional, so `has()` and `.?` of a declared name are
+/// refused: neither tests a variable for presence.
+#[test]
+fn has_and_optional_select_of_a_variable_name_are_refused() {
+    let names = [("a.b", Type::Int)];
+    for source in ["has(a.b)", "a.?b", "a.?b.orValue(0)"] {
+        assert!(refusal(source, &names).is_some(), "{source}");
+    }
 }

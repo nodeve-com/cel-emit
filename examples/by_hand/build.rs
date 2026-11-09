@@ -25,10 +25,6 @@ impl Vars for OurInputs {
     fn read(&self, _: usize) -> Result<String, Error> {
         Ok("sensor".into())
     }
-
-    fn has(&self, _: usize) -> Result<String, Error> {
-        Ok("true".into())
-    }
 }
 
 fn number(name: &str) -> Field {

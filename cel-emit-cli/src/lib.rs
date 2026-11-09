@@ -45,10 +45,6 @@ impl Vars for Input {
     fn read(&self, _: usize) -> Result<String, Error> {
         Ok(self.0.into())
     }
-
-    fn has(&self, _: usize) -> Result<String, Error> {
-        Ok("true".into())
-    }
 }
 
 fn function(name: &str, param: &[Type], result: Type) -> Function {

@@ -1,18 +1,16 @@
 //! `json.encode(x)`: `x` written as JSON in the module. A message's fields, a message name's, a
 //! literal's, or a map literal's, are written as an object member by member as each computes
 //! ([`Node::Encode`]), and so is each item of a `map` whose body is such a literal
-//! ([`Node::EncodeEach`]); a field whose variables hold no value is left out, and so is a nested
-//! object left with none. With [`Decls::skip_failed`], so is a field whose value errors or holds a
-//! NaN or an infinity, which JSON can't hold. Any other value is written whole
+//! ([`Node::EncodeEach`]). A member written from an optional is left out where it holds none. With
+//! [`Decls::skip_failed`], a field whose value errors or holds a NaN or an infinity, which JSON
+//! can't hold, is left out too. Any other value is written whole
 //! ([`Node::Written`]).
 
 use super::dynamic::fits;
 use super::fold::{fold_of, Fold};
 use super::parts::{held_by_field, is_fields};
-use super::scope::wrap;
 use super::*;
 use crate::tree::{split, Member, Object, Out};
-use crate::walk;
 
 impl<'a> Lower<'a> {
     /// `json.encode(arg)`: an object written as it computes, or the call on `arg` as a dyn.
@@ -54,7 +52,7 @@ impl<'a> Lower<'a> {
         let s = split(v);
         let mut members = Vec::new();
         for (key, v) in s.fields {
-            members.push(self.member(key, held_by_field(v), &s.lets)?);
+            members.push(self.member(key, held_by_field(v))?);
         }
         Ok(Object {
             lets: s.lets,
@@ -62,20 +60,12 @@ impl<'a> Lower<'a> {
         })
     }
 
-    /// The member `key` of an object whose lets are `lets`, written from `v`.
-    fn member(&mut self, key: String, v: Typed, lets: &[(usize, Typed)]) -> Result<Member, Error> {
+    /// The member `key` of an object, written from `v`.
+    fn member(&mut self, key: String, v: Typed) -> Result<Member, Error> {
         if is_fields(&v) {
             let out = Out::Object(self.object(v)?);
-            return Ok(Member {
-                key,
-                present: None,
-                out,
-            });
+            return Ok(Member { key, out });
         }
-        let read = reading(&v, lets);
-        // A message is there where its required reads are, else where any flagged one is.
-        let present = present_when(walk::vars(&wrap(unflagged(&v), &read)), Typed::and)
-            .or_else(|| present_when(walk::vars(&wrap(v.clone(), &read)), Typed::or));
         let kept = self.decls.skip_failed && !is_literal(&v);
         let out = match v.ty.clone() {
             _ if is_object(&v) => Out::Object(self.object(v)?),
@@ -91,7 +81,7 @@ impl<'a> Lower<'a> {
             }
             _ => Out::Value(self.written(v)?, kept),
         };
-        Ok(Member { key, present, out })
+        Ok(Member { key, out })
     }
 
     /// `t` as a dyn: a float32 or a list of them as stored, so each is written in its own digits.
@@ -132,53 +122,12 @@ fn is_object(t: &Typed) -> bool {
     is_fields(t) || matches!((&t.ty, &t.node), (Type::Message(_), Node::Message(_)))
 }
 
-/// Those of `lets` that `v` reads, directly or through another of them, in order.
-fn reading(v: &Typed, lets: &[(usize, Typed)]) -> Vec<(usize, Typed)> {
-    let mut read = walk::locals(v);
-    let mut kept: Vec<_> = lets
-        .iter()
-        .rev()
-        .filter(|(n, value)| {
-            let needed = read.contains(n);
-            if needed {
-                read.extend(walk::locals(value));
-            }
-            needed
-        })
-        .cloned()
-        .collect();
-    kept.reverse();
-    kept
-}
-
 /// Whether `t` is a constant, which computes without error.
 fn is_literal(t: &Typed) -> bool {
     matches!(
         t.node,
         Node::Int(_) | Node::Uint(_) | Node::Double(_) | Node::Bool(_) | Node::Str(_) | Node::Null
     )
-}
-
-/// `v`, a message literal without its flagged entries, which are set only where they hold: the
-/// message is there without them.
-fn unflagged(v: &Typed) -> Typed {
-    match &v.node {
-        Node::Message(entries) => Typed::new(
-            v.ty.clone(),
-            Node::Message(entries.iter().filter(|(_, _, f)| !f).cloned().collect()),
-        ),
-        _ => v.clone(),
-    }
-}
-
-/// The tests that each of `vars` holds a value, joined by `join`.
-fn present_when(mut vars: Vec<usize>, join: fn(Typed, Typed) -> Typed) -> Option<Typed> {
-    vars.sort_unstable();
-    vars.dedup();
-    let tests = vars
-        .into_iter()
-        .map(|v| Typed::new(Type::Bool, Node::Has(v)));
-    tests.reduce(join)
 }
 
 #[cfg(test)]

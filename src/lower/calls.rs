@@ -134,10 +134,6 @@ mod tests {
         fn read(&self, _: usize) -> Result<String, Error> {
             Ok("text".into())
         }
-
-        fn has(&self, _: usize) -> Result<String, Error> {
-            Ok("true".into())
-        }
     }
 
     fn message(field: &str, ty: Type) -> Type {

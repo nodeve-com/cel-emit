@@ -19,10 +19,6 @@ impl Vars for Params<'_> {
             false => format!("(*p{var})"),
         })
     }
-
-    fn has(&self, _: usize) -> Result<String, Error> {
-        Ok("true".into())
-    }
 }
 
 impl Emitter {
