@@ -3,6 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
+use cel_emit::emit::Messages;
 use cel_emit::Type;
 use cel_emit_schema_bridge::{bridge, Asked, Bridged, Held};
 use serde_json::{json, Value};
@@ -152,4 +153,86 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
 fn what_is_no_slot_of_a_filler_is_refused() {
     let refused = bridged(Some("id"), &[]).err().unwrap();
     assert!(refused.contains("`into` names no property"), "{refused}");
+}
+
+/// A generic model whose field is another model of its resource, holding slots `left` and
+/// `right` besides the model's own `load`.
+fn nested_generic() -> Value {
+    json!({
+        "$id": "outer",
+        "type": "object",
+        "required": ["inner", "load"],
+        "properties": {"inner": {"$ref": "#/$defs/Inner"}, "load": {"$dynamicRef": "#load"}},
+        "$defs": {
+            "load": {"$dynamicAnchor": "load", "type": "object"},
+            "left": {"$dynamicAnchor": "left", "type": "object"},
+            "right": {"$dynamicAnchor": "right"},
+            "Inner": {
+                "type": "object",
+                "required": ["left", "right"],
+                "properties": {
+                    "left": {"$dynamicRef": "#left"},
+                    "right": {"$dynamicRef": "#right"},
+                },
+            },
+        },
+    })
+}
+
+fn nested_asking() -> Value {
+    json!({
+        "$id": "https://example.test/crate",
+        "$ref": "outer",
+        "$defs": {
+            "Outer": nested_generic(),
+            "load": {
+                "$dynamicAnchor": "load",
+                "type": "object",
+                "required": ["n"],
+                "properties": {"n": {"type": "integer"}},
+            },
+            "left": {
+                "$dynamicAnchor": "left",
+                "type": "object",
+                "required": ["a"],
+                "properties": {"a": {"type": "string"}},
+            },
+            "right": {
+                "$dynamicAnchor": "right",
+                "type": "object",
+                "required": ["b"],
+                "properties": {"b": {"type": "boolean"}},
+            },
+        },
+    })
+}
+
+#[test]
+fn a_slot_one_model_deeper_is_its_propertys_filling_type() {
+    let schema = nested_asking();
+    let asked = Asked {
+        schema: &schema,
+        name: "Crate",
+        into: Some("load"),
+        computed: &["n"],
+        module: "b",
+        held: &[],
+    };
+    let bridged = bridge(&asked).map_err(|e| e.to_string()).unwrap();
+    let inner = bridged.record.properties.iter().find(|p| p.key == "inner");
+    let names = |ty: &Type| -> Vec<String> { ty.fields().iter().map(|f| f.name.clone()).collect() };
+    let ty = &inner.unwrap().ty;
+    assert_eq!(names(ty), ["left", "right"]);
+    let held = ty.fields();
+    assert_eq!(names(&held[0].ty), ["a"]);
+    assert_eq!(names(&held[1].ty), ["b"]);
+    // The nested generic model is the struct schema-emit writes: its type parameters follow from
+    // the fields a literal fills.
+    let Type::Message(message) = ty else {
+        panic!("not a message");
+    };
+    assert_eq!(bridged.models.clone().path(0, message), "b::Inner");
+    assert!(bridged
+        .items
+        .contains("pub struct Inner<Left_ = OuterLeft, Right_ = OuterRight>"));
 }

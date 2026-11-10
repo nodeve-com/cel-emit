@@ -25,7 +25,8 @@ pub struct Asked<'a> {
     /// The one object property the computed properties fill, where they don't fill the record's
     /// own.
     pub into: Option<&'a str>,
-    /// Each computed property's key.
+    /// Each computed property's key: a bare property name of the record, or of the `into`
+    /// object where `into` is set. A dotted key, or a property outside `into`, is refused.
     pub computed: &'a [&'a str],
     /// The Rust path of the module [`Bridged::items`] sits in.
     pub module: &'a str,
@@ -83,13 +84,18 @@ impl Models {
     /// Each model of the form's schema that is a record, its Rust in `module`, or in the module
     /// holding it: `external` gives each model's, by index.
     pub fn held(std: &StdForm, external: &[Option<String>], module: &str) -> Models {
-        let each = (0..std.schema.models.len()).zip(external);
-        let records = each.filter_map(|(i, held)| match types::record(std.schema, i) {
-            Ok(Type::Message(message)) => {
-                let at = held.as_deref().unwrap_or(module);
-                Some((message, format!("{at}::{}", std.model_name(i))))
-            }
-            _ => None,
+        let models = &std.schema.models;
+        // A model holding slots inside a record that fills them is that record's own type, named
+        // by the generic model's struct: its type parameters follow from the fields.
+        let records = (0..models.len()).flat_map(|root| {
+            let made = types::entered(std.schema, root).into_iter();
+            made.filter_map(|(i, ty)| match ty {
+                Type::Message(message) if !models.get(i)?.is_value() => {
+                    let at = external.get(i).and_then(Option::as_deref).unwrap_or(module);
+                    Some((message, format!("{at}::{}", std.model_name(i))))
+                }
+                _ => None,
+            })
         });
         Models {
             records: records.collect(),
@@ -126,9 +132,9 @@ struct Bridge<'a> {
 
 impl Bridge<'_> {
     /// `field` as a property sitting at `place`, with its check where an expression fills it.
-    fn property(&mut self, field: &Field, place: String) -> Result<Property, Error> {
+    fn property(&mut self, root: usize, field: &Field, place: String) -> Result<Property, Error> {
         let key = field.name.as_str();
-        let ty = types::value(self.schema, &field.ty).map_err(|e| e.at(key))?;
+        let ty = types::value(self.schema, root, &field.ty).map_err(|e| e.at(key))?;
         let computed = self.asked.computed.contains(&key);
         Ok(Property {
             key: key.into(),
@@ -171,7 +177,7 @@ impl Bridge<'_> {
         let mut properties = Vec::new();
         for (field, place) in own.iter().zip(rust) {
             if self.asked.into != Some(field.name.as_str()) {
-                properties.push(self.property(field, place)?);
+                properties.push(self.property(root, field, place)?);
                 continue;
             }
             let inner = match (&field.ty.base, field.held()) {
@@ -180,7 +186,7 @@ impl Bridge<'_> {
             };
             let inside = std_form::fields(inner.iter().map(|f| f.name.as_str()));
             for (field, at) in inner.iter().zip(inside) {
-                properties.push(self.property(field, format!("{place}.{at}"))?);
+                properties.push(self.property(root, field, format!("{place}.{at}"))?);
             }
         }
         Ok(properties)
