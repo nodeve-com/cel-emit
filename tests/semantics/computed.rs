@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use cel_emit::computed::{Compute, Computed, Expression, Property, Record};
 use cel_emit::emit::Emitter;
-use cel_emit::{Decls, Error, Field, Type};
+use cel_emit::{Decls, Error, Field, Name, Type};
 
 use crate::common::bind::Bound;
 use crate::common::{build_run, items, Positional};
@@ -45,7 +45,7 @@ pub fn record() -> Record {
         property("shown", Type::String, "data.shown"),
         property("tagged", Type::Bool, "data.tagged"),
     ];
-    for key in ["early", "last", "limit", "total"] {
+    for key in ["early", "last", "limit", "moved", "total"] {
         properties.push(property(key, Type::Int, &format!("data.{key}")));
     }
     if let Some(qty) = properties.get_mut(1) {
@@ -66,14 +66,23 @@ pub fn compute(key: &str, cel: &str) -> Compute {
     }
 }
 
+/// The params `floor` and `prev` beside the message an expression builds.
 pub fn decls() -> Decls {
     let mut decls = Decls::default();
     decls.messages.insert("Label".into(), label());
+    for (var, name) in ["floor", "prev"].into_iter().enumerate() {
+        decls.names.insert(name.into(), Name::var(Type::Int, var));
+    }
     decls
 }
 
+/// How each param reads: `floor` a field of the params, `prev` looked up by what `early` holds.
+fn reads() -> Bound {
+    Bound(vec!["p.floor".into(), "p.prev(r.data.early)?".into()])
+}
+
 /// Listed out of the order they fill in. `early` reads nothing computed and fills after `total`;
-/// `last` is a tree its caller lowered.
+/// `moved` reads only params, one of them read from `early`; `last` is a tree its caller lowered.
 fn computes(computed: &Computed) -> Vec<Compute> {
     let last = cel_emit::lower("limit + 1", &computed.decls().unwrap()).unwrap();
     vec![
@@ -86,6 +95,10 @@ fn computes(computed: &Computed) -> Vec<Compute> {
         compute("total", "qty * price"),
         compute("tagged", "has(tag.text)"),
         compute("limit", "price / (qty - 2)"),
+        Compute {
+            after: vec!["early".into()],
+            ..compute("moved", "prev + floor")
+        },
         Compute {
             after: vec!["total".into()],
             ..compute("early", "price + 1")
@@ -101,8 +114,17 @@ const RECORDS: &str = "
 #[derive(Clone, Debug, Default)]
 pub struct Data {
     pub bonus: Option<i64>, pub early: Option<i64>, pub label: Option<Declared0>,
-    pub last: Option<i64>, pub limit: i64, pub shown: Option<String>, pub tagged: Option<bool>,
-    pub total: Option<i64>,
+    pub last: Option<i64>, pub limit: i64, pub moved: Option<i64>, pub shown: Option<String>,
+    pub tagged: Option<bool>, pub total: Option<i64>,
+}
+pub struct Params { pub floor: i64 }
+impl Params {
+    fn prev(&self, key: Option<i64>) -> s::Result<i64> {
+        match key {
+            Some(key) if key < 100 => Ok(key * 10),
+            _ => Err(s::Error::Absent),
+        }
+    }
 }
 #[derive(Clone, Debug, Default)]
 pub struct Record {
@@ -119,12 +141,13 @@ fn main() {
     for entry in INDEX.iter() {
         println!(\"{} {:?} {}\", entry.key, entry.reads, entry.required);
     }
+    let params = Params { floor: 5 };
     let tag = Some(Declared0 { f0: \"t\".into() });
     for (n, (qty, price, tag)) in [(Some(3), 2, tag), (None, 2, None), (Some(2), 600, None), (Some(4), 4, None), (Some(5), 5, None)].into_iter().enumerate() {
         let data = Data { limit: 7, ..Data::default() };
         let mut record = Record { text: \"a\".into(), qty, price, tag, data };
         for entry in INDEX.iter() {
-            println!(\"{n} {} {:?}\", entry.key, (entry.fill)(&mut record));
+            println!(\"{n} {} {:?}\", entry.key, (entry.fill)(&mut record, &params));
         }
         println!(\"{n} {:?}\", record.data);
     }
@@ -143,7 +166,8 @@ fn built() -> Vec<String> {
     let computed = Computed {
         record: &record,
         decls: &decls,
-        vars: &Bound(Vec::new()),
+        params: "Params",
+        vars: &reads(),
     };
     let mut emitter = Emitter::new(&[], Box::new(Positional));
     assert_eq!(emitter.rust(&label()).unwrap(), "Declared0");
@@ -174,7 +198,7 @@ fn of(lines: &[String], n: usize) -> Vec<&str> {
 /// order, each entry with its key, reads, and `required`.
 #[test]
 fn an_index_lists_each_property_after_what_it_reads() {
-    let entries: Vec<&str> = walked().iter().take(8).map(String::as_str).collect();
+    let entries: Vec<&str> = walked().iter().take(9).map(String::as_str).collect();
     let want = [
         r#"limit ["price", "qty"] false"#,
         r#"last ["limit"] false"#,
@@ -183,6 +207,7 @@ fn an_index_lists_each_property_after_what_it_reads() {
         r#"bonus ["total"] false"#,
         r#"early ["price"] false"#,
         r#"label ["text", "total"] false"#,
+        r#"moved [] false"#,
         r#"shown ["bonus"] false"#,
     ];
     assert_eq!(entries, want);
@@ -200,15 +225,15 @@ fn a_walk_fills_skips_or_fails_each_property() {
     let filled = of(lines, 0);
     assert_eq!(filled[4], division("bonus"));
     assert_eq!(
-        filled[8],
-        r#"Data { bonus: None, early: Some(3), label: Some(Declared0 { f0: "a: 6" }), last: Some(3), limit: 2, shown: Some("0"), tagged: Some(true), total: Some(6) }"#
+        filled[9],
+        r#"Data { bonus: None, early: Some(3), label: Some(Declared0 { f0: "a: 6" }), last: Some(3), limit: 2, moved: Some(35), shown: Some("0"), tagged: Some(true), total: Some(6) }"#
     );
     let empty = of(lines, 1);
     let skipped = ["limit", "total", "bonus", "label"].map(|key| format!("{key} Skipped"));
     assert_eq!([empty[0], empty[3], empty[4], empty[6]], skipped);
     assert_eq!(
-        empty[8],
-        r#"Data { bonus: None, early: Some(3), label: None, last: Some(8), limit: 7, shown: Some("0"), tagged: Some(false), total: None }"#
+        empty[9],
+        r#"Data { bonus: None, early: Some(3), label: None, last: Some(8), limit: 7, moved: Some(35), shown: Some("0"), tagged: Some(false), total: None }"#
     );
     let refused = of(lines, 2);
     assert_eq!(refused[0], division("limit"));
@@ -217,10 +242,25 @@ fn a_walk_fills_skips_or_fails_each_property() {
         r#"total Failed(Failure { place: "total", reason: Check("range") })"#
     );
     assert_eq!([refused[4], refused[6]], ["bonus Skipped", "label Skipped"]);
-    assert!(refused[8].contains("limit: 7") && refused[8].contains("total: None"));
+    assert!(refused[9].contains("limit: 7") && refused[9].contains("total: None"));
     let all = of(lines, 3);
-    assert!(all[..8].iter().all(|line| line.ends_with(" Filled")));
-    assert!(all[8].contains("bonus: Some(10)") && all[8].contains(r#"shown: Some("10")"#));
+    assert!(all[..9].iter().all(|line| line.ends_with(" Filled")));
+    assert!(all[9].contains("bonus: Some(10)") && all[9].contains(r#"shown: Some("10")"#));
+}
+
+/// Only here: a param reads as its caller says, from the params or by a property the record
+/// holds once `after` has it filled, and a read that finds nothing skips its property.
+#[test]
+fn a_param_reads_from_the_params_and_the_record() {
+    let lines = walked();
+    assert_eq!(of(lines, 0)[7], "moved Filled");
+    assert!(
+        of(lines, 0)[9].contains("early: Some(3)") && of(lines, 0)[9].contains("moved: Some(35)")
+    );
+    assert_eq!(of(lines, 2)[7], "moved Skipped");
+    assert!(
+        of(lines, 2)[9].contains("early: Some(601)") && of(lines, 2)[9].contains("moved: None")
+    );
 }
 
 /// Only here: an expression failing inside a field of the message it builds names that field.
@@ -231,7 +271,7 @@ fn a_failure_inside_a_built_message_names_its_field() {
         inside[6],
         r#"label Failed(Failure { place: "label.text", reason: Expression(Division) })"#
     );
-    assert!(inside[8].contains("label: None"));
+    assert!(inside[9].contains("label: None"));
 }
 
 /// What translating `computes` over `record` refuses.
@@ -239,7 +279,8 @@ pub fn refusal(record: &Record, decls: &Decls, computes: &[Compute]) -> Error {
     let computed = Computed {
         record,
         decls,
-        vars: &Bound(Vec::new()),
+        params: "Params",
+        vars: &reads(),
     };
     let mut emitter = Emitter::new(&[], Box::new(Positional));
     computed.index("INDEX", computes, &mut emitter).unwrap_err()

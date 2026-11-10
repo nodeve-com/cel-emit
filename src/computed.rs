@@ -63,11 +63,15 @@ pub struct Compute {
     pub required: bool,
 }
 
-/// A record, and what its expressions read and call beside it: the caller's declarations, and
-/// how each of the caller's variables reads.
+/// A record, and what its expressions read and call beside it: the caller's declarations, its
+/// params, and how each of the caller's variables reads.
 pub struct Computed<'a> {
     pub record: &'a Record,
     pub decls: &'a Decls,
+    /// The Rust type of the params: what each entry's function takes beside the record.
+    pub params: &'a str,
+    /// Each read is Rust over the params `p` and the record `r`. One using a property an
+    /// expression fills needs it in [`Compute::after`].
     pub vars: &'a dyn Vars,
 }
 
@@ -81,7 +85,7 @@ struct Fill<'a> {
 }
 
 /// How an expression reads each variable: a property from the record `r`, any other as the
-/// caller says.
+/// caller says, over `r` and the params `p`.
 struct Reads<'a> {
     computed: &'a Computed<'a>,
     first: usize,
@@ -217,19 +221,20 @@ impl<'a> Computed<'a> {
         };
         let (mut functions, mut entries) = (String::new(), String::new());
         for (n, fill) in order.iter().filter_map(|key| fills.get(key)).enumerate() {
-            let rust = &self.record.rust;
+            let (rust, params) = (&self.record.rust, self.params);
             let body = fill
                 .body(emitter, &reads)
                 .map_err(|e| e.at(&fill.compute.key))?;
             let _ = writeln!(
                 functions,
-                "fn f{n}(record: &mut {rust}) -> {STD}::computed::Outcome {{ {body} }}"
+                "#[allow(unused_variables)]
+                fn f{n}(record: &mut {rust}, p: &{params}) -> {STD}::computed::Outcome {{ {body} }}"
             );
             let _ = writeln!(entries, "{},", fill.entry(n));
         }
-        let (rust, count) = (&self.record.rust, order.len());
+        let (rust, params, count) = (&self.record.rust, self.params, order.len());
         Ok(format!(
-            "pub static {name}: [{STD}::computed::Entry<{rust}>; {count}] = {{\n{functions}[{entries}] }};\n"
+            "pub static {name}: [{STD}::computed::Entry<{rust}, {params}>; {count}] = {{\n{functions}[{entries}] }};\n"
         ))
     }
 }
@@ -243,7 +248,7 @@ impl<'a> Fill<'a> {
             .collect()
     }
 
-    /// Its function's body: compute over the record, check, store. `at` holds the place a failed
+    /// Its function's body: compute over the record and the params, check, store. `at` holds the place a failed
     /// expression names: the key, or the field of a struct literal it was computing.
     fn body(&self, emitter: &mut Emitter, reads: &Reads) -> Result<String, Error> {
         let Property { key, place, .. } = self.property;

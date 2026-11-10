@@ -1,14 +1,15 @@
 //! Computed properties as a program walks them: an index is a list of [`Entry`], one per
 //! property, in the order they fill. cel-emit writes each entry; the program walking them is
-//! written once, for every record type `R`.
+//! written once, for every record type `R` and params type `P`.
 
 use std::borrow::Cow;
 
 use crate::Error;
 
-/// One computed property of a record `R`.
+/// One computed property of a record `R`, its expression reading the caller's params `P` beside
+/// the record.
 #[derive(Clone, Copy, Debug)]
-pub struct Entry<R: 'static> {
+pub struct Entry<R: 'static, P: 'static> {
     /// The property it fills.
     pub key: &'static str,
     /// The properties its expression reads, in key order.
@@ -16,7 +17,7 @@ pub struct Entry<R: 'static> {
     /// Whether the record needs it: what its caller said, for the walk to judge by.
     pub required: bool,
     /// Computes the value, checks it, and stores it in the record.
-    pub fill: fn(&mut R) -> Outcome,
+    pub fill: fn(&mut R, &P) -> Outcome,
 }
 
 /// What filling one property came to.

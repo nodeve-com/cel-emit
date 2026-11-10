@@ -22,7 +22,7 @@ impl Vars for NoVars {
 const WALK: &str = "
     let mut empty = Vec::new();
     for entry in INDEX.iter() {
-        let outcome = (entry.fill)(&mut record);
+        let outcome = (entry.fill)(&mut record, &());
         if let s::computed::Outcome::Failed(failure) = &outcome {
             eprintln!(\"{}: {:?}\", failure.place, failure.reason);
         }
@@ -106,6 +106,7 @@ pub fn computed(
     let computed = Computed {
         record: &bridged.record,
         decls: &declared.decls,
+        params: "()",
         vars: &NoVars,
     };
     let models = Box::new(bridged.models.clone());
