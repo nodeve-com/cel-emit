@@ -4,6 +4,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The package directory and target directory every program here shares.
 fn dirs(name: &str) -> (PathBuf, PathBuf) {
@@ -17,13 +18,16 @@ const PROFILE: &str = "\n[profile.release]\ncodegen-units = 1\nstrip = true\n";
 
 /// `text` at `path`, unless it already holds it: an unchanged file keeps its mtime, so Cargo keeps
 /// its build. Written beside and renamed over, so a test building the same package at once never
-/// reads it half written.
+/// reads it half written. The name beside is this call's alone: tests are threads of one process
+/// or processes of their own, and either way two may write the same file at once.
 fn write(path: &Path, text: &[u8]) {
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
     if std::fs::read(path).is_ok_and(|held| held == text) {
         return;
     }
     let file = path.file_name().unwrap().to_string_lossy();
-    let part = path.with_file_name(format!(".{file}.{}", std::process::id()));
+    let (process, call) = (std::process::id(), CALLS.fetch_add(1, Ordering::Relaxed));
+    let part = path.with_file_name(format!(".{file}.{process}.{call}"));
     std::fs::write(&part, text).unwrap();
     std::fs::rename(part, path).unwrap();
 }
