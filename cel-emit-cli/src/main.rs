@@ -1,13 +1,26 @@
-//! `cel-emit <expression.cel>... <dir> [--schema <file>] [--functions <file.json>] [--into
-//! <property>]`: writes the program as a Cargo package in `dir`. One expression is the program's
-//! value, with `--schema` over that JSON Schema's types. Two or more are computed properties,
-//! each filling the property its file's name keys, in the record `--schema` types, under `--into`
-//! where that names their object. `--functions` gives either functions written in CEL.
+//! `cel-emit <expression.cel>... <dir> [--schema <file>] [--defs <Name>=<file>] [--functions
+//! <file.json>] [--into <property>]`: writes the program as a Cargo package in `dir`. One
+//! expression is the program's value, with `--schema` over that JSON Schema's types. Two or more
+//! are computed properties, each filling the property its file's name keys, in the record
+//! `--schema` types, under `--into` where that names their object. `--defs` joins a second
+//! schema file's definitions to `--schema`'s, its root as `Name`. `--functions` gives either
+//! functions written in CEL.
 
 use std::path::Path;
 
 const USAGE: &str = "usage: cel-emit <expression.cel>... <dir> [--schema <file>] \
-                     [--functions <file.json>] [--into <property>]";
+                     [--defs <Name>=<file>] [--functions <file.json>] [--into <property>]";
+
+/// `schema` with the definitions of `defs`, a `<Name>=<file>`, joined to its own.
+fn joined(schema: Option<String>, defs: Option<String>) -> Result<Option<String>, String> {
+    let Some(defs) = defs else {
+        return Ok(schema);
+    };
+    let schema = schema.ok_or("--defs takes a --schema")?;
+    let (name, file) = defs.split_once('=').ok_or(USAGE)?;
+    let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+    cel_emit_cli::with_defs(&schema, name, &text).map(Some)
+}
 
 /// Each expression file's stem and text.
 fn expressions(files: &[String]) -> Result<Vec<(String, String)>, String> {
@@ -41,19 +54,20 @@ fn main() -> Result<(), String> {
         files.push(file);
     }
     let dir = files.pop().ok_or(USAGE)?;
-    let (mut schema, mut functions, mut into) = (None, None, None);
+    let (mut schema, mut functions, mut into, mut defs) = (None, None, None, None);
     while let Some(flag) = args.next() {
         let slot = match flag.as_str() {
             "--schema" => &mut schema,
             "--functions" => &mut functions,
             "--into" => &mut into,
+            "--defs" => &mut defs,
             _ => return Err(USAGE.into()),
         };
         *slot = Some(args.next().ok_or(USAGE)?);
     }
     let write = |e: std::io::Error| e.to_string();
     let read = |file: Option<String>| file.map(std::fs::read_to_string).transpose().map_err(write);
-    let (schema, functions) = (read(schema)?, read(functions)?);
+    let (schema, functions) = (joined(read(schema)?, defs)?, read(functions)?);
     let texts = [schema.as_deref(), functions.as_deref(), into.as_deref()];
     let program = program(&expressions(&files)?, texts)?;
     let dir = Path::new(&dir);

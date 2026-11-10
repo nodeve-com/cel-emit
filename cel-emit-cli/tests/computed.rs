@@ -10,6 +10,7 @@ mod programs;
 const ROWS: &str = include_str!("../../examples/answer_rows/computed/rows.cel");
 const LOCATION: &str = include_str!("../../examples/answer_rows/computed/location.cel");
 const RECORD: &str = include_str!("../../examples/answer_rows/computed/record.schema.json");
+const ANSWER_SCHEMA: &str = include_str!("../../examples/answer_rows/answer.schema.json");
 const ANSWER: &str = include_str!("../../examples/answer_rows/answer.json");
 const EXPECT: &str = include_str!("../../examples/answer_rows/expect.json");
 
@@ -25,6 +26,11 @@ fn parsed(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
 
+/// The example's schema: the record's, the answer's definitions joined to it.
+fn record_schema() -> String {
+    cel_emit_cli::with_defs(RECORD, "Answer", ANSWER_SCHEMA).unwrap()
+}
+
 /// The example's record: its `input` the answer.
 fn record(answer: &Value) -> String {
     json!({ "input": answer }).to_string()
@@ -34,7 +40,7 @@ fn record(answer: &Value) -> String {
 fn the_example_fills_rows_then_location() {
     // Listed in key order, `location` first: it reads `rows`, so it fills after.
     let expressions = [("location", LOCATION), ("rows", ROWS)];
-    let exe = built("computed_rows", &expressions, RECORD, None);
+    let exe = built("computed_rows", &expressions, &record_schema(), None);
     let (out, err, ok) = programs::run(&exe, &record(&parsed(ANSWER)));
     assert!(ok && err.is_empty(), "{err}");
     let filled = parsed(&out);
@@ -46,7 +52,7 @@ fn the_example_fills_rows_then_location() {
 #[test]
 fn a_failed_required_property_prints_its_failure_and_exits_non_zero() {
     let expressions = [("location", LOCATION), ("rows", ROWS)];
-    let exe = built("computed_rows", &expressions, RECORD, None);
+    let exe = built("computed_rows", &expressions, &record_schema(), None);
     let mut answer = parsed(ANSWER);
     answer["from"]["id"] = json!("nowhere");
     let (out, err, ok) = programs::run(&exe, &record(&answer));
@@ -117,4 +123,10 @@ fn a_check_refuses_a_value_naming_its_place() {
     assert!(err.starts_with("total: Check(\"range\")\n"), "{err}");
     assert!(err.contains("required and empty: total"), "{err}");
     assert_eq!(record["data"], json!({}));
+}
+
+#[test]
+fn a_definition_both_files_name_is_refused() {
+    let clash = cel_emit_cli::with_defs(INTO, "Label", "{}").unwrap_err();
+    assert_eq!(clash, "--defs: both files define Label");
 }

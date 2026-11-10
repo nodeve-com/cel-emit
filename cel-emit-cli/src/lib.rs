@@ -8,9 +8,11 @@ use schema_emit::emit::std_form::{names, StdForm};
 use schema_emit::ir::Schema;
 
 mod computed;
+mod defs;
 mod functions;
 
 pub use computed::computed;
+pub use defs::with_defs;
 
 /// No message reaches here: every value read is dynamic.
 struct NoMessages;

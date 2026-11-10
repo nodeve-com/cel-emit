@@ -38,7 +38,9 @@
     "currency",
     "options",
     "products",
-    "locations"
+    "locations",
+    "from",
+    "to"
   ],
   "properties": {
     "currency": {
@@ -210,6 +212,12 @@
       "items": {
         "$ref": "#/$defs/Location"
       }
+    },
+    "from": {
+      "$ref": "#/$defs/Place"
+    },
+    "to": {
+      "$ref": "#/$defs/Place"
     }
   },
   "x-strip-additional": true

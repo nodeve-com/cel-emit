@@ -32,14 +32,14 @@ input.orders.map(order, {
 }
 ```
 
-From this repo's root, write the program, then run it:
+From this repo's root:
 
 ```sh
 cargo run -p cel-emit-cli --bin cel-emit -- orders.cel target/orders
 cargo run --manifest-path target/orders/Cargo.toml < orders.json
 ```
 
-It prints one JSON line, wrapped here:
+It prints one line, wrapped here:
 
 ```json
 [{"id":1,"customer":"Ada","total_minor":700,"placed_utc":"2030-07-01T10:00:00Z","note":"gift"},
@@ -50,7 +50,7 @@ It prints one JSON line, wrapped here:
 
 ## Expressions
 
-The file holds one CEL expression of any shape: a list, a map, or a single value such as `input.orders.size()`. It reads `input`, the decoded JSON, and the program prints its value as JSON. `//` starts a comment. `cel.bind(name, value, rest)` names a value used more than once.
+The file holds one CEL expression: a list, a map, or one value such as `input.orders.size()`. It reads `input`, the decoded JSON. `//` starts a comment. `cel.bind(name, value, rest)` names a value used more than once.
 
 ## Functions
 
@@ -75,7 +75,9 @@ The output stays the same. The program gains a struct per object, and [schema-em
 - **A bad answer fails where it's wrong.** The error names the field, as `Input.options[0].pricing.total`, before the expression runs.
 - **Write only what you read.** The program skips, unread, keys the schema doesn't name, unless it closes the object with `additionalProperties: false`.
 
-[`examples/answer_rows`](../examples/answer_rows) runs both ways: `answer.schema.json` names what `rows.cel` reads.
+[`examples/answer_rows`](../examples/answer_rows) runs both ways: `answer.schema.json` names what its expressions read.
+
+`--defs <Name>=<file>` joins a second schema file's definitions to this one's: its root as `Name`, its `$defs` by their own names. A name both define fails. [`computed`](../examples/answer_rows/computed)'s record reads `Answer` this way.
 
 ## Your own functions
 
@@ -97,7 +99,7 @@ Write a formula the expression repeats once, as a function in a JSON file:
 cargo run -p cel-emit-cli --bin cel-emit -- rows-func.cel target/rows-func --schema answer.schema.json --functions rows-func.functions.json
 ```
 
-The expression calls it by its key, `location(input.locations, row.legs[0].location.id)`, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. Each becomes one Rust function, its body run at every call; `cel.bind` saves computing a value twice.
+The expression calls it by its key, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. Each becomes one Rust function, its body run at every call.
 
 ## Computed properties
 
@@ -105,7 +107,7 @@ With 2+ `.cel` files, each fills the [computed property](../docs/computed.md) it
 
 ## Limits
 
-- **Without a schema, JSON values have no declared types**, so CEL can't tell which JSON values hold numbers. Comparing, copying, and selecting work as written, but arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which translation refuses.
+- **Without a schema, JSON values have no declared types**, so CEL can't tell which hold numbers. Only arithmetic needs a cast: `int(order.qty) * 2`, not `order.qty * 2`, which translation refuses.
 - **One failure stops the run.** An expression fails whole, so a lookup that finds nothing ends the program with a non-zero exit and prints nothing. That error names its kind, not its place.
 - **The program reads the whole input into memory.**
 - **The program builds inside this repo.** Its `Cargo.toml` points at this checkout's cel-emit-runtime by path.
