@@ -243,11 +243,15 @@ impl<'a> Fill<'a> {
             .collect()
     }
 
-    /// Its function's body: compute over the record, check, store.
+    /// Its function's body: compute over the record, check, store. `at` holds the place a failed
+    /// expression names: the key, or the field of a struct literal it was computing.
     fn body(&self, emitter: &mut Emitter, reads: &Reads) -> Result<String, Error> {
         let Property { key, place, .. } = self.property;
         let ty = emitter.rust(self.property.value())?;
-        let value = emitter.expr(&self.tree, reads)?;
+        emitter.at = Some(key.clone());
+        let value = emitter.expr(&self.tree, reads);
+        emitter.at = None;
+        let value = value?;
         let check = self
             .property
             .check
@@ -263,8 +267,9 @@ impl<'a> Fill<'a> {
             false => "value",
         };
         Ok(format!(
-            "let value = {{ let r = &*record; (|| -> {STD}::Result<{ty}> {{ Ok({value}) }})() }};
-            let value = match {STD}::computed::computed({key:?}, value) {{
+            "let at = &::core::cell::Cell::new({key:?});
+            let value = {{ let r = &*record; (|| -> {STD}::Result<{ty}> {{ Ok({value}) }})() }};
+            let value = match {STD}::computed::computed(at.get(), value) {{
                 Ok(value) => value,
                 Err(outcome) => return outcome,
             }};

@@ -16,6 +16,7 @@ The caller gives each computed property its key and its expression, as CEL text 
 - **`after`**, a computed property's option, lists properties it fills after, beside the ones its expression reads, for a value the caller hands its expression that depends on them. It only orders: one left empty doesn't stop the property.
 - **`required`**, a computed property's option, says the record needs it. It changes nothing in how the property fills: its entry in [the index](#the-index) repeats it, for whoever walks the index to judge by.
 - **A property's check runs as it fills**, before any expression reads it. A value that fails leaves the property empty, and the failure names the place, as `total` or `label.text`.
+- **An expression's failure names its property**, or the field the expression had reached where it builds an object, as `label.text`. A failure inside a list's element names the list's property.
 - **An expression whose input is empty doesn't run**, unless it allows the absence, as `has(order.note)` does. Its own property stays empty, without a failure. A property the caller types as an optional reads as one, empty or not: `total.orValue(0)`.
 - **A property may always hold a value**, as one with a default does. A failure leaves it holding what it held, so an expression reading it still runs.
 - **`into`** names one object property of the record for the computed properties to fill. Its properties are then read by their own names, as the record's are; a name the two share fails translation.

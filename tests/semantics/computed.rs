@@ -77,7 +77,10 @@ pub fn decls() -> Decls {
 fn computes(computed: &Computed) -> Vec<Compute> {
     let last = cel_emit::lower("limit + 1", &computed.decls().unwrap()).unwrap();
     vec![
-        compute("label", "Label{text: text + ': ' + string(total)}"),
+        compute(
+            "label",
+            "Label{text: text + ': ' + string(total + 0 / (total - 25))}",
+        ),
         compute("shown", "string(bonus.orValue(0))"),
         compute("bonus", "100 / (total - 6)"),
         compute("total", "qty * price"),
@@ -117,7 +120,7 @@ fn main() {
         println!(\"{} {:?} {}\", entry.key, entry.reads, entry.required);
     }
     let tag = Some(Declared0 { f0: \"t\".into() });
-    for (n, (qty, price, tag)) in [(Some(3), 2, tag), (None, 2, None), (Some(2), 600, None), (Some(4), 4, None)].into_iter().enumerate() {
+    for (n, (qty, price, tag)) in [(Some(3), 2, tag), (None, 2, None), (Some(2), 600, None), (Some(4), 4, None), (Some(5), 5, None)].into_iter().enumerate() {
         let data = Data { limit: 7, ..Data::default() };
         let mut record = Record { text: \"a\".into(), qty, price, tag, data };
         for entry in INDEX.iter() {
@@ -185,7 +188,7 @@ fn an_index_lists_each_property_after_what_it_reads() {
     assert_eq!(entries, want);
 }
 
-/// Only here: the walk over four records: every property filling, an empty input skipping what
+/// Only here: the walk over the first four records: every property filling, an empty input skipping what
 /// reads it, a failure and a check's refusal leaving a property as it was, an optional read and
 /// an `after` going on regardless.
 #[test]
@@ -218,6 +221,17 @@ fn a_walk_fills_skips_or_fails_each_property() {
     let all = of(lines, 3);
     assert!(all[..8].iter().all(|line| line.ends_with(" Filled")));
     assert!(all[8].contains("bonus: Some(10)") && all[8].contains(r#"shown: Some("10")"#));
+}
+
+/// Only here: an expression failing inside a field of the message it builds names that field.
+#[test]
+fn a_failure_inside_a_built_message_names_its_field() {
+    let inside = of(walked(), 4);
+    assert_eq!(
+        inside[6],
+        r#"label Failed(Failure { place: "label.text", reason: Expression(Division) })"#
+    );
+    assert!(inside[8].contains("label: None"));
 }
 
 /// What translating `computes` over `record` refuses.

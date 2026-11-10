@@ -1,7 +1,7 @@
 //! The typed tree as Rust: each node an expression of its type's Rust ([`Emitter::rust`]), a CEL
 //! error raised by `?`, so a tree emits into a closure or function returning
 //! `cel_emit_runtime::Result`. Every name it writes is generated: cel-emit-runtime as `s`, locals `l0`, a comprehension's element and index `x0` and `n0`, a struct literal's `rec` and
-//! `val`; a string is a literal's data, never a name; a message and its fields are named by
+//! `val`, a computed property's `at`; a string is a literal's data, never a name; a message and its fields are named by
 //! [`Messages`], as a CEL environment declares a message type. The embedder writes the crate around
 //! it: `use ::cel_emit_runtime as s;`, the variables, each struct [`Items::messages`] declares, and
 //! [`Items::code`]. A value is owned: what an expression reads, a variable, a
@@ -49,6 +49,9 @@ pub struct Emitter {
     lent: Vec<String>,
     /// Each message type an expression compares, and those nested in it: each gets `==`.
     compared: Vec<Message>,
+    /// The record place the value about to emit fills, where a computed property's failure names
+    /// one: a struct literal there notes each field's place in `at` before computing it.
+    pub(crate) at: Option<String>,
 }
 
 impl Emitter {
@@ -71,6 +74,7 @@ impl Emitter {
             defined: Vec::new(),
             lent: Vec::new(),
             compared: Vec::new(),
+            at: None,
         }
     }
 
@@ -115,6 +119,11 @@ impl Emitter {
 
     /// `t` as a Rust expression of its type.
     pub fn expr(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
+        // Only a value that is the place's own keeps it: a conditional's branch, a binding's
+        // body, a struct literal.
+        if !matches!(t.node, Node::Cond(..) | Node::Let(..) | Node::Message(..)) {
+            self.at = None;
+        }
         match &t.node {
             walk::literal!() => node::literal(t),
             walk::access!() => self.access(t, vars),

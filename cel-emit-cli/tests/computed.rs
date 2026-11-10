@@ -51,7 +51,7 @@ fn a_failed_required_property_prints_its_failure_and_exits_non_zero() {
     answer["from"]["id"] = json!("nowhere");
     let (out, err, ok) = programs::run(&exe, &record(&answer));
     assert!(!ok);
-    assert!(err.starts_with("location: Expression("), "{err}");
+    assert!(err.starts_with("location.from: Expression("), "{err}");
     assert!(err.contains("required and empty: location"), "{err}");
     let filled = parsed(&out);
     assert_eq!(filled["rows"], parsed(EXPECT));

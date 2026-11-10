@@ -112,7 +112,7 @@ impl Emitter {
     }
 
     /// A struct literal: the message, defaulted, then each entry set in order, as its field
-    /// stores it.
+    /// stores it. Filling a record place, it notes each field's place before computing it.
     pub(super) fn message(
         &mut self,
         t: &Typed,
@@ -124,11 +124,17 @@ impl Emitter {
             return Err(Error::Invalid("a struct literal of a non-message".into()));
         };
         let names = self.declare.fields(message);
+        let at = self.at.take();
         for (i, v, flagged) in entries {
             let name = names
                 .get(*i)
                 .ok_or_else(|| Error::Invalid("a field past its message".into()))?;
             let field = t.ty.fields().get(*i);
+            if let (Some(at), Some(f)) = (&at, field) {
+                let inside = format!("{at}.{}", f.name);
+                let _ = write!(body, "at.set({inside:?}); ");
+                self.at = Some(inside);
+            }
             let v = match field {
                 Some(f) => self.stored(v, &f.ty, vars)?,
                 None => self.expr(v, vars)?,
@@ -140,6 +146,7 @@ impl Emitter {
             } else {
                 let _ = write!(body, "rec.{name} = {v}; ");
             }
+            self.at = None;
         }
         Ok(format!("{{ {body}rec }}"))
     }

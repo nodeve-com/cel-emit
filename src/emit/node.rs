@@ -82,11 +82,12 @@ impl Emitter {
                 format!("{STD}::cmp::{f}(|| {STD}::ok({a}), || {STD}::ok({b}))?")
             }
             Node::Cond(c, a, b) => {
-                let (c, a, b) = (
-                    self.expr(c, vars)?,
-                    self.expr(a, vars)?,
-                    self.expr(b, vars)?,
-                );
+                let at = self.at.take();
+                let c = self.expr(c, vars)?;
+                self.at.clone_from(&at);
+                let a = self.expr(a, vars)?;
+                self.at = at;
+                let b = self.expr(b, vars)?;
                 format!("if {c} {{ {a} }} else {{ {b} }}")
             }
             Node::Let(..) => self.lets(t, vars)?,
@@ -100,6 +101,7 @@ impl Emitter {
 
     /// The bindings `t` starts with, around the body they end in.
     fn lets(&mut self, t: &Typed, vars: &dyn Vars) -> Result<String, Error> {
+        let at = self.at.take();
         let mut rest = t;
         let mut lets = String::new();
         while let Node::Let(n, value, body) = &rest.node {
@@ -108,6 +110,7 @@ impl Emitter {
             lets.push_str(&format!("let {name} = {}; ", self.bound(value, vars)?));
             rest = body;
         }
+        self.at = at;
         Ok(format!("{{ {lets}{} }}", self.expr(rest, vars)?))
     }
 
