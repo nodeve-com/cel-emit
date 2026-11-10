@@ -10,6 +10,7 @@ use cel_emit::{Decls, Error, Field, Name, Type};
 use crate::common::bind::Bound;
 use crate::common::{build_run, items, Positional};
 
+mod nested;
 mod refused;
 
 fn label() -> Type {

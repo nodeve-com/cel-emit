@@ -11,6 +11,7 @@ The caller gives each computed property its key and its expression, as CEL text 
 | `total` | `order.qty * order.price` |
 
 - **A key names the property it fills**, a property of the record. Its expression must give that property's type.
+- **A dotted key**, as `place.key`, names a property inside an object the record also holds. An expression reads it by that dotted name, and a property reading it fills after it.
 - **An expression reads the record's properties by name**: the ones the input gave, here `text`, and the ones other expressions fill.
 - **A property fills after the properties its expression reads**, so `order` fills first and `label` last. The order the caller lists them in means nothing: properties nothing orders fill in key order. Properties that depend on each other in a cycle, through reads or `after`, fail translation, which names them.
 - **`after`**, a computed property's option, lists properties it fills after, beside the ones its expression reads, for a value the caller hands its expression that depends on them. It only orders: one left empty doesn't stop the property.
