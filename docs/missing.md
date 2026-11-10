@@ -22,6 +22,7 @@ An expression checked inside a container (a namespace), reading or building a de
 
 - **`null` as a value of its own type**, outside a nullable field.
 - **A list literal of records**, such as `[Sample{v: 1}]`: refused as "a list of records".
+- **A map literal filling a declared message inside a macro**, such as `xs.map(x, {'v': x})` for a list of `Sample`: only the map literal an expression gives whole becomes a message. `xs.map(x, Sample{v: x})` builds each.
 - **`flatten(depth)` of a typed nested list**, such as a list of lists of ints: no conversion makes a dyn list of one nested two deep, so only a list of dyn takes the depth form. `flatten()` takes either. `[].flatten()` has no element type to read.
 - **A comprehension written out by hand**, rather than through a macro such as `all` or `map`; and `transformMap` over a non-empty map.
 - **A duration written `.5s`, `.5h`, or `5.s`**: `humantime` reads none of them, and CEL does.
