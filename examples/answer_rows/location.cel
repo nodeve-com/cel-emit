@@ -1,0 +1,6 @@
+// The answer's route, each end its full location, and how many rows `rows.cel` gives.
+Summary{
+  from: input.locations.filter(l, l.id == input.from.id)[0],
+  to: input.locations.filter(l, l.id == input.to.id)[0],
+  count: rows.size(),
+}

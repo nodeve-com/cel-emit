@@ -39,14 +39,14 @@ cargo run -p cel-emit-cli --bin cel-emit -- orders.cel target/orders
 cargo run --manifest-path target/orders/Cargo.toml < orders.json
 ```
 
-It prints one line of JSON, shown here across two:
+It prints one JSON line, wrapped here:
 
 ```json
 [{"id":1,"customer":"Ada","total_minor":700,"placed_utc":"2030-07-01T10:00:00Z","note":"gift"},
  {"id":2,"customer":"Lin","total_minor":900,"placed_utc":"2030-07-01T16:30:00Z","note":null}]
 ```
 
-`target/orders/src/main.rs` holds the generated Rust. [`examples/answer_rows`](../examples/answer_rows) is a larger expression over a deeply nested answer.
+`target/orders/src/main.rs` holds the Rust.
 
 ## Expressions
 
@@ -63,13 +63,13 @@ A generated program links the time zone database and `jiff` only if its expressi
 
 ## With a schema
 
-Without a schema, `input` is dynamic JSON: every read looks up a key at run time, in the program's own loop. Give the program a [JSON Schema](https://json-schema.org) and `input` has types:
+Without a schema, `input` is dynamic JSON: every read looks up a key at run time. Give the program a [JSON Schema](https://json-schema.org) and `input` has types:
 
 ```sh
 cargo run -p cel-emit-cli --bin cel-emit -- rows.cel target/rows --schema answer.schema.json
 ```
 
-The same expression gives the same output. The program gains a struct for each object, and [schema-emit](https://github.com/nodeve-com/schema-emit) writes its decode:
+The output stays the same. The program gains a struct per object, and [schema-emit](https://github.com/nodeve-com/schema-emit) writes its decode:
 
 - **Reads are plain Rust.** `row.pricing.total` is a field read, not a map search and a cast. Arithmetic needs no `int()`.
 - **A bad answer fails where it's wrong.** The error names the field, as `Input.options[0].pricing.total`, before the expression runs.
@@ -97,7 +97,11 @@ Write a formula the expression repeats once, as a function in a JSON file:
 cargo run -p cel-emit-cli --bin cel-emit -- rows-func.cel target/rows-func --schema answer.schema.json --functions rows-func.functions.json
 ```
 
-The expression calls it by its key, `location(input.locations, row.legs[0].location.id)`, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. The program holds one Rust function for each, whatever number of places call it. A call still runs its body each time: `cel.bind` is what saves computing a value twice.
+The expression calls it by its key, `location(input.locations, row.legs[0].location.id)`, its arguments in the order of `params`. Each param's `schema` is JSON Schema; a `$ref` reads the `--schema` file's `$defs`. The body reads only its params, and may call another function in the file, never in a cycle. Each becomes one Rust function, its body run at every call; `cel.bind` saves computing a value twice.
+
+## Computed properties
+
+With 2+ `.cel` files, each fills the [computed property](../docs/computed.md) its name keys; `--into` names their object; `--schema` types the record. It prints the record and failures; an empty required property exits non-zero.
 
 ## Limits
 
