@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 cel-emit = { path = ".." }
 # The schema's models, their Rust, and each property's check.
-schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "d59b7e35a5a57c15e966e468265244ed59bb21d2" }
+schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "c909bbc3a47cfccbfb9495f9956f2ea9ff2f5bab" }
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 
 [lints.clippy]

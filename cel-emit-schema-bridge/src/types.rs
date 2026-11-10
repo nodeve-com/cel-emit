@@ -79,6 +79,7 @@ fn ty(schema: &Schema, t: &Ty, open: &mut Vec<usize>) -> Result<Type, Error> {
         Base::Null => return Err(Error::unsupported("null alone has no type")),
         Base::Any => return Err(Error::unsupported("any value has no type")),
         Base::Union(_) => return Err(Error::unsupported("unions are not on the edge")),
+        Base::Slot(_) => return Err(Error::unsupported("a slot no schema fills has no type")),
     };
     Ok(if t.nullable {
         Type::Nullable(Box::new(base))
