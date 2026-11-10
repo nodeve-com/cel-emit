@@ -40,6 +40,7 @@ fn bridged(schema: &Value, into: Option<&str>, computed: &[&str]) -> Result<Brid
         into,
         computed,
         module: "types",
+        held: &[],
     };
     bridge(&asked).map_err(|e| e.to_string())
 }

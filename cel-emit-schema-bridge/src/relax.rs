@@ -20,9 +20,45 @@ fn target(document: &Value, at: &[&str]) -> Vec<String> {
     path
 }
 
+/// The slot the property `into` of a model in `document` holds: the name its `$dynamicRef` gives.
+fn anchor<'v>(document: &'v Value, into: &str) -> Option<&'v str> {
+    let named = document.get("properties").and_then(|p| p.get(into));
+    let named = named
+        .and_then(|p| p.get("$dynamicRef"))
+        .and_then(Value::as_str);
+    if let Some(name) = named {
+        return name.strip_prefix('#');
+    }
+    let inside: Vec<&Value> = match document {
+        Value::Object(map) => map.values().collect(),
+        Value::Array(list) => list.iter().collect(),
+        _ => Vec::new(),
+    };
+    inside.into_iter().find_map(|v| anchor(v, into))
+}
+
+/// The `$defs` entry of the record's schema that fills the slot property `into` holds, where the
+/// record is a filler with no properties of its own.
+fn slot(document: &Value, into: &str) -> Option<Vec<String>> {
+    let name = anchor(document, into)?;
+    let defs = document.get("$defs").and_then(Value::as_object)?;
+    let fills = |def: &Value| def.get("$dynamicAnchor").and_then(Value::as_str) == Some(name);
+    let (key, _) = defs.iter().find(|(_, def)| fills(def))?;
+    Some(vec!["$defs".into(), key.clone()])
+}
+
 /// The object schema at `path` of `document`.
 fn object<'v>(document: &'v mut Value, path: &[String]) -> Option<&'v mut Value> {
     path.iter().try_fold(document, |v, key| v.get_mut(key))
+}
+
+/// Where the object `into` names sits: a property of the record, or a slot's filling.
+fn into_path(document: &Value, into: &str) -> Result<Vec<String>, Error> {
+    let own = document.get("properties").and_then(|p| p.get(into));
+    match own {
+        Some(_) => Ok(target(document, &["properties", into])),
+        None => slot(document, into).ok_or_else(|| Error::invalid("`into` names no property")),
+    }
 }
 
 /// `asked`'s schema, each computed property out of the `required` of the object holding it, and
@@ -30,7 +66,7 @@ fn object<'v>(document: &'v mut Value, path: &[String]) -> Option<&'v mut Value>
 pub(crate) fn relaxed(asked: &Asked) -> Result<(Value, Vec<String>), Error> {
     let mut document = asked.schema.clone();
     let path = match asked.into {
-        Some(into) => target(&document, &["properties", into]),
+        Some(into) => into_path(&document, into)?,
         None => Vec::new(),
     };
     let holder =

@@ -11,8 +11,11 @@ use schema_emit::ir::{Base, Field, Schema};
 use schema_emit::Error;
 use serde_json::Value;
 
+mod held;
 mod relax;
 pub mod types;
+
+pub use held::Held;
 
 /// What to bridge: a record's JSON Schema, and the properties expressions fill.
 pub struct Asked<'a> {
@@ -26,6 +29,9 @@ pub struct Asked<'a> {
     pub computed: &'a [&'a str],
     /// The Rust path of the module [`Bridged::items`] sits in.
     pub module: &'a str,
+    /// The modules holding models the schema reads, as the generic model a record fills the slots
+    /// of. [`Bridged::items`] writes none of them.
+    pub held: &'a [Held<'a>],
 }
 
 /// A schema as computed properties take it.
@@ -48,7 +54,7 @@ pub struct Bridged {
     pub loads: Vec<String>,
 }
 
-/// Each message as the struct schema-emit writes for its model.
+/// Each message as the struct, or alias, schema-emit writes for its model.
 #[derive(Clone)]
 pub struct Models {
     records: Vec<(Message, String)>,
@@ -69,9 +75,20 @@ impl Models {
     /// Each model of `schema` that is a record, its struct in `module`.
     pub fn new(schema: &Schema, module: &str) -> Models {
         let named = names(schema);
-        let each = (0..schema.models.len()).zip(named);
-        let records = each.filter_map(|(i, name)| match types::record(schema, i) {
-            Ok(Type::Message(message)) => Some((message, format!("{module}::{name}"))),
+        let name = |i: usize| named.get(i).cloned().unwrap_or_default();
+        let none = vec![None; schema.models.len()];
+        Models::held(&StdForm::new(schema, &name), &none, module)
+    }
+
+    /// Each model of the form's schema that is a record, its Rust in `module`, or in the module
+    /// holding it: `external` gives each model's, by index.
+    pub fn held(std: &StdForm, external: &[Option<String>], module: &str) -> Models {
+        let each = (0..std.schema.models.len()).zip(external);
+        let records = each.filter_map(|(i, held)| match types::record(std.schema, i) {
+            Ok(Type::Message(message)) => {
+                let at = held.as_deref().unwrap_or(module);
+                Some((message, format!("{at}::{}", std.model_name(i))))
+            }
             _ => None,
         });
         Models {
@@ -140,10 +157,16 @@ impl Bridge<'_> {
         ))
     }
 
+    /// Model `m`'s fields, a slot's holding the type filling it.
+    fn fields(&self, m: usize) -> Vec<Field> {
+        let filled = self.schema.filled(m);
+        let model = filled.as_ref().or_else(|| self.schema.models.get(m));
+        model.map(|m| m.fields.clone()).unwrap_or_default()
+    }
+
     /// Each property an expression reads by name: the record's, and in place of `into` its own.
     fn properties(&mut self, root: usize) -> Result<Vec<Property>, Error> {
-        let fields = |m: usize| self.schema.models.get(m).map(|m| m.fields.as_slice());
-        let own = fields(root).unwrap_or_default();
+        let own = self.fields(root);
         let rust = std_form::fields(own.iter().map(|f| f.name.as_str()));
         let mut properties = Vec::new();
         for (field, place) in own.iter().zip(rust) {
@@ -152,7 +175,7 @@ impl Bridge<'_> {
                 continue;
             }
             let inner = match (&field.ty.base, field.held()) {
-                (Base::Model(m), true) => fields(*m).unwrap_or_default(),
+                (Base::Model(m), true) => self.fields(*m),
                 _ => return Err(Error::invalid("`into` names no required object").at(&field.name)),
             };
             let inside = std_form::fields(inner.iter().map(|f| f.name.as_str()));
@@ -185,7 +208,9 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     let (schema, root) = schema_emit::json_schema::lower(asked.name, &document, &shared, &[])?;
     let named = names(&schema);
     let name = |i: usize| named.get(i).cloned().unwrap_or_default();
-    let std = StdForm::new(&schema, &name);
+    let external = held::modules(&schema, asked.held)?;
+    let theirs = |i: usize| external.get(i).cloned().flatten();
+    let std = StdForm::new(&schema, &name).with_external(&theirs);
     let mut bridge = Bridge {
         schema: &schema,
         asked,
@@ -195,17 +220,23 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
         loads: Vec::new(),
     };
     let properties = bridge.properties(root)?;
-    let (module, decode) = (asked.module, std.decoder(root));
+    let module = asked.module;
+    // A filler has no decoder of its own: the generic model's decodes it.
+    let generic = schema.filling(root);
+    let home = external
+        .get(generic)
+        .and_then(Option::as_deref)
+        .unwrap_or(module);
     Ok(Bridged {
         record: Record {
-            rust: format!("{module}::{}", name(root)),
+            rust: format!("{module}::{}", std.model_name(root)),
             properties,
         },
         messages: messages(&document, &schema),
-        models: Models::new(&schema, module),
+        models: Models::held(&std, &external, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
         required,
-        decode: format!("{module}::{decode}"),
+        decode: format!("{home}::{}", std.decoder(generic)),
         loads: bridge.loads,
     })
 }

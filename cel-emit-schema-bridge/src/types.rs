@@ -9,7 +9,8 @@ use schema_emit::Error;
 #[cfg(test)]
 mod tests;
 
-/// Model `root` of `schema` as a record: one field per field, a nested model a nested record. A
+/// Model `root` of `schema` as a record: one field per field, a nested model a nested record, a
+/// slot the type filling it. A
 /// model wrapping a root that is no object ([`schema_emit::ir::Model::is_value`]) is the type it
 /// holds.
 pub fn record(schema: &Schema, root: usize) -> Result<Type, Error> {
@@ -21,9 +22,11 @@ pub fn record(schema: &Schema, root: usize) -> Result<Type, Error> {
 }
 
 fn model(schema: &Schema, at: usize, open: &mut Vec<usize>) -> Result<Type, Error> {
-    let m = schema
-        .models
-        .get(at)
+    // A filler is the model it fills with each slot holding its filling type.
+    let filled = schema.filled(at);
+    let m = filled
+        .as_ref()
+        .or_else(|| schema.models.get(at))
         .ok_or_else(|| Error::invalid(format!("model {at} is not in the schema")))?;
     if open.contains(&at) {
         return Err(Error::unsupported(format!(
@@ -79,7 +82,7 @@ fn ty(schema: &Schema, t: &Ty, open: &mut Vec<usize>) -> Result<Type, Error> {
         Base::Null => return Err(Error::unsupported("null alone has no type")),
         Base::Any => return Err(Error::unsupported("any value has no type")),
         Base::Union(_) => return Err(Error::unsupported("unions are not on the edge")),
-        Base::Slot(_) => return Err(Error::unsupported("a slot no schema fills has no type")),
+        Base::Slot(_) => return Err(Error::unsupported("a slot outside any model has no type")),
     };
     Ok(if t.nullable {
         Type::Nullable(Box::new(base))

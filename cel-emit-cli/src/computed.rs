@@ -97,6 +97,7 @@ pub fn computed(
         into,
         computed: &keys,
         module: "types",
+        held: &[],
     };
     let bridged = bridge(&asked).map_err(|e| e.to_string())?;
     let mut decls = Decls::default();
