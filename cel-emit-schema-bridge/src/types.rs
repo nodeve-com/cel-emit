@@ -56,6 +56,11 @@ fn model(schema: &Schema, at: usize, open: &mut Vec<usize>) -> Result<Type, Erro
     Ok(Type::message(fields))
 }
 
+/// The type of a value of `t`, as a field of that type holds it.
+pub fn value(schema: &Schema, t: &Ty) -> Result<Type, Error> {
+    ty(schema, t, &mut Vec::new())
+}
+
 /// The type, a number at its stored width wherever it sits.
 fn ty(schema: &Schema, t: &Ty, open: &mut Vec<usize>) -> Result<Type, Error> {
     let base = match &t.base {

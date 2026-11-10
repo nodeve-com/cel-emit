@@ -3,11 +3,14 @@
 use cel_emit::emit::{Emitter, Messages, Vars};
 use cel_emit::functions::Function;
 use cel_emit::{lower, Body, Decl, Decls, Error, Message, Name, Type, Written};
-use schema_emit::emit::std_form::{self, names, StdForm};
+use cel_emit_schema_bridge::{types, Models};
+use schema_emit::emit::std_form::{names, StdForm};
 use schema_emit::ir::Schema;
 
+mod computed;
 mod functions;
-pub mod schema_types;
+
+pub use computed::computed;
 
 /// No message reaches here: every value read is dynamic.
 struct NoMessages;
@@ -19,22 +22,6 @@ impl Messages for NoMessages {
 
     fn fields(&self, message: &Message) -> Vec<String> {
         message.fields.iter().map(|f| f.name.clone()).collect()
-    }
-}
-
-/// Each message is the struct schema-emit writes for its model.
-struct Models {
-    records: Vec<(Message, String)>,
-}
-
-impl Messages for Models {
-    fn path(&mut self, _: usize, message: &Message) -> String {
-        let found = self.records.iter().find(|(held, _)| held == message);
-        found.map_or_else(String::new, |(_, name)| format!("types::{name}"))
-    }
-
-    fn fields(&self, message: &Message) -> Vec<String> {
-        std_form::fields(message.fields.iter().map(|f| f.name.as_str()))
     }
 }
 
@@ -64,14 +51,17 @@ pub struct Declared {
 /// What every program declares: the functions, those `written` in CEL, and the one input `name`,
 /// of type `ty`.
 fn declarations(name: &str, ty: Type, written: &[Written]) -> Result<Declared, String> {
-    let mut decls = Decls {
-        functions: vec![
-            function("to_utc", &[Type::String, Type::String], Type::Timestamp),
-            function("iso_duration", &[Type::String], Type::Duration),
-        ],
-        ..Decls::default()
-    };
+    let mut decls = Decls::default();
     decls.names.insert(name.into(), Name::var(ty, 0));
+    declared_over(decls, written)
+}
+
+/// `decls` with the functions every program may call, and those `written` in CEL.
+fn declared_over(mut decls: Decls, written: &[Written]) -> Result<Declared, String> {
+    decls.functions = vec![
+        function("to_utc", &[Type::String, Type::String], Type::Timestamp),
+        function("iso_duration", &[Type::String], Type::Duration),
+    ];
     let bodies = cel_emit::written::check(written, &decls).map_err(|e| e.to_string())?;
     decls.define(&bodies);
     Ok(Declared { decls, bodies })
@@ -121,6 +111,10 @@ struct Entry<'a> {
     input: &'a str,
 }
 
+/// A program's first statement: its input, all of stdin, as `text`.
+const STDIN: &str =
+    "let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;";
+
 /// The whole program: `prelude`, `items`, `decode` from input text to the input, the CEL as
 /// `expression` from the input to output text, `output` calling the two, and a `main` reading
 /// stdin.
@@ -140,7 +134,7 @@ fn source(prelude: &str, items: &str, expression: &str, entry: Entry) -> Result<
             expression(&decode(text)?).map_err(|e| format!(\"{{e:?}}\"))
         }}
         fn main() -> Result<(), String> {{
-            let text = std::io::read_to_string(std::io::stdin()).map_err(|e| e.to_string())?;
+            {STDIN}
             println!(\"{{}}\", output(&text)?);
             Ok(())
         }}",
@@ -158,7 +152,7 @@ pub fn declared(schema: Option<&str>, functions: Option<&str>) -> Result<Declare
     let ty = match schema {
         Some(schema) => {
             let (ir, root) = lowered(schema)?;
-            schema_types::record(&ir, root).map_err(|e| e.to_string())?
+            types::record(&ir, root).map_err(|e| e.to_string())?
         }
         None => Type::Dyn,
     };
@@ -181,16 +175,6 @@ fn dynamic(expression: &str, functions: Option<&str>) -> Result<String, String> 
     source("", &items, &output, entry)
 }
 
-/// Each model of `schema` a record names, as its fields and struct.
-fn records(schema: &Schema, named: &[String]) -> Vec<(Message, String)> {
-    let each = (0..schema.models.len()).zip(named);
-    let found = each.filter_map(|(i, name)| match schema_types::record(schema, i) {
-        Ok(Type::Message(message)) => Some((message, name.clone())),
-        _ => None,
-    });
-    found.collect()
-}
-
 /// `schema`, a JSON Schema document, as schema-emit's models, and the root's index.
 fn lowered(schema: &str) -> Result<(Schema, usize), String> {
     let document: serde_json::Value = serde_json::from_str(schema).map_err(|e| e.to_string())?;
@@ -200,16 +184,14 @@ fn lowered(schema: &str) -> Result<(Schema, usize), String> {
 
 fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<String, String> {
     let (ir, root) = lowered(schema)?;
-    let ty = schema_types::record(&ir, root).map_err(|e| e.to_string())?;
+    let ty = types::record(&ir, root).map_err(|e| e.to_string())?;
     let declared = declarations("input", ty, &written(functions, Some(schema))?)?;
     let named = names(&ir);
     let name = |i: usize| named.get(i).cloned().unwrap_or_default();
     let types = StdForm::new(&ir, &name)
         .items()
         .map_err(|e| e.to_string())?;
-    let messages = Models {
-        records: records(&ir, &named),
-    };
+    let messages = Models::new(&ir, "types");
     let (output, items) = emitted(&encoded(expression), &declared, "input", Box::new(messages))?;
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as __s; {types} }}");
@@ -230,7 +212,8 @@ const TYPED: &str = concat!(
 );
 
 /// A Cargo manifest for `program`, built against this repo's cel-emit-runtime, with the `civil`
-/// feature only if it calls those functions, and what a schema's types need only if it has them.
+/// feature only if it calls those functions, what a schema's types need only if it has them, and
+/// `chrono` only if one of them holds a time.
 pub fn manifest(name: &str, program: &str) -> String {
     let runtime = concat!(env!("CARGO_MANIFEST_DIR"), "/../cel-emit-runtime");
     let features = match program.contains("s::time::civil::") {
@@ -241,8 +224,12 @@ pub fn manifest(name: &str, program: &str) -> String {
         true => TYPED,
         false => "",
     };
+    let time = match program.contains("::chrono::") {
+        true => "chrono = { version = \"0.4\", default-features = false }\n",
+        false => "",
+    };
     format!(
         "[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n\n\
-         [dependencies]\ncel-emit-runtime = {{ path = {runtime:?}{features} }}\n{typed}"
+         [dependencies]\ncel-emit-runtime = {{ path = {runtime:?}{features} }}\n{typed}{time}"
     )
 }

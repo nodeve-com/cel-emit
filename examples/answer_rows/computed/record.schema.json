@@ -1,0 +1,346 @@
+{
+  "$defs": {
+    "Place": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "x-strip-additional": true
+    },
+    "Location": {
+      "type": "object",
+      "required": [
+        "id",
+        "locode",
+        "timezone"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "locode": {
+          "type": "string"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "x-strip-additional": true
+    },
+    "Answer": {
+      "type": "object",
+      "required": [
+        "currency",
+        "options",
+        "products",
+        "locations",
+        "from",
+        "to"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "start_date",
+              "start_time",
+              "end_date",
+              "end_time",
+              "timezone",
+              "product_id",
+              "legs",
+              "pricing",
+              "pricing_potential_best",
+              "capacities",
+              "status"
+            ],
+            "properties": {
+              "start_date": {
+                "type": "string"
+              },
+              "start_time": {
+                "type": "string"
+              },
+              "end_date": {
+                "type": "string"
+              },
+              "end_time": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "product_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "venue": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "x-strip-additional": true
+              },
+              "legs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "location",
+                    "end_location"
+                  ],
+                  "properties": {
+                    "location": {
+                      "$ref": "#/$defs/Place"
+                    },
+                    "end_location": {
+                      "$ref": "#/$defs/Place"
+                    }
+                  },
+                  "x-strip-additional": true
+                }
+              },
+              "pricing": {
+                "type": "object",
+                "required": [
+                  "total"
+                ],
+                "properties": {
+                  "total": {
+                    "type": "integer"
+                  }
+                },
+                "x-strip-additional": true
+              },
+              "pricing_potential_best": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "total"
+                ],
+                "properties": {
+                  "total": {
+                    "type": "integer"
+                  }
+                },
+                "x-strip-additional": true
+              },
+              "capacities": {
+                "type": "object",
+                "required": [
+                  "available"
+                ],
+                "properties": {
+                  "available": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "x-strip-additional": true
+              }
+            },
+            "x-strip-additional": true
+          }
+        },
+        "products": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "title",
+              "multi_usage_rules"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "multi_usage_rules": {
+                "type": "object",
+                "required": [
+                  "active_period"
+                ],
+                "properties": {
+                  "active_period": {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "period"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "period": {
+                        "type": "string"
+                      }
+                    },
+                    "x-strip-additional": true
+                  }
+                },
+                "x-strip-additional": true
+              }
+            },
+            "x-strip-additional": true
+          }
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Location"
+          }
+        },
+        "from": {
+          "$ref": "#/$defs/Place"
+        },
+        "to": {
+          "$ref": "#/$defs/Place"
+        }
+      },
+      "x-strip-additional": true
+    },
+    "Row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "dest",
+        "depart_utc",
+        "arrive_utc",
+        "depart_local",
+        "arrive_local",
+        "fare",
+        "vessel",
+        "currency",
+        "total_minor",
+        "best_total_minor",
+        "duration_min",
+        "active_period_min",
+        "seats_available",
+        "bookable"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string"
+        },
+        "dest": {
+          "type": "string"
+        },
+        "depart_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "arrive_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "depart_local": {
+          "type": "string"
+        },
+        "arrive_local": {
+          "type": "string"
+        },
+        "fare": {
+          "type": "string"
+        },
+        "vessel": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": "string"
+        },
+        "total_minor": {
+          "type": "integer"
+        },
+        "best_total_minor": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_min": {
+          "type": "integer"
+        },
+        "active_period_min": {
+          "type": "integer"
+        },
+        "seats_available": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bookable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "count"
+      ],
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/Location"
+        },
+        "to": {
+          "$ref": "#/$defs/Location"
+        },
+        "count": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "input",
+    "rows",
+    "location"
+  ],
+  "properties": {
+    "input": {
+      "$ref": "#/$defs/Answer"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Row"
+      }
+    },
+    "location": {
+      "$ref": "#/$defs/Summary"
+    }
+  }
+}

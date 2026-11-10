@@ -4,7 +4,7 @@
 use cel_emit::{Type, Written};
 use serde_json::{Map, Value};
 
-use crate::schema_types;
+use cel_emit_schema_bridge::types;
 
 /// The functions `file` holds, JSON, each param's type read from its JSON Schema. A `$ref` in one
 /// resolves against `schema`'s `$defs`, `schema` being the document `--schema` names.
@@ -62,5 +62,5 @@ fn param(schema: &Value, defs: &Option<Value>) -> Result<Type, String> {
     }
     let (ir, root) = schema_emit::json_schema::lower("Param", &document, &Map::new(), &[])
         .map_err(|e| e.to_string())?;
-    schema_types::record(&ir, root).map_err(|e| e.to_string())
+    types::record(&ir, root).map_err(|e| e.to_string())
 }

@@ -2,6 +2,7 @@
 
 pub mod cmp;
 pub mod collections;
+pub mod computed;
 pub mod conversions;
 pub mod dynamic;
 pub mod fields;

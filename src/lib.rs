@@ -1,5 +1,7 @@
 #![doc = include_str!("../README.md")]
 
+#[doc = include_str!("../docs/computed.md")]
+pub mod computed;
 pub mod decls;
 pub mod emit;
 #[doc(hidden)]
