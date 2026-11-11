@@ -42,6 +42,17 @@ An expression may read names the record doesn't hold: the caller's params, such 
 
 A read that uses a property an expression fills needs that property filled first: the computed property reading the param lists it in `after`. A read may fail as an expression does. One failing with cel-emit-runtime's `Error::Absent` skips the computed property, as an empty input does.
 
+### A record as params
+
+The params may be a second record, so one record's properties fill from another's. The caller gives it as it gives [the record](#what-the-caller-gives), with a name of its choosing, such as `source`. It writes no Rust for these reads:
+
+- **An expression reads each of its properties as `source.key`**, and a dotted key as `source.place.key`.
+- **Each reads as the record's own property does.** An empty one skips the computed property reading it, an optional reads as one, and a message reads where it sits.
+- **Its Rust type is the params type.** Nothing fills it, so its checks never run.
+- **The name stands apart.** A property of the record, or a caller's name, that is the name or starts with it and a dot fails translation.
+
+The caller's own params work beside it, each read written over that record as `p`.
+
 ## The index
 
 The generated Rust holds one function per computed property and an index: a list of the properties in the order they fill. Each entry holds the property's key, the properties it reads, its `required`, and its function. The function takes the record and the params, computes the value, checks it, and stores it in the record. The function returns one of three outcomes: filled; skipped, an input being empty; or a failure, which holds its place and its reason. So every entry has one type whatever its property holds.
