@@ -1,7 +1,7 @@
 //! A program built from a bridged filler and run: the module holding its generic model, the
 //! bridge's items, the index filling `title`, and a `main` reading a record from stdin.
 
-use cel_emit::computed::{Compute, Computed, Expression};
+use cel_emit::computed::{Compute, Computed, Expression, Params};
 use cel_emit::emit::{Emitter, Vars};
 use cel_emit::{Decls, Error};
 use cel_emit_schema_bridge::Bridged;
@@ -62,7 +62,7 @@ fn index_of(bridged: &Bridged) -> String {
     let computed = Computed {
         record: &bridged.record,
         decls: &decls,
-        params: "()",
+        params: Params::Rust("()"),
         vars: &NoVars,
     };
     let mut emitter = Emitter::new(&decls.functions, Box::new(bridged.models.clone()));

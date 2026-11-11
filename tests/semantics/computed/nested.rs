@@ -1,7 +1,7 @@
 //! A computed property may fill a place inside a struct the record also holds: its key is dotted,
 //! and an expression reads it by that dotted name.
 
-use cel_emit::computed::{Compute, Computed, Property, Record};
+use cel_emit::computed::{Compute, Computed, Params, Property, Record};
 use cel_emit::emit::Emitter;
 use cel_emit::{Decls, Type};
 
@@ -48,21 +48,32 @@ fn built(record: &Record) -> Vec<String> {
     let computed = Computed {
         record,
         decls: &decls,
-        params: "Params",
+        params: Params::Rust("Params"),
         vars: &Bound(Vec::new()),
     };
     let computes: Vec<Compute> = vec![
         compute("tag", "place.id + '/' + place.key"),
         compute("place.key", "label + '-k'"),
     ];
+    walk(&computed, &computes, RECORDS, "nested")
+}
+
+/// The lines a program prints: the index of `computes` as `INDEX`, then `records`, the Rust
+/// around it, built in a folder named after `name`.
+pub(super) fn walk(
+    computed: &Computed,
+    computes: &[Compute],
+    records: &str,
+    name: &str,
+) -> Vec<String> {
     let mut emitter = Emitter::new(&[], Box::new(Positional));
     let index = computed
-        .index("INDEX", &computes, &mut emitter)
+        .index("INDEX", computes, &mut emitter)
         .unwrap_or_else(|e| panic!("{e}"));
     let items = items(&mut emitter).unwrap();
     let source =
-        format!("#![allow(warnings)]\nuse ::cel_emit_runtime as s;\n{items}{index}{RECORDS}");
-    let dir = std::env::temp_dir().join(format!("cel-emit-nested-{}", std::process::id()));
+        format!("#![allow(warnings)]\nuse ::cel_emit_runtime as s;\n{items}{index}{records}");
+    let dir = std::env::temp_dir().join(format!("cel-emit-{name}-{}", std::process::id()));
     let lines = build_run(&dir, &source);
     let _ = std::fs::remove_dir_all(&dir);
     lines.unwrap_or_else(|e| panic!("rustc: {e}"))

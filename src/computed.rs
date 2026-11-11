@@ -18,6 +18,10 @@ use crate::types::Type;
 use crate::{walk, Error};
 
 mod order;
+mod reads;
+
+pub use reads::Params;
+use reads::Reads;
 
 /// One property of the record: what an expression reads by `key`.
 #[derive(Clone, Debug)]
@@ -68,10 +72,10 @@ pub struct Compute {
 pub struct Computed<'a> {
     pub record: &'a Record,
     pub decls: &'a Decls,
-    /// The Rust type of the params: what each entry's function takes beside the record.
-    pub params: &'a str,
-    /// Each read is Rust over the params `p` and the record `r`. One using a property an
-    /// expression fills needs it in [`Compute::after`].
+    /// The params: what each entry's function takes beside the record.
+    pub params: Params<'a>,
+    /// How each of the caller's variables reads: Rust over the params `p` and the record `r`.
+    /// One using a property an expression fills needs it in [`Compute::after`].
     pub vars: &'a dyn Vars,
 }
 
@@ -82,22 +86,6 @@ struct Fill<'a> {
     tree: Typed,
     /// The properties its tree reads, in key order.
     reads: Vec<&'a str>,
-}
-
-/// How an expression reads each variable: a property from the record `r`, any other as the
-/// caller says, over `r` and the params `p`.
-struct Reads<'a> {
-    computed: &'a Computed<'a>,
-    first: usize,
-}
-
-impl Vars for Reads<'_> {
-    fn read(&self, var: usize) -> Result<String, Error> {
-        match self.computed.property(self.first, var) {
-            Some(property) => Ok(property.read()),
-            None => self.computed.vars.read(var),
-        }
-    }
 }
 
 impl Property {
@@ -112,20 +100,6 @@ impl Property {
     /// Whether its place is an `Option` of its value.
     fn optional(&self) -> bool {
         self.empty || matches!(self.ty, Type::Optional(_))
-    }
-
-    /// Its read from the record `r`: an optional as one, a message's by reference; any other its
-    /// value, raising the absence that skips the expression where it is empty.
-    fn read(&self) -> String {
-        let place = &self.place;
-        match (&self.ty, self.empty) {
-            (Type::Optional(held), _) if matches!(**held, Type::Message(_)) => {
-                format!("r.{place}.as_ref()")
-            }
-            (Type::Optional(_), _) => format!("r.{place}.clone()"),
-            (_, true) => format!("(*r.{place}.as_ref().ok_or({STD}::Error::Absent)?)"),
-            (_, false) => format!("r.{place}"),
-        }
     }
 }
 
@@ -145,8 +119,8 @@ impl<'a> Computed<'a> {
         self.record.properties.get(at)
     }
 
-    /// What an expression checks against: the caller's declarations and each property by its
-    /// key. A key naming two things is an error.
+    /// What an expression checks against: the caller's declarations, each property by its key,
+    /// and each of a params record's by its name and key. A key naming two things is an error.
     pub fn decls(&self) -> Result<Decls, Error> {
         let mut decls = self.decls.clone();
         let first = self.first();
@@ -156,6 +130,8 @@ impl<'a> Computed<'a> {
                 return Err(Error::Invalid("a name two things share".into()).at(&property.key));
             }
         }
+        let past = first.saturating_add(self.record.properties.len());
+        self.params.declare(&mut decls, past)?;
         Ok(decls)
     }
 
@@ -221,7 +197,7 @@ impl<'a> Computed<'a> {
         };
         let (mut functions, mut entries) = (String::new(), String::new());
         for (n, fill) in order.iter().filter_map(|key| fills.get(key)).enumerate() {
-            let (rust, params) = (&self.record.rust, self.params);
+            let (rust, params) = (&self.record.rust, self.params.rust());
             let body = fill
                 .body(emitter, &reads)
                 .map_err(|e| e.at(&fill.compute.key))?;
@@ -232,7 +208,7 @@ impl<'a> Computed<'a> {
             );
             let _ = writeln!(entries, "{},", fill.entry(n));
         }
-        let (rust, params, count) = (&self.record.rust, self.params, order.len());
+        let (rust, params, count) = (&self.record.rust, self.params.rust(), order.len());
         Ok(format!(
             "pub static {name}: [{STD}::computed::Entry<{rust}, {params}>; {count}] = {{\n{functions}[{entries}] }};\n"
         ))

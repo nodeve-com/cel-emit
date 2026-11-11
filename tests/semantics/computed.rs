@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use cel_emit::computed::{Compute, Computed, Expression, Property, Record};
+use cel_emit::computed::{Compute, Computed, Expression, Params, Property, Record};
 use cel_emit::emit::Emitter;
 use cel_emit::{Decls, Error, Field, Name, Type};
 
@@ -12,6 +12,7 @@ use crate::common::{build_run, items, Positional};
 
 mod nested;
 mod refused;
+mod source;
 
 fn label() -> Type {
     let text = Field {
@@ -167,7 +168,7 @@ fn built() -> Vec<String> {
     let computed = Computed {
         record: &record,
         decls: &decls,
-        params: "Params",
+        params: Params::Rust("Params"),
         vars: &reads(),
     };
     let mut emitter = Emitter::new(&[], Box::new(Positional));
@@ -280,7 +281,7 @@ pub fn refusal(record: &Record, decls: &Decls, computes: &[Compute]) -> Error {
     let computed = Computed {
         record,
         decls,
-        params: "Params",
+        params: Params::Rust("Params"),
         vars: &reads(),
     };
     let mut emitter = Emitter::new(&[], Box::new(Positional));

@@ -1,7 +1,7 @@
 //! A program of computed properties: each expression fills the property its key names, in a
 //! record the schema types.
 
-use cel_emit::computed::{Compute, Computed, Expression};
+use cel_emit::computed::{Compute, Computed, Expression, Params};
 use cel_emit::emit::{Emitter, Vars};
 use cel_emit::{Decls, Error};
 use cel_emit_schema_bridge::{bridge, Asked, Bridged};
@@ -107,7 +107,7 @@ pub fn computed(
     let computed = Computed {
         record: &bridged.record,
         decls: &declared.decls,
-        params: "()",
+        params: Params::Rust("()"),
         vars: &NoVars,
     };
     let models = Box::new(bridged.models.clone());
