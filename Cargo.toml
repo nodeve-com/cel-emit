@@ -24,7 +24,7 @@ too_many_lines = "warn"
 # The front end: parse and check (src/lower.rs). A fork's branch: upstream plus
 # `fix/chrono-default-features` (chrono without its clock, for wasm) and
 # `fix/checker-mismatched-type-params` (the checker rejects `"s" == 3`, as cel-go does).
-cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+cel-core = { package = "cel-core-nodeve", git = "https://github.com/nodeve-com/cel-core", branch = "loom", version = "0.5.1" }
 # What the Rust it writes links: here for its time constants and zone tables.
 cel-emit-runtime = { path = "cel-emit-runtime", version = "0.6.2" }
 # A constant `matches` pattern as a search table, built while translating.

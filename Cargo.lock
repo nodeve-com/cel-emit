@@ -66,9 +66,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cel-core"
+name = "cel-core-conformance"
 version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#ba47283508f7fc736990ae47baf9a60316eb8223"
+dependencies = [
+ "cel-core-nodeve",
+ "cel-core-proto",
+ "prost",
+ "prost-reflect",
+]
+
+[[package]]
+name = "cel-core-nodeve"
+version = "0.5.1"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#ba47283508f7fc736990ae47baf9a60316eb8223"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -77,22 +88,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "cel-core-conformance"
-version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
-dependencies = [
- "cel-core",
- "cel-core-proto",
- "prost",
- "prost-reflect",
-]
-
-[[package]]
 name = "cel-core-proto"
 version = "0.5.1"
-source = "git+https://github.com/nodeve-com/cel-core?branch=loom#3c76976cf54e1a3113b32dd1c0cd51756519cec8"
+source = "git+https://github.com/nodeve-com/cel-core?branch=loom#ba47283508f7fc736990ae47baf9a60316eb8223"
 dependencies = [
- "cel-core",
+ "cel-core-nodeve",
  "prost",
  "prost-reflect",
  "prost-types",
@@ -103,8 +103,8 @@ dependencies = [
 name = "cel-emit"
 version = "0.6.2"
 dependencies = [
- "cel-core",
  "cel-core-conformance",
+ "cel-core-nodeve",
  "cel-core-proto",
  "cel-emit-runtime",
  "chrono",
@@ -119,7 +119,7 @@ dependencies = [
 name = "cel-emit-cli"
 version = "0.0.0"
 dependencies = [
- "cel-core",
+ "cel-core-nodeve",
  "cel-core-proto",
  "cel-emit",
  "cel-emit-runtime",

@@ -30,7 +30,7 @@ cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
 schema-emit-runtime = { git = "https://github.com/nodeve-com/schema-emit", rev = "945b15f03b815353a726c43be174fd6b6814db10", features = ["decode"] }
 # An expression checked ahead of time and saved as a `CheckedExpr`, for the interpreter program
 # (tests/references.rs).
-cel-core = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
+cel-core = { package = "cel-core-nodeve", git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
 cel-core-proto = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
 prost = "0.14"
 

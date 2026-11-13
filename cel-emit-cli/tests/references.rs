@@ -67,10 +67,11 @@ fn public(reference: &str) -> [&str; 2] {
 /// What the interpreter program links: cel-core and its protobuf form, cel-emit's functions as
 /// the interpreter runs them, and cel-emit-runtime's civil time for the embedder's.
 fn interpreter_manifest(name: &str) -> String {
-    let core = "{ git = \"https://github.com/nodeve-com/cel-core\", branch = \"loom\" }";
+    let fork = "git = \"https://github.com/nodeve-com/cel-core\", branch = \"loom\"";
     format!(
         "[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n\n\
-         [dependencies]\ncel-core = {core}\ncel-core-proto = {core}\nprost = \"0.14\"\n\
+         [dependencies]\ncel-core = {{ package = \"cel-core-nodeve\", {fork} }}\n\
+         cel-core-proto = {{ {fork} }}\nprost = \"0.14\"\n\
          cel-emit = {{ path = {ROOT:?} }}\n\
          cel-emit-runtime = {{ path = \"{ROOT}/cel-emit-runtime\", features = [\"civil\"] }}\n"
     )
