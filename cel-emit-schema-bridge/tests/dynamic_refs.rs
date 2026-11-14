@@ -1,4 +1,4 @@
-//! A record whose schema fills another model's slots: its properties, places, and Rust, with the
+//! A record whose schema fills another model's dynamic references: its properties, places, and Rust, with the
 //! generic model written beside it or in a module of its own, and the programs built from both.
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -8,10 +8,10 @@ use cel_emit::Type;
 use cel_emit_schema_bridge::{bridge, Asked, Bridged, Held};
 use serde_json::{json, Value};
 
-#[path = "slots/program.rs"]
+#[path = "dynamic_refs/program.rs"]
 mod program;
 
-/// The generic model: a required string, and a required slot for an object.
+/// The generic model: a required string, and a required dynamic reference for an object.
 fn generic() -> Value {
     json!({
         "$id": "parcel",
@@ -30,7 +30,7 @@ fn held() -> Value {
     json!({"$id": "https://example.test/root", "$defs": {"Parcel": generic()}})
 }
 
-/// A record filling the generic model's slot, holding the generic model's schema too.
+/// A record filling the generic model's dynamic reference, holding the generic model's schema too.
 fn record() -> Value {
     json!({
         "$id": "https://example.test/book",
@@ -49,7 +49,7 @@ fn record() -> Value {
 
 fn bridged(into: Option<&str>, held: &[Held]) -> Result<Bridged, String> {
     let schema = record();
-    // `title` is the slot's: without `into` nothing is computed.
+    // `title` is the dynamic reference's: without `into` nothing is computed.
     let computed: &[&str] = if into.is_some() { &["title"] } else { &[] };
     let asked = Asked {
         schema: &schema,
@@ -73,7 +73,7 @@ fn properties(bridged: &Bridged) -> Vec<String> {
 }
 
 #[test]
-fn into_names_a_slot_and_its_properties_are_the_filling_types() {
+fn into_names_a_dynamic_reference_and_its_properties_are_the_filling_types() {
     let bridged = bridged(Some("contents"), &[]).unwrap();
     assert_eq!(bridged.record.rust, "b::Book");
     assert_eq!(bridged.decode, "b::decode_parcel");
@@ -97,7 +97,7 @@ fn into_names_a_slot_and_its_properties_are_the_filling_types() {
 }
 
 #[test]
-fn a_slot_not_named_is_a_property_holding_its_filling_type() {
+fn a_dynamic_reference_not_named_is_a_property_holding_its_filling_type() {
     let bridged = bridged(None, &[]).unwrap();
     assert_eq!(
         properties(&bridged),
@@ -109,9 +109,9 @@ fn a_slot_not_named_is_a_property_holding_its_filling_type() {
 }
 
 #[test]
-fn a_computed_property_fills_in_the_slot() {
+fn a_computed_property_fills_in_a_dynamic_reference() {
     let out = program::run(
-        "slots_beside",
+        "dynamic_refs_beside",
         &bridged(Some("contents"), &[]).unwrap(),
         &[],
     );
@@ -142,7 +142,7 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
     assert!(bridged
         .items
         .contains("pub type Book = crate::a::Parcel<Contents>;"));
-    let out = program::run("slots_apart", &bridged, &[&doc]);
+    let out = program::run("dynamic_refs_apart", &bridged, &[&doc]);
     assert_eq!(
         out,
         json!({"id": "a", "contents": {"title": "a:2", "pieces": 2}})
@@ -150,12 +150,12 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
 }
 
 #[test]
-fn what_is_no_slot_of_a_filler_is_refused() {
+fn what_is_no_dynamic_reference_of_a_filler_is_refused() {
     let refused = bridged(Some("id"), &[]).err().unwrap();
     assert!(refused.contains("`into` names no property"), "{refused}");
 }
 
-/// A generic model whose field is another model of its resource, holding slots `left` and
+/// A generic model whose field is another model of its resource, holding dynamic references `left` and
 /// `right` besides the model's own `load`.
 fn nested_generic() -> Value {
     json!({
@@ -208,7 +208,7 @@ fn nested_asking() -> Value {
 }
 
 #[test]
-fn a_slot_one_model_deeper_is_its_propertys_filling_type() {
+fn a_dynamic_reference_one_model_deeper_is_its_propertys_filling_type() {
     let schema = nested_asking();
     let asked = Asked {
         schema: &schema,

@@ -30,7 +30,7 @@ pub struct Asked<'a> {
     pub computed: &'a [&'a str],
     /// The Rust path of the module [`Bridged::items`] sits in.
     pub module: &'a str,
-    /// The modules holding models the schema reads, as the generic model a record fills the slots
+    /// The modules holding models the schema reads, as the generic model a record fills the dynamic references
     /// of. [`Bridged::items`] writes none of them.
     pub held: &'a [Held<'a>],
 }
@@ -85,7 +85,7 @@ impl Models {
     /// holding it: `external` gives each model's, by index.
     pub fn held(std: &StdForm, external: &[Option<String>], module: &str) -> Models {
         let models = &std.schema.models;
-        // A model holding slots inside a record that fills them is that record's own type, named
+        // A model holding dynamic references inside a record that fills them is that record's own type, named
         // by the generic model's struct: its type parameters follow from the fields.
         let records = (0..models.len()).flat_map(|root| {
             let made = types::entered(std.schema, root).into_iter();
@@ -163,7 +163,7 @@ impl Bridge<'_> {
         ))
     }
 
-    /// Model `m`'s fields, a slot's holding the type filling it.
+    /// Model `m`'s fields, a dynamic reference holding the type filling it.
     fn fields(&self, m: usize) -> Vec<Field> {
         let filled = self.schema.filled(m);
         let model = filled.as_ref().or_else(|| self.schema.models.get(m));

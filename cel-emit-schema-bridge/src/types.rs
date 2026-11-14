@@ -10,7 +10,7 @@ use schema_emit::Error;
 mod tests;
 
 /// Model `root` of `schema` as a record: one field per field, a nested model a nested record, a
-/// slot the type filling it. A
+/// dynamic reference the type filling it. A
 /// model wrapping a root that is no object ([`schema_emit::ir::Model::is_value`]) is the type it
 /// holds.
 pub fn record(schema: &Schema, root: usize) -> Result<Type, Error> {
@@ -22,7 +22,7 @@ pub fn record(schema: &Schema, root: usize) -> Result<Type, Error> {
     }
 }
 
-/// The type of a value of `t`, as a field of that type holds it, in model `root`: the slots it
+/// The type of a value of `t`, as a field of that type holds it, in model `root`: the dynamic references it
 /// has, or fills, hold their filling wherever `t` reaches them.
 pub fn value(schema: &Schema, root: usize, t: &Ty) -> Result<Type, Error> {
     let mut walk = Walk::new(schema);
@@ -30,7 +30,7 @@ pub fn value(schema: &Schema, root: usize, t: &Ty) -> Result<Type, Error> {
     walk.ty(t)
 }
 
-/// Model `root` and each model it holds, at any depth, as a record: the type of each, its slots
+/// Model `root` and each model it holds, at any depth, as a record: the type of each, its dynamic references
 /// filled as `root` fills them, by the model's index. Nothing where `root` has no record.
 pub fn entered(schema: &Schema, root: usize) -> Vec<(usize, Type)> {
     let mut walk = Walk::new(schema);
@@ -41,7 +41,7 @@ pub fn entered(schema: &Schema, root: usize) -> Vec<(usize, Type)> {
     }
 }
 
-/// A walk of a schema's types: the models being entered, and what each slot in scope holds.
+/// A walk of a schema's types: the models being entered, and what each dynamic reference in scope holds.
 struct Walk<'a> {
     schema: &'a Schema,
     open: Vec<usize>,
@@ -61,8 +61,8 @@ impl<'a> Walk<'a> {
     }
 
     /// Enters model `at`, giving the model whose fields it has and the fills in scope before.
-    /// A filler holds the fills of the model it fills; a model with slots takes a fill in scope
-    /// of the same name, else the slot's own type, so a slot at any depth holds its filling.
+    /// A filler holds the fills of the model it fills; a model with dynamic references takes a fill in scope
+    /// of the same name, else the dynamic reference's own type, so a dynamic reference at any depth holds its filling.
     fn enter(&mut self, at: usize) -> Result<(Model, usize), Error> {
         let missing = || Error::invalid(format!("model {at} is not in the schema"));
         let m = self.schema.models.get(at).ok_or_else(missing)?;
@@ -70,7 +70,7 @@ impl<'a> Walk<'a> {
         let (of, fills) = match &m.of {
             Some(f) => {
                 let generic = self.schema.models.get(f.model).ok_or_else(missing)?;
-                let names = generic.slots.iter().map(|s| s.name.clone());
+                let names = generic.dynamic_refs.iter().map(|s| s.name.clone());
                 (
                     generic,
                     names.zip(f.with.iter().cloned()).collect::<Vec<_>>(),
@@ -78,7 +78,7 @@ impl<'a> Walk<'a> {
             }
             None => (
                 m,
-                m.slots
+                m.dynamic_refs
                     .iter()
                     .map(|s| (s.name.clone(), s.ty.clone()))
                     .collect(),
@@ -156,12 +156,14 @@ impl<'a> Walk<'a> {
             Base::Null => return Err(Error::unsupported("null alone has no type")),
             Base::Any => return Err(Error::unsupported("any value has no type")),
             Base::Union(_) => return Err(Error::unsupported("unions are not on the edge")),
-            Base::Slot(name) => {
+            Base::DynamicRef(name) => {
                 let found = self.fills.iter().rev().find(|(n, _)| n == name);
                 let Some((_, fill)) = found.cloned() else {
-                    return Err(Error::unsupported("a slot outside any model has no type"));
+                    return Err(Error::unsupported(
+                        "a dynamic reference outside any model has no type",
+                    ));
                 };
-                // The fill is a type of the schema, outside the slots in scope here.
+                // The fill is a type of the schema, outside the dynamic references in scope here.
                 let inside = self.fills.split_off(0);
                 let made = self.ty(&fill);
                 self.fills = inside;

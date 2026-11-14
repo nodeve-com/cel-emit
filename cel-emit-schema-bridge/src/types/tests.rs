@@ -64,7 +64,7 @@ fn maps() {
             checks: vec![],
             others: None,
             additional: schema_emit::ir::Additional::Fail,
-            slots: vec![],
+            dynamic_refs: vec![],
             of: None,
         };
         record(
@@ -136,7 +136,7 @@ fn a_model_holding_itself_is_refused() {
         checks: vec![],
         others: None,
         additional: schema_emit::ir::Additional::Fail,
-        slots: vec![],
+        dynamic_refs: vec![],
         of: None,
     };
     let schema = Schema {

@@ -15,7 +15,7 @@ mod programs;
 const PRELUDE: &str =
     "#![allow(unused_imports, dead_code, clippy::all)] use ::schema_emit_runtime as __s;";
 
-/// The expression filling `title`: a property outside the slot, and one inside.
+/// The expression filling `title`: a property outside the dynamic reference, and one inside.
 const TITLE: &str = "id + ':' + string(pieces)";
 
 /// An expression reads nothing but the record.

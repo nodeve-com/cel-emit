@@ -8,9 +8,9 @@ Builds what cel-emit's [computed properties](../docs/computed.md) take from a [J
 - **Each named type**: a `$defs` entry, which an expression builds by its name, as `Label{ text: 'a' }`.
 - **The computed properties the schema requires.** The Rust type holds each as one that may be empty, since a failed expression leaves it so. Whoever walks the index judges them.
 
-A record's schema may fill another model's [slots](https://github.com/nodeve-com/schema-emit/blob/main/docs/std-form.md#slots):
+A record's schema may fill another model's [dynamic references](https://github.com/nodeve-com/schema-emit/blob/main/docs/std-form.md#dynamic-references):
 
-- **Its properties are that model's**, each slot holding the type the schema fills it with. `into` may name a slot.
+- **Its properties are that model's**, each dynamic reference holding the type the schema fills it with. `into` may name a dynamic reference.
 - **Its Rust type is the alias** schema-emit writes for it.
 - **Models another module holds.** The program says which, and where; this crate writes none of them, and reads each by its path there.
 
