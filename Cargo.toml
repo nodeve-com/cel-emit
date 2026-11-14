@@ -21,14 +21,14 @@ fn_params_excessive_bools = "deny"
 too_many_lines = "warn"
 
 [dependencies]
-# The front end: parse and check (src/lower.rs). A fork's branch: upstream plus
+# The front end: parse and check (src/lower.rs). A fork, published under its own name: upstream plus
 # `fix/chrono-default-features` (chrono without its clock, for wasm) and
 # `fix/checker-mismatched-type-params` (the checker rejects `"s" == 3`, as cel-go does).
-cel-core = { package = "cel-core-nodeve", git = "https://github.com/nodeve-com/cel-core", branch = "loom", version = "0.5.1" }
+cel-core = { package = "cel-core-nodeve", version = "0.5.1" }
 # What the Rust it writes links: here for its time constants and zone tables.
 cel-emit-runtime = { path = "cel-emit-runtime", version = "0.6.2" }
 # A constant `matches` pattern as a search table, built while translating.
-pattern-emit = { git = "https://github.com/nodeve-com/pattern-emit", rev = "1acab6a86e146143e8ab2ba5bde2dada963df88c", version = "0.6.2", features = ["build"] }
+pattern-emit = { version = "0.6.2", features = ["build"] }
 # A `timestamp()` literal; a zone a CEL accessor names, fixed as a table (src/zone.rs).
 chrono = { version = "0.4", default-features = false }
 chrono-tz = "0.10"
@@ -42,3 +42,8 @@ cel-core-conformance = { git = "https://github.com/nodeve-com/cel-core", branch 
 cel-core-proto = { git = "https://github.com/nodeve-com/cel-core", branch = "loom" }
 # The descriptors cel-core-proto reads: the suite's messages and enums, declared to cel-emit.
 prost-reflect = "0.16"
+
+# cel-core-proto and cel-core-conformance come from the fork's git repo, which builds them on its
+# own cel-core-nodeve; this puts the published one in its place, so the tests hold one cel-core.
+[patch."https://github.com/nodeve-com/cel-core"]
+cel-core-nodeve = "0.5.1"

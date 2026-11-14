@@ -64,16 +64,19 @@ fn public(reference: &str) -> [&str; 2] {
     [name(), name()]
 }
 
-/// What the interpreter program links: cel-core and its protobuf form, cel-emit's functions as
-/// the interpreter runs them, and cel-emit-runtime's civil time for the embedder's.
+/// What the interpreter program links: cel-core at the version this repo's lock holds and its
+/// protobuf form from the fork's repo, built on that same cel-core as the root manifest's patch
+/// does; cel-emit's functions as the interpreter runs them, and cel-emit-runtime's civil time for
+/// the embedder's.
 fn interpreter_manifest(name: &str) -> String {
-    let fork = "git = \"https://github.com/nodeve-com/cel-core\", branch = \"loom\"";
+    let fork = "\"https://github.com/nodeve-com/cel-core\"";
     format!(
         "[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n\n\
-         [dependencies]\ncel-core = {{ package = \"cel-core-nodeve\", {fork} }}\n\
-         cel-core-proto = {{ {fork} }}\nprost = \"0.14\"\n\
+         [dependencies]\ncel-core = {{ package = \"cel-core-nodeve\", version = \"*\" }}\n\
+         cel-core-proto = {{ git = {fork}, branch = \"loom\" }}\nprost = \"0.14\"\n\
          cel-emit = {{ path = {ROOT:?} }}\n\
-         cel-emit-runtime = {{ path = \"{ROOT}/cel-emit-runtime\", features = [\"civil\"] }}\n"
+         cel-emit-runtime = {{ path = \"{ROOT}/cel-emit-runtime\", features = [\"civil\"] }}\n\n\
+         [patch.{fork}]\ncel-core-nodeve = \"*\"\n"
     )
 }
 

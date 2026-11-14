@@ -27,14 +27,13 @@ impl Vars for NoVars {
     }
 }
 
-/// A Cargo manifest for the program.
+/// A Cargo manifest for the program: schema-emit-runtime at the version this repo's lock holds.
 fn manifest(name: &str) -> String {
     let runtime = concat!(env!("CARGO_MANIFEST_DIR"), "/../cel-emit-runtime");
     format!(
         "[package]\nname = {name:?}\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[workspace]\n\n\
          [dependencies]\ncel-emit-runtime = {{ path = {runtime:?} }}\nserde_json = \"1\"\n\
-         schema-emit-runtime = {{ git = \"https://github.com/nodeve-com/schema-emit\", \
-         rev = \"c909bbc3a47cfccbfb9495f9956f2ea9ff2f5bab\", features = [\"decode\"] }}\n"
+         schema-emit-runtime = {{ version = \"*\", features = [\"decode\"] }}\n"
     )
 }
 

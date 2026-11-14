@@ -1,16 +1,16 @@
 [package]
 name = "cel-emit-schema-bridge"
 description = "What cel-emit's computed properties take, built from a JSON Schema through schema-emit."
-version = "0.0.0"
+version = "0.6.2"
 edition = "2021"
 license = "MPL-2.0"
-readme = "README.md"
-publish = false
+repository = "https://github.com/nodeve-com/cel-emit"
+include = ["/src", "/README.md", "/LICENSE"]
 
 [dependencies]
-cel-emit = { path = ".." }
+cel-emit = { path = "..", version = "0.6.2" }
 # The schema's models, their Rust, and each property's check.
-schema-emit = { git = "https://github.com/nodeve-com/schema-emit", rev = "945b15f03b815353a726c43be174fd6b6814db10" }
+schema-emit = "0.6.2"
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 
 [lints.clippy]

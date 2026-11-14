@@ -204,12 +204,12 @@ fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<Stri
     source(&prelude, &items, &output, entry)
 }
 
-/// What a program over a schema's types links beside the runtime: schema-emit-runtime at the rev
-/// `schema-emit` is pinned to here, so its decode matches what wrote it.
+/// What a program over a schema's types links beside the runtime: schema-emit-runtime at the version
+/// `schema-emit` takes here, so its decode matches what wrote it.
 const TYPED: &str = concat!(
     "serde_json = \"1\"\n",
-    "schema-emit-runtime = { git = \"https://github.com/nodeve-com/schema-emit\", rev = \"",
-    env!("SCHEMA_EMIT_REV"),
+    "schema-emit-runtime = { version = \"",
+    env!("SCHEMA_EMIT_VERSION"),
     "\", features = [\"decode\"] }\n",
 );
 
