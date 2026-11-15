@@ -1,17 +1,13 @@
 # cel-emit-schema-bridge
 
-Builds what cel-emit's [computed properties](../docs/computed.md) take from a [JSON Schema](https://json-schema.org), through [schema-emit](https://github.com/nodeve-com/schema-emit). A program holding a schema for its record hands this crate the schema, the computed properties' keys, and `into` where one object property holds them. It gets back:
+Builds what cel-emit's [computed properties](../docs/computed.md) take from a schema [schema-emit](https://github.com/nodeve-com/schema-emit) has read. This crate reads no schema document and no schema keyword: schema-emit resolves every reference, and this crate reads its result.
+
+A program lowers its record's schema with schema-emit and makes the [standard form](https://github.com/nodeve-com/schema-emit/blob/main/docs/std-form.md) for it, naming each computed property as a [field filled later](https://github.com/nodeve-com/schema-emit/blob/main/docs/std-form.md#fields-filled-later). It hands this crate the lowered schema, that standard form, the computed properties' keys, and `into` where one object property holds them. It gets back:
 
 - **Each property's type.** A model schema-emit reads becomes a cel-emit record type: a field per field, a nested model a nested record. A type cel-emit can't hold fails with its reason, never widened.
-- **The record's Rust type**, schema-emit's, and where each property sits in it.
+- **The record's Rust type**, schema-emit's, where each property sits in it, and whether that place can be empty.
 - **Each property's check**, the one schema-emit writes for its schema. A failure names its place inside the value, as `label.text`.
 - **Each named type**: a `$defs` entry, which an expression builds by its name, as `Label{ text: 'a' }`.
-- **The computed properties the schema requires.** The Rust type holds each as one that may be empty, since a failed expression leaves it so. Whoever walks the index judges them.
-
-A record's schema may fill another model's [dynamic references](https://github.com/nodeve-com/schema-emit/blob/main/docs/std-form.md#dynamic-references):
-
-- **Its properties are that model's**, each dynamic reference holding the type the schema fills it with. `into` may name a dynamic reference.
-- **Its Rust type is the alias** schema-emit writes for it.
-- **Models another module holds.** The program says which, and where; this crate writes none of them, and reads each by its path there.
+- **The computed properties the schema requires**, as schema-emit's fields say. Whoever walks the index judges them.
 
 [cel-emit-cli](../cel-emit-cli/README.md#computed-properties) builds its programs this way.
