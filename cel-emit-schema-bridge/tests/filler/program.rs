@@ -15,7 +15,7 @@ mod programs;
 const PRELUDE: &str =
     "#![allow(unused_imports, dead_code, clippy::all)] use ::schema_emit_runtime as __s;";
 
-/// The expression filling `title`: a property outside the dynamic reference, and one inside.
+/// The expression filling `title`: a property outside the open part, and one inside.
 const TITLE: &str = "id + ':' + string(pieces)";
 
 /// An expression reads nothing but the record.
@@ -41,7 +41,7 @@ fn manifest(name: &str) -> String {
 fn held_modules(held: &[&Value]) -> String {
     let mut out = String::new();
     for document in held {
-        let (schema, _) = lower_defs(document, &Map::new(), &[]).unwrap();
+        let schema = lower_defs(document, &Map::new(), &[]).unwrap();
         let items = source(&schema, &|_| None, &[]).unwrap();
         out.push_str(&format!("mod a {{ {PRELUDE} {items} }}\n"));
     }

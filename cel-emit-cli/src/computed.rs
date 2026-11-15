@@ -5,6 +5,7 @@ use cel_emit::computed::{Compute, Computed, Expression, Params};
 use cel_emit::emit::{Emitter, Vars};
 use cel_emit::{Decls, Error};
 use cel_emit_schema_bridge::{bridge, Asked, Bridged};
+use schema_emit::emit::std_form::{names, StdForm};
 
 use crate::STDIN;
 
@@ -80,6 +81,31 @@ fn source(bridged: &Bridged, items: &str, index: &str) -> Result<String, String>
     ))
 }
 
+/// `schema`, the record's JSON Schema, lowered as `Record` and bridged: each of `keys` a field
+/// filled later, in `into` where it is set.
+fn bridged(schema: &str, into: Option<&str>, keys: &[&str]) -> Result<Bridged, String> {
+    let document: serde_json::Value = serde_json::from_str(schema).map_err(|e| e.to_string())?;
+    let shared = serde_json::Map::new();
+    let lowered = schema_emit::json_schema::lower("Record", &document, &shared, &[]);
+    let (lowered, root) = lowered.map_err(|e| e.to_string())?;
+    let named = names(&lowered);
+    let name = |i: usize| named.get(i).cloned().unwrap_or_default();
+    let paths: Vec<String> = match into {
+        Some(into) => keys.iter().map(|key| format!("{into}.{key}")).collect(),
+        None => keys.iter().map(|key| (*key).to_string()).collect(),
+    };
+    let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
+    let std = StdForm::new(&lowered, &name).with_empty(root, &paths);
+    let asked = Asked {
+        std: &std.map_err(|e| e.to_string())?,
+        root,
+        into,
+        computed: keys,
+        module: "types",
+    };
+    bridge(&asked).map_err(|e| e.to_string())
+}
+
 /// The Rust program filling a record: each of `expressions` a property's key and the CEL filling
 /// it, over `schema`, the record's JSON Schema. `into` names the one object property they fill,
 /// where they don't fill the record's own.
@@ -89,17 +115,8 @@ pub fn computed(
     into: Option<&str>,
     functions: Option<&str>,
 ) -> Result<String, String> {
-    let document: serde_json::Value = serde_json::from_str(schema).map_err(|e| e.to_string())?;
     let keys: Vec<&str> = expressions.iter().map(|(key, _)| *key).collect();
-    let asked = Asked {
-        schema: &document,
-        name: "Record",
-        into,
-        computed: &keys,
-        module: "types",
-        held: &[],
-    };
-    let bridged = bridge(&asked).map_err(|e| e.to_string())?;
+    let bridged = bridged(schema, into, &keys).map_err(|e| e.to_string())?;
     let mut decls = Decls::default();
     decls.messages.clone_from(&bridged.messages);
     let declared = crate::declared_over(decls, &crate::written(functions, Some(schema))?)?;

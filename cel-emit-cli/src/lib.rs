@@ -190,10 +190,9 @@ fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<Stri
     let declared = declarations("input", ty, &written(functions, Some(schema))?)?;
     let named = names(&ir);
     let name = |i: usize| named.get(i).cloned().unwrap_or_default();
-    let types = StdForm::new(&ir, &name)
-        .items()
-        .map_err(|e| e.to_string())?;
-    let messages = Models::new(&ir, "types");
+    let std = StdForm::new(&ir, &name);
+    let types = std.items().map_err(|e| e.to_string())?;
+    let messages = Models::new(&std, "types");
     let (output, items) = emitted(&encoded(expression), &declared, "input", Box::new(messages))?;
     let root = name(root);
     let prelude = format!("mod types {{ use ::schema_emit_runtime as __s; {types} }}");

@@ -1,17 +1,19 @@
-//! A record whose schema fills another model's dynamic references: its properties, places, and Rust, with the
-//! generic model written beside it or in a module of its own, and the programs built from both.
+//! A record whose schema fills another model's open parts: its properties, places, and Rust, with
+//! the generic model written beside it or in a module of its own, and the programs built from both.
 
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use cel_emit::emit::Messages;
 use cel_emit::Type;
-use cel_emit_schema_bridge::{bridge, Asked, Bridged, Held};
-use serde_json::{json, Value};
+use cel_emit_schema_bridge::Bridged;
+use schema_emit::json_schema::lower_defs;
+use serde_json::{json, Map, Value};
 
-#[path = "dynamic_refs/program.rs"]
+mod asked;
+#[path = "filler/program.rs"]
 mod program;
 
-/// The generic model: a required string, and a required dynamic reference for an object.
+/// The generic model: a required string, and a required open part for an object.
 fn generic() -> Value {
     json!({
         "$id": "parcel",
@@ -30,7 +32,7 @@ fn held() -> Value {
     json!({"$id": "https://example.test/root", "$defs": {"Parcel": generic()}})
 }
 
-/// A record filling the generic model's dynamic reference, holding the generic model's schema too.
+/// A record filling the generic model's open part, holding the generic model's schema too.
 fn record() -> Value {
     json!({
         "$id": "https://example.test/book",
@@ -47,19 +49,18 @@ fn record() -> Value {
     })
 }
 
-fn bridged(into: Option<&str>, held: &[Held]) -> Result<Bridged, String> {
-    let schema = record();
-    // `title` is the dynamic reference's: without `into` nothing is computed.
+fn bridged(into: Option<&str>, external: &[(String, &str)]) -> Result<Bridged, String> {
+    // `title` is the open part's: without `into` nothing is computed.
     let computed: &[&str] = if into.is_some() { &["title"] } else { &[] };
-    let asked = Asked {
-        schema: &schema,
+    let ask = asked::Ask {
         name: "Book",
         into,
         computed,
         module: "b",
-        held,
+        external,
+        later: true,
     };
-    bridge(&asked).map_err(|e| e.to_string())
+    asked::bridged(&record(), &ask)
 }
 
 /// Each property as `key place empty checked`.
@@ -73,7 +74,7 @@ fn properties(bridged: &Bridged) -> Vec<String> {
 }
 
 #[test]
-fn into_names_a_dynamic_reference_and_its_properties_are_the_filling_types() {
+fn into_names_an_open_part_and_its_properties_are_the_filling_types() {
     let bridged = bridged(Some("contents"), &[]).unwrap();
     assert_eq!(bridged.record.rust, "b::Book");
     assert_eq!(bridged.decode, "b::decode_parcel");
@@ -97,7 +98,7 @@ fn into_names_a_dynamic_reference_and_its_properties_are_the_filling_types() {
 }
 
 #[test]
-fn a_dynamic_reference_not_named_is_a_property_holding_its_filling_type() {
+fn an_open_part_not_named_is_a_property_holding_its_filling_type() {
     let bridged = bridged(None, &[]).unwrap();
     assert_eq!(
         properties(&bridged),
@@ -109,9 +110,9 @@ fn a_dynamic_reference_not_named_is_a_property_holding_its_filling_type() {
 }
 
 #[test]
-fn a_computed_property_fills_in_a_dynamic_reference() {
+fn a_computed_property_fills_in_an_open_part() {
     let out = program::run(
-        "dynamic_refs_beside",
+        "filler_beside",
         &bridged(Some("contents"), &[]).unwrap(),
         &[],
     );
@@ -124,10 +125,12 @@ fn a_computed_property_fills_in_a_dynamic_reference() {
 #[test]
 fn a_generic_model_another_module_holds_is_read_by_its_path() {
     let doc = held();
-    let theirs = [Held {
-        schema: &doc,
-        module: "crate::a",
-    }];
+    let lowered = lower_defs(&doc, &Map::new(), &[]).unwrap();
+    let theirs: Vec<(String, &str)> = lowered
+        .models
+        .into_iter()
+        .map(|m| (m.name, "crate::a"))
+        .collect();
     let bridged = bridged(Some("contents"), &theirs).unwrap();
     assert_eq!(bridged.record.rust, "b::Book");
     assert_eq!(bridged.decode, "crate::a::decode_parcel");
@@ -142,7 +145,7 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
     assert!(bridged
         .items
         .contains("pub type Book = crate::a::Parcel<Contents>;"));
-    let out = program::run("dynamic_refs_apart", &bridged, &[&doc]);
+    let out = program::run("filler_apart", &bridged, &[&doc]);
     assert_eq!(
         out,
         json!({"id": "a", "contents": {"title": "a:2", "pieces": 2}})
@@ -150,12 +153,23 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
 }
 
 #[test]
-fn what_is_no_dynamic_reference_of_a_filler_is_refused() {
-    let refused = bridged(Some("id"), &[]).err().unwrap();
-    assert!(refused.contains("`into` names no property"), "{refused}");
+fn into_naming_no_object_of_a_filler_is_refused() {
+    let ask = asked::Ask {
+        name: "Book",
+        into: Some("id"),
+        computed: &[],
+        module: "b",
+        external: &[],
+        later: true,
+    };
+    let refused = asked::bridged(&record(), &ask).err().unwrap();
+    assert!(
+        refused.contains("`into` names no required object"),
+        "{refused}"
+    );
 }
 
-/// A generic model whose field is another model of its resource, holding dynamic references `left` and
+/// A generic model whose field is another model of its resource, holding open parts `left` and
 /// `right` besides the model's own `load`.
 fn nested_generic() -> Value {
     json!({
@@ -208,17 +222,16 @@ fn nested_asking() -> Value {
 }
 
 #[test]
-fn a_dynamic_reference_one_model_deeper_is_its_propertys_filling_type() {
-    let schema = nested_asking();
-    let asked = Asked {
-        schema: &schema,
+fn an_open_part_one_model_deeper_is_its_propertys_filling_type() {
+    let ask = asked::Ask {
         name: "Crate",
         into: Some("load"),
         computed: &["n"],
         module: "b",
-        held: &[],
+        external: &[],
+        later: true,
     };
-    let bridged = bridge(&asked).map_err(|e| e.to_string()).unwrap();
+    let bridged = asked::bridged(&nested_asking(), &ask).unwrap();
     let inner = bridged.record.properties.iter().find(|p| p.key == "inner");
     let names = |ty: &Type| -> Vec<String> { ty.fields().iter().map(|f| f.name.clone()).collect() };
     let ty = &inner.unwrap().ty;

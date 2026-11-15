@@ -1,4 +1,11 @@
-use super::*;
+//! A schema-emit model as the cel-emit record that holds it, and what has no record.
+
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+
+use cel_emit::{Field, Type, Width};
+use cel_emit_schema_bridge::types::record;
+use schema_emit::ir::{Base, Float, Int, Schema, Ty};
+use schema_emit::Error;
 use serde_json::{json, Value};
 
 fn map(schema: Value) -> Result<Type, Error> {
@@ -64,13 +71,13 @@ fn maps() {
             checks: vec![],
             others: None,
             additional: schema_emit::ir::Additional::Fail,
-            dynamic_refs: vec![],
-            of: None,
+            ..Default::default()
         };
         record(
             &Schema {
                 models: vec![model],
                 warnings: vec![],
+                ..Default::default()
             },
             0,
         )
@@ -136,12 +143,12 @@ fn a_model_holding_itself_is_refused() {
         checks: vec![],
         others: None,
         additional: schema_emit::ir::Additional::Fail,
-        dynamic_refs: vec![],
-        of: None,
+        ..Default::default()
     };
     let schema = Schema {
         models: vec![model],
         warnings: vec![],
+        ..Default::default()
     };
     let e = record(&schema, 0).unwrap_err();
     assert!(e.message.contains("holding itself"), "{}", e.message);

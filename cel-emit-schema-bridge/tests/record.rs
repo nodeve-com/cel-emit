@@ -2,8 +2,10 @@
 //! what the bridge refuses.
 
 use cel_emit::Type;
-use cel_emit_schema_bridge::{bridge, Asked, Bridged};
+use cel_emit_schema_bridge::Bridged;
 use serde_json::{json, Value};
+
+mod asked;
 
 fn schema() -> Value {
     json!({
@@ -33,16 +35,26 @@ fn schema() -> Value {
     })
 }
 
-fn bridged(schema: &Value, into: Option<&str>, computed: &[&str]) -> Result<Bridged, String> {
-    let asked = Asked {
-        schema,
+/// `schema` bridged as `Record`, each computed property a field filled later where `later`.
+fn asked(
+    schema: &Value,
+    into: Option<&str>,
+    computed: &[&str],
+    later: bool,
+) -> Result<Bridged, String> {
+    let ask = asked::Ask {
         name: "Record",
         into,
         computed,
         module: "types",
-        held: &[],
+        external: &[],
+        later,
     };
-    bridge(&asked).map_err(|e| e.to_string())
+    asked::bridged(schema, &ask)
+}
+
+fn bridged(schema: &Value, into: Option<&str>, computed: &[&str]) -> Result<Bridged, String> {
+    asked(schema, into, computed, true)
 }
 
 /// Each property as `key place empty checked`.
@@ -111,7 +123,7 @@ fn without_into_the_records_own_properties_fill() {
 
 #[test]
 fn what_the_bridge_refuses() {
-    let refused = |into, computed: &[&str]| bridged(&schema(), into, computed).err().unwrap();
+    let refused = |into, computed: &[&str]| asked(&schema(), into, computed, false).err().unwrap();
     assert!(refused(Some("data"), &["none"]).contains("the schema doesn't declare"));
     assert!(refused(Some("none"), &[]).contains("`into` names no property"));
     assert!(refused(Some("price"), &[]).contains("`into` names no required object"));

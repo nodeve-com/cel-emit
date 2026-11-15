@@ -5,49 +5,45 @@ use std::collections::BTreeMap;
 use cel_emit::computed::{Property, Record};
 use cel_emit::emit::Messages;
 use cel_emit::{Message, Type};
-use schema_emit::emit::std_form::{self, names, StdForm};
+use schema_emit::emit::std_form::{self, StdForm};
 use schema_emit::emit::Emitter;
 use schema_emit::ir::{Base, Field, Schema};
 use schema_emit::Error;
-use serde_json::Value;
 
-mod held;
-mod relax;
 pub mod types;
 
-pub use held::Held;
-
-/// What to bridge: a record's JSON Schema, and the properties expressions fill.
+/// What to bridge: a record's standard form, and the properties expressions fill.
 pub struct Asked<'a> {
-    pub schema: &'a Value,
-    /// The record's name: its Rust type's, in camel case.
-    pub name: &'a str,
+    /// The standard form of the record's lowered schema: each model another module holds named
+    /// by `with_external`, each computed property a field `with_empty` fills later.
+    pub std: &'a StdForm<'a>,
+    /// The record's model in the form's schema.
+    pub root: usize,
     /// The one object property the computed properties fill, where they don't fill the record's
     /// own.
     pub into: Option<&'a str>,
     /// Each computed property's key: a bare property name of the record, or of the `into`
-    /// object where `into` is set. A dotted key, or a property outside `into`, is refused.
+    /// object where `into` is set. A key the object doesn't declare is refused.
     pub computed: &'a [&'a str],
     /// The Rust path of the module [`Bridged::items`] sits in.
     pub module: &'a str,
-    /// The modules holding models the schema reads, as the generic model a record fills the dynamic references
-    /// of. [`Bridged::items`] writes none of them.
-    pub held: &'a [Held<'a>],
 }
 
 /// A schema as computed properties take it.
 pub struct Bridged {
     /// The record: its Rust type, and each property's type, place, and check.
     pub record: Record,
-    /// Each type the schema's `$defs` names, for an expression to build by that name.
+    /// Each record type the schema names ([`Schema::named`]), for an expression to build by that
+    /// name.
     pub messages: BTreeMap<String, Type>,
     /// Each message's Rust.
     pub models: Models,
     /// The types and checks, for a module holding `use ::schema_emit_runtime as __s;`, in a
     /// crate linking cel-emit-runtime.
     pub items: String,
-    /// The computed properties the schema requires. Each sits as one that may be empty, so a
-    /// failure can leave it so, and whoever walks the index judges it.
+    /// The computed properties the schema requires, as their fields say. Each the program names
+    /// a field filled later sits as one that may be empty, so a failure can leave it so, and
+    /// whoever walks the index judges it.
     pub required: Vec<String>,
     /// The Rust path of the function decoding the record.
     pub decode: String,
@@ -73,29 +69,24 @@ impl Messages for Models {
 }
 
 impl Models {
-    /// Each model of `schema` that is a record, its struct in `module`.
-    pub fn new(schema: &Schema, module: &str) -> Models {
-        let named = names(schema);
-        let name = |i: usize| named.get(i).cloned().unwrap_or_default();
-        let none = vec![None; schema.models.len()];
-        Models::held(&StdForm::new(schema, &name), &none, module)
-    }
-
-    /// Each model of the form's schema that is a record, its Rust in `module`, or in the module
-    /// holding it: `external` gives each model's, by index.
-    pub fn held(std: &StdForm, external: &[Option<String>], module: &str) -> Models {
-        let models = &std.schema.models;
-        // A model holding dynamic references inside a record that fills them is that record's own type, named
-        // by the generic model's struct: its type parameters follow from the fields.
-        let records = (0..models.len()).flat_map(|root| {
-            let made = types::entered(std.schema, root).into_iter();
-            made.filter_map(|(i, ty)| match ty {
-                Type::Message(message) if !models.get(i)?.is_value() => {
-                    let at = external.get(i).and_then(Option::as_deref).unwrap_or(module);
-                    Some((message, format!("{at}::{}", std.model_name(i))))
-                }
-                _ => None,
-            })
+    /// Each model of `std`'s schema that is a record, its Rust in `module`, or in the module
+    /// `std` names as holding it.
+    pub fn new(std: &StdForm, module: &str) -> Models {
+        let filled = std.schema.filled();
+        let records = (0..filled.models.len()).filter_map(|k| {
+            let made = filled
+                .models
+                .get(k)
+                .filter(|m| !m.is_value())
+                .map(|_| types::model(&filled, k));
+            let Some(Ok(Type::Message(message))) = made else {
+                return None;
+            };
+            // A model is the struct holding it: a struct with type parameters infers them from
+            // its fields.
+            let s = filled.filling(k);
+            let at = (std.external)(s).unwrap_or_else(|| module.into());
+            Some((message, format!("{at}::{}", std.model_name(s))))
         });
         Models {
             records: records.collect(),
@@ -119,28 +110,39 @@ pub fn checked<T>(
 }
 ";
 
-/// One bridging: the lowered schema, what was asked, and the checks written so far.
+/// One bridging: the filled schema, what was asked, and the checks written so far.
 struct Bridge<'a> {
-    schema: &'a Schema,
+    filled: &'a Schema,
     asked: &'a Asked<'a>,
-    std: &'a StdForm<'a>,
     checks: String,
     /// How many checks are written.
     count: usize,
     loads: Vec<String>,
+    required: Vec<String>,
+    /// The model whose fields the computed properties are.
+    holder: usize,
 }
 
 impl Bridge<'_> {
-    /// `field` as a property sitting at `place`, with its check where an expression fills it.
-    fn property(&mut self, root: usize, field: &Field, place: String) -> Result<Property, Error> {
+    /// `field`, field `at` of model `model`, as a property sitting at `place`, with its check
+    /// where an expression fills it.
+    fn property(
+        &mut self,
+        (model, at): (usize, usize),
+        field: &Field,
+        place: String,
+    ) -> Result<Property, Error> {
         let key = field.name.as_str();
-        let ty = types::value(self.schema, root, &field.ty).map_err(|e| e.at(key))?;
-        let computed = self.asked.computed.contains(&key);
+        let ty = types::value(self.filled, &field.ty).map_err(|e| e.at(key))?;
+        let computed = model == self.holder && self.asked.computed.contains(&key);
+        if computed && field.required {
+            self.required.push(key.into());
+        }
         Ok(Property {
             key: key.into(),
             ty,
             place,
-            empty: !field.held(),
+            empty: self.asked.std.can_be_empty(self.filled.filling(model), at),
             check: computed.then(|| self.check(field)).transpose()?,
         })
     }
@@ -153,7 +155,7 @@ impl Bridge<'_> {
         let module = self.asked.module;
         let name = format!("check_{}", self.count);
         self.count = self.count.saturating_add(1);
-        let check = Emitter::new(self.std).check_value(&field.ty, &field.name, &name)?;
+        let check = Emitter::new(self.asked.std).check_value(&field.ty, &field.name, &name)?;
         if check.contains(&format!("pub fn {name}_load(")) {
             self.loads.push(format!("{module}::{name}_load"));
         }
@@ -163,85 +165,93 @@ impl Bridge<'_> {
         ))
     }
 
-    /// Model `m`'s fields, a dynamic reference holding the type filling it.
+    /// Model `m`'s fields.
     fn fields(&self, m: usize) -> Vec<Field> {
-        let filled = self.schema.filled(m);
-        let model = filled.as_ref().or_else(|| self.schema.models.get(m));
+        let model = self.filled.models.get(m);
         model.map(|m| m.fields.clone()).unwrap_or_default()
+    }
+
+    /// The field of `root` that `into` names and the model it holds, where `into` is set.
+    fn holder(&self, root: usize) -> Result<Option<(usize, usize)>, Error> {
+        let Some(into) = self.asked.into else {
+            return Ok(None);
+        };
+        let own = self.fields(root);
+        let at = own.iter().position(|f| f.name == into);
+        let at = at.ok_or_else(|| Error::invalid("`into` names no property"))?;
+        let held = !self.asked.std.can_be_empty(self.filled.filling(root), at);
+        match own.get(at).map(|f| (&f.ty.base, f.ty.nullable)) {
+            Some((Base::Model(m), false)) if held => Ok(Some((at, *m))),
+            _ => Err(Error::invalid("`into` names no required object").at(into)),
+        }
     }
 
     /// Each property an expression reads by name: the record's, and in place of `into` its own.
     fn properties(&mut self, root: usize) -> Result<Vec<Property>, Error> {
+        let holder = self.holder(root)?;
+        self.holder = holder.map_or(root, |(_, m)| m);
+        let declared = self.fields(self.holder);
+        let missing =
+            (self.asked.computed.iter()).find(|k| !declared.iter().any(|f| f.name == **k));
+        if let Some(key) = missing {
+            return Err(Error::invalid("a computed property the schema doesn't declare").at(key));
+        }
         let own = self.fields(root);
         let rust = std_form::fields(own.iter().map(|f| f.name.as_str()));
         let mut properties = Vec::new();
-        for (field, place) in own.iter().zip(rust) {
-            if self.asked.into != Some(field.name.as_str()) {
-                properties.push(self.property(root, field, place)?);
+        for (i, (field, place)) in own.iter().zip(rust).enumerate() {
+            let Some((_, m)) = holder.filter(|(at, _)| *at == i) else {
+                properties.push(self.property((root, i), field, place)?);
                 continue;
-            }
-            let inner = match (&field.ty.base, field.held()) {
-                (Base::Model(m), true) => self.fields(*m),
-                _ => return Err(Error::invalid("`into` names no required object").at(&field.name)),
             };
-            let inside = std_form::fields(inner.iter().map(|f| f.name.as_str()));
-            for (field, at) in inner.iter().zip(inside) {
-                properties.push(self.property(root, field, format!("{place}.{at}"))?);
+            let inside = std_form::fields(declared.iter().map(|f| f.name.as_str()));
+            for (j, (field, at)) in declared.iter().zip(inside).enumerate() {
+                properties.push(self.property((m, j), field, format!("{place}.{at}"))?);
             }
         }
         Ok(properties)
     }
 }
 
-/// Each type `document`'s `$defs` names that is a record.
-fn messages(document: &Value, schema: &Schema) -> BTreeMap<String, Type> {
-    let defs = document.get("$defs").and_then(Value::as_object);
-    let named = defs.into_iter().flat_map(|defs| defs.keys());
-    let found = named.filter_map(|key| {
-        let at = schema.models.iter().position(|m| m.name == *key)?;
-        match types::record(schema, at) {
-            Ok(ty @ Type::Message(_)) => Some((key.clone(), ty)),
+/// Each type `filled` names that is a record, by its name.
+fn messages(filled: &Schema) -> BTreeMap<String, Type> {
+    let found = filled
+        .named
+        .iter()
+        .filter_map(|(name, ty)| match types::value(filled, ty) {
+            Ok(ty @ Type::Message(_)) => Some((name.clone(), ty)),
             _ => None,
-        }
-    });
+        });
     found.collect()
 }
 
-/// `asked`'s schema as computed properties take it.
+/// `asked`'s record as computed properties take it.
 pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
-    let (document, required) = relax::relaxed(asked)?;
-    let shared = serde_json::Map::new();
-    let (schema, root) = schema_emit::json_schema::lower(asked.name, &document, &shared, &[])?;
-    let named = names(&schema);
-    let name = |i: usize| named.get(i).cloned().unwrap_or_default();
-    let external = held::modules(&schema, asked.held)?;
-    let theirs = |i: usize| external.get(i).cloned().flatten();
-    let std = StdForm::new(&schema, &name).with_external(&theirs);
+    let std = asked.std;
+    let filled = std.schema.filled();
     let mut bridge = Bridge {
-        schema: &schema,
+        filled: &filled,
         asked,
-        std: &std,
         checks: String::new(),
         count: 0,
         loads: Vec::new(),
+        required: Vec::new(),
+        holder: asked.root,
     };
-    let properties = bridge.properties(root)?;
+    let properties = bridge.properties(asked.root)?;
     let module = asked.module;
-    // A filler has no decoder of its own: the generic model's decodes it.
-    let generic = schema.filling(root);
-    let home = external
-        .get(generic)
-        .and_then(Option::as_deref)
-        .unwrap_or(module);
+    // A filler has no decoder of its own: the struct holding it decodes it.
+    let generic = filled.filling(asked.root);
+    let home = (std.external)(generic).unwrap_or_else(|| module.into());
     Ok(Bridged {
         record: Record {
-            rust: format!("{module}::{}", std.model_name(root)),
+            rust: format!("{module}::{}", std.model_name(asked.root)),
             properties,
         },
-        messages: messages(&document, &schema),
-        models: Models::held(&std, &external, module),
+        messages: messages(&filled),
+        models: Models::new(std, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
-        required,
+        required: bridge.required,
         decode: format!("{home}::{}", std.decoder(generic)),
         loads: bridge.loads,
     })
