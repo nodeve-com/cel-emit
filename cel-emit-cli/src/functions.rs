@@ -14,16 +14,15 @@ pub(crate) fn written(file: &str, schema: Option<&str>) -> Result<Vec<Written>, 
         return Err("functions: a JSON object of functions by name".into());
     };
     let defs = match schema {
-        Some(text) => serde_json::from_str::<Value>(text)
-            .map_err(|e| e.to_string())?
-            .get("$defs")
-            .cloned(),
-        None => None,
+        Some(text) => schema_emit::json_schema::defs(
+            &serde_json::from_str::<Value>(text).map_err(|e| e.to_string())?,
+        ),
+        None => Map::new(),
     };
     all.iter().map(|(name, f)| one(name, f, &defs)).collect()
 }
 
-fn one(name: &str, f: &Value, defs: &Option<Value>) -> Result<Written, String> {
+fn one(name: &str, f: &Value, defs: &Map<String, Value>) -> Result<Written, String> {
     let at = |why: &str| format!("function {name}: {why}");
     let valid = name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
@@ -55,12 +54,8 @@ fn one(name: &str, f: &Value, defs: &Option<Value>) -> Result<Written, String> {
 }
 
 /// `schema` as the type it describes, its `$ref`s resolving in `defs`.
-fn param(schema: &Value, defs: &Option<Value>) -> Result<Type, String> {
-    let mut document = schema.clone();
-    if let (Some(defs), Some(object)) = (defs, document.as_object_mut()) {
-        object.insert("$defs".into(), defs.clone());
-    }
-    let (ir, root) = schema_emit::json_schema::lower("Param", &document, &Map::new(), &[])
-        .map_err(|e| e.to_string())?;
+fn param(schema: &Value, defs: &Map<String, Value>) -> Result<Type, String> {
+    let (ir, root) =
+        schema_emit::json_schema::lower("Param", schema, defs, &[]).map_err(|e| e.to_string())?;
     types::record(&ir, root).map_err(|e| e.to_string())
 }

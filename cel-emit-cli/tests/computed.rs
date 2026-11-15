@@ -128,5 +128,5 @@ fn a_check_refuses_a_value_naming_its_place() {
 #[test]
 fn a_definition_both_files_name_is_refused() {
     let clash = cel_emit_cli::with_defs(INTO, "Label", "{}").unwrap_err();
-    assert_eq!(clash, "--defs: both files define Label");
+    assert_eq!(clash, "--defs: both documents define Label");
 }
