@@ -19,7 +19,7 @@ cel-emit = { path = ".." }
 # A schema as the record computed properties fill, and each model's cel-emit type.
 cel-emit-schema-bridge = { path = "../cel-emit-schema-bridge" }
 # A schema's types and their decode.
-schema-emit = "0.6.2"
+schema-emit = "0.7.0"
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
 # Formats the Rust it writes.
 prettyplease = "0.2"
@@ -27,7 +27,7 @@ syn = { version = "2", features = ["full", "parsing"] }
 
 [dev-dependencies]
 cel-emit-runtime = { path = "../cel-emit-runtime", features = ["civil"] }
-schema-emit-runtime = { version = "0.6.2", features = ["decode"] }
+schema-emit-runtime = { version = "0.6.3", features = ["decode"] }
 # An expression checked ahead of time and saved as a `CheckedExpr`, for the interpreter program
 # (tests/references.rs).
 cel-core = { package = "cel-core-nodeve", version = "0.5.1" }

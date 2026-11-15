@@ -573,9 +573,9 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "schema-emit"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3b6ce9fe5498f76faa4947c57915a5a992a9f4be9f1346487add6be89509ce4"
+checksum = "20752149ca37b9ac97f328dc2018e8e3645486d6f9cb205152dd8553557d2e80"
 dependencies = [
  "iri-string",
  "pattern-emit",
@@ -585,9 +585,9 @@ dependencies = [
 
 [[package]]
 name = "schema-emit-runtime"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c269b6e42055fa9cd965f3feca057a302dd9e8a2514849bcaea3b2e5c845a3c"
+checksum = "4e2c165f583e9d62968c516281a49b5b103893ed65bc0a193790084f89d2880f"
 dependencies = [
  "any-value",
  "base64",

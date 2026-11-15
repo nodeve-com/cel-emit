@@ -204,11 +204,11 @@ fn typed(expression: &str, schema: &str, functions: Option<&str>) -> Result<Stri
 }
 
 /// What a program over a schema's types links beside the runtime: schema-emit-runtime at the version
-/// `schema-emit` takes here, so its decode matches what wrote it.
+/// this crate takes it, so its decode matches what wrote it.
 const TYPED: &str = concat!(
     "serde_json = \"1\"\n",
     "schema-emit-runtime = { version = \"",
-    env!("SCHEMA_EMIT_VERSION"),
+    env!("SCHEMA_EMIT_RUNTIME_VERSION"),
     "\", features = [\"decode\"] }\n",
 );
 
