@@ -54,7 +54,8 @@ fn scalars_and_containers() {
     assert_eq!(one(list).unwrap().ty, Type::list(Type::String));
     let same = json!({"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}],
         "items": false});
-    assert_eq!(one(same).unwrap().ty, Type::list(Type::Double));
+    // An array typed by position is a tuple, moved whole, whatever its positions hold.
+    assert!(matches!(one(same).unwrap().ty, Type::Opaque(_)));
 }
 
 /// The front end does not lower maps yet, so these are built as the IR.
@@ -123,10 +124,8 @@ fn nested_model() {
 fn refusals() {
     refused(json!(true), "any value");
     refused(json!({"type": "null"}), "null alone");
-    refused(
-        json!({"type": "array", "prefixItems": [{"type": "string"}, {"type": "integer"}]}),
-        "mixed-kind tuple has no type",
-    );
+    let holding = json!({"type": "array", "prefixItems": [{"type": "object"}]});
+    refused(holding, "a tuple holding a model or a union has no type");
     let e = map(json!({"type": "object", "properties": {"b": {"type": "null"}}})).unwrap_err();
     assert!(e.message.starts_with("m.b:"), "{}", e.message);
 }

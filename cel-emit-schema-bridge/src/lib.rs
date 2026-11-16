@@ -3,14 +3,18 @@
 use std::collections::BTreeMap;
 
 use cel_emit::computed::{Property, Record};
-use cel_emit::emit::Messages;
-use cel_emit::{Message, Type};
+use cel_emit::Type;
 use schema_emit::emit::std_form::{self, StdForm};
 use schema_emit::emit::Emitter;
 use schema_emit::ir::{Base, Field, Schema};
 use schema_emit::Error;
 
+mod models;
+pub mod tuples;
 pub mod types;
+
+pub use models::Models;
+pub use tuples::Tuple;
 
 /// What to bridge: a record's standard form, and the properties expressions fill.
 pub struct Asked<'a> {
@@ -40,8 +44,12 @@ pub struct Bridged {
     /// Each other type the schema names that cel-emit holds, a list or a scalar, for a call to
     /// name as its type argument (cel-emit's `Decls::types`).
     pub types: BTreeMap<String, Type>,
-    /// Each message's Rust.
+    /// Each message's Rust, and each tuple's functions.
     pub models: Models,
+    /// Each tuple type the schema holds, which an expression moves whole, and the functions in
+    /// [`Bridged::items`] reading and writing one as a dynamic value. [`Bridged::models`] names
+    /// them to cel-emit.
+    pub tuples: Vec<Tuple>,
     /// The types and checks, for a module holding `use ::schema_emit_runtime as __s;`, in a
     /// crate linking cel-emit-runtime.
     pub items: String,
@@ -57,49 +65,6 @@ pub struct Bridged {
     pub encode: Option<String>,
     /// The Rust path of each function checking a check's pattern tables, to call once.
     pub loads: Vec<String>,
-}
-
-/// Each message as the struct, or alias, schema-emit writes for its model.
-#[derive(Clone)]
-pub struct Models {
-    records: Vec<(Message, String)>,
-}
-
-impl Messages for Models {
-    fn path(&mut self, _: usize, message: &Message) -> String {
-        let found = self.records.iter().find(|(held, _)| held == message);
-        found.map_or_else(String::new, |(_, rust)| rust.clone())
-    }
-
-    fn fields(&self, message: &Message) -> Vec<String> {
-        std_form::fields(message.fields.iter().map(|f| f.name.as_str()))
-    }
-}
-
-impl Models {
-    /// Each model of `std`'s schema that is a record, its Rust in `module`, or in the module
-    /// `std` names as holding it.
-    pub fn new(std: &StdForm, module: &str) -> Models {
-        let filled = std.schema.filled();
-        let records = (0..filled.models.len()).filter_map(|k| {
-            let made = filled
-                .models
-                .get(k)
-                .filter(|m| !m.is_value())
-                .map(|_| types::model(&filled, Some(std), k));
-            let Some(Ok(Type::Message(message))) = made else {
-                return None;
-            };
-            // A model is the struct holding it: a struct with type parameters infers them from
-            // its fields.
-            let s = filled.filling(k);
-            let at = (std.external)(s).unwrap_or_else(|| module.into());
-            Some((message, format!("{at}::{}", std.model_name(s))))
-        });
-        Models {
-            records: records.collect(),
-        }
-    }
 }
 
 /// The helper every check goes through: the first failure a check reports, as cel-emit-runtime's.
@@ -249,6 +214,12 @@ fn codec(asked: &Asked, filled: &Schema) -> (String, Option<String>) {
     (format!("{home}::{decode}"), encode)
 }
 
+/// The module's items: the form's, each tuple's functions, `checks`, and the checks' helper.
+fn items(std: &StdForm, filled: &Schema, checks: &str) -> Result<String, Error> {
+    let (form, tuples) = (std.items()?, tuples::items(filled, std)?);
+    Ok(format!("{form}{tuples}{checks}{CHECKED}"))
+}
+
 /// `asked`'s record as computed properties take it.
 pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     let std = asked.std;
@@ -276,7 +247,8 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
         messages,
         types,
         models: Models::new(std, module),
-        items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
+        tuples: tuples::tuples(&filled, std, module),
+        items: items(std, &filled, &bridge.checks)?,
         required: bridge.required,
         encode,
         decode,

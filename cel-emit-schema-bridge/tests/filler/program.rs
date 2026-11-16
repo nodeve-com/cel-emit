@@ -116,8 +116,10 @@ fn held_modules(held: &[&Value]) -> String {
     out
 }
 
-/// The functions and the index filling the program's property, as the Rust it holds.
-fn index_of(program: Program) -> String {
+/// The functions and the index filling the program's property, as the Rust it holds, or why
+/// its expression is refused.
+#[allow(dead_code)]
+pub fn index_of(program: Program) -> Result<String, Error> {
     let (key, cel) = program.fill;
     let compute = Compute {
         key: key.into(),
@@ -133,8 +135,8 @@ fn index_of(program: Program) -> String {
         vars: beside.vars,
     };
     let mut emitter = Emitter::new(&beside.decls.functions, beside.messages);
-    let index = computed.index("INDEX", &[compute], &mut emitter).unwrap();
-    format!("{}{index}", emitter.items().unwrap().code)
+    let index = computed.index("INDEX", &[compute], &mut emitter)?;
+    Ok(format!("{}{index}", emitter.items()?.code))
 }
 
 /// The program's source: `held` as module `a`, the bridge's items as `b`, and the index.
@@ -143,7 +145,7 @@ fn source_of(program: Program) -> String {
     let (record, decode, encode) = (&bridged.record.rust, &bridged.decode, program.encode);
     let held = held_modules(program.held);
     let (beside, params) = (program.beside.items.clone(), program.beside.value.clone());
-    let index = index_of(program);
+    let index = index_of(program).unwrap();
     format!(
         "use ::cel_emit_runtime as s;
         {held}

@@ -114,7 +114,7 @@ impl<'a> Walk<'a> {
             Base::Float(Float::F64) => Type::Double,
             Base::List(item) => Type::list(self.ty(item)?),
             Base::Map(item) => Type::map(self.ty(item)?),
-            Base::Tuple { prefix, rest } => self.tuple(prefix, rest.as_deref())?,
+            Base::Tuple { .. } => self.tuple(t)?,
             Base::Model(m) => self.model(*m)?,
             Base::Null => return Err(Error::unsupported("null alone has no type")),
             Base::Any => return Err(Error::unsupported("any value has no type")),
@@ -128,16 +128,10 @@ impl<'a> Walk<'a> {
         })
     }
 
-    /// An array whose positions all share one type is a list; any other mix has no type.
-    fn tuple(&mut self, prefix: &[Ty], rest: Option<&Ty>) -> Result<Type, Error> {
-        let mut all = prefix.iter().chain(rest);
-        let first = all
-            .next()
-            .ok_or_else(|| Error::unsupported("an empty array has no type"))?;
-        if all.any(|t| t != first) {
-            return Err(Error::unsupported("a mixed-kind tuple has no type"));
-        }
-        Ok(Type::list(self.ty(first)?))
+    /// An array typed by position is the Rust tuple schema-emit writes, which an expression
+    /// moves and never reads into.
+    fn tuple(&self, t: &Ty) -> Result<Type, Error> {
+        crate::tuples::rust(self.schema, self.std, t).map(Type::Opaque)
     }
 }
 

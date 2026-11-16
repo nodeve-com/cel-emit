@@ -10,7 +10,7 @@ include = ["/src", "/README.md", "/LICENSE"]
 [dependencies]
 cel-emit = { path = "..", version = "0.7.0" }
 # The schema's models, their Rust, and each property's check.
-schema-emit = "0.7.1"
+schema-emit = "0.7.2"
 
 [dev-dependencies]
 serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
