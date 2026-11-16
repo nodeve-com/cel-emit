@@ -157,3 +157,27 @@ fn what_the_bridge_refuses() {
     assert!(refused(Some("price"), &[]).contains("`into` names no required object"));
     assert!(refused(Some("data"), &["maybe"]).contains("a nullable computed property"));
 }
+
+#[test]
+fn a_record_another_module_holds_is_named_by_that_modules_path() {
+    let theirs = [("Record".to_string(), "crate::theirs")];
+    let ask = asked::Ask {
+        name: "Record",
+        into: None,
+        computed: &[],
+        module: "types",
+        external: &theirs,
+        later: true,
+    };
+    let bridged = asked::bridged(&schema(), &ask).unwrap();
+    assert_eq!(bridged.record.rust, "crate::theirs::Record");
+    assert_eq!(bridged.decode, "crate::theirs::decode_record");
+    assert!(!bridged.items.contains("struct Record "), "its own struct");
+    // A model the form leaves here stays in the bridge's module.
+    let label = &bridged.messages["Label"];
+    let cel_emit::Type::Message(label) = label else {
+        panic!("not a message");
+    };
+    let path = cel_emit::emit::Messages::path(&mut bridged.models.clone(), 0, label);
+    assert_eq!(path, "types::Label");
+}

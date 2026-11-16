@@ -25,7 +25,8 @@ pub struct Asked<'a> {
     /// Each computed property's key: a bare property name of the record, or of the `into`
     /// object where `into` is set. A key the object doesn't declare is refused.
     pub computed: &'a [&'a str],
-    /// The Rust path of the module [`Bridged::items`] sits in.
+    /// The Rust path of the module [`Bridged::items`] sits in. A model the form names as written
+    /// in another module is read by that module's path, the record's own included.
     pub module: &'a str,
 }
 
@@ -256,10 +257,12 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     };
     let home = (std.external)(reader).unwrap_or_else(|| module.into());
     let decode = std.decoder(reader);
+    // The record's type sits where the form says its model is written.
+    let own = (std.external)(asked.root).unwrap_or_else(|| module.into());
     let encode = decode.strip_prefix("decode_").filter(|_| bare);
     Ok(Bridged {
         record: Record {
-            rust: format!("{module}::{}", std.model_name(asked.root)),
+            rust: format!("{own}::{}", std.model_name(asked.root)),
             properties,
         },
         messages,
