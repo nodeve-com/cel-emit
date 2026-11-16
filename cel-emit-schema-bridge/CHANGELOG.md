@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.8.0...cel-emit-schema-bridge-v0.9.0) - 2026-11-16
+
+### Added
+
+- *(bridge)* take schema-emit 0.7.2; a tuple is an opaque type wherever it sits, read and written by functions made of schema-emit's own
+
+### Other
+
+- *(bridge)* a tuple, moved whole, and its functions
+
 ## [0.8.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.7.1...cel-emit-schema-bridge-v0.8.0) - 2026-11-16
 
 ### Added
