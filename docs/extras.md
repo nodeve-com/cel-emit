@@ -6,6 +6,8 @@ An embedder also adds expansions, which rewrite a call as it lowers from an argu
 
 An embedder may also write a function in CEL: its name, its parameters in order, each a name and a type, and a body that reads only them. cel-emit checks the body once and writes it as one Rust function returning the body's type, which every call checks its arguments against and runs. An error inside the body is the call's error. A body whose value is a part of a parameter returns it by reference, so a call copies nothing. A body may call another written this way, never in a cycle.
 
+An embedder may declare an opaque type: a Rust type it names, which CEL never looks inside. An expression moves such a value whole: from a variable or a field into a field, a list, a map, an optional, or its result. cel-emit refuses every read into one as it checks the expression. A read is a field, an index, arithmetic, a comparison, even with `null`, a conversion, or a call of cel-emit's own functions. An embedder's function may take one. The translated code only clones it. `json.encode` and `json.decode` take one through two functions the embedder names, `Messages::writes` and `Messages::reads`.
+
 Beyond CEL's standard library, expressions get CEL's math, strings, optional-value, and lists extensions, plus:
 
 - `duration('7d')`: as [`humantime`](https://docs.rs/humantime) reads it, signed: CEL's units plus `d`, `w`, `M` (30.44 days), and `y` (365.25 days).
