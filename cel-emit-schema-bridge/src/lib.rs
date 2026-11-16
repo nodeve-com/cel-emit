@@ -231,6 +231,24 @@ fn named(filled: &Schema, std: &StdForm) -> (BTreeMap<String, Type>, BTreeMap<St
     held.partition(|(_, ty)| matches!(ty, Type::Message(_)))
 }
 
+/// The Rust paths of the functions decoding `asked`'s record, and writing it where its serde impl
+/// doesn't. A filler has no decoder of its own: the struct holding it decodes it. One filling
+/// with a type that is no struct reads and writes by functions of its own.
+fn codec(asked: &Asked, filled: &Schema) -> (String, Option<String>) {
+    let std = asked.std;
+    let bare = std.is_bare(asked.root);
+    let reader = if bare {
+        asked.root
+    } else {
+        filled.filling(asked.root)
+    };
+    let home = (std.external)(reader).unwrap_or_else(|| asked.module.into());
+    let decode = std.decoder(reader);
+    let encode = decode.strip_prefix("decode_").filter(|_| bare);
+    let encode = encode.map(|id| format!("{home}::encode_{id}"));
+    (format!("{home}::{decode}"), encode)
+}
+
 /// `asked`'s record as computed properties take it.
 pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     let std = asked.std;
@@ -247,19 +265,9 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     let properties = bridge.properties(asked.root)?;
     let (messages, types) = named(&filled, std);
     let module = asked.module;
-    // A filler has no decoder of its own: the struct holding it decodes it. One filling with a
-    // type that is no struct reads and writes by functions of its own.
-    let bare = std.is_bare(asked.root);
-    let reader = if bare {
-        asked.root
-    } else {
-        filled.filling(asked.root)
-    };
-    let home = (std.external)(reader).unwrap_or_else(|| module.into());
-    let decode = std.decoder(reader);
     // The record's type sits where the form says its model is written.
     let own = (std.external)(asked.root).unwrap_or_else(|| module.into());
-    let encode = decode.strip_prefix("decode_").filter(|_| bare);
+    let (decode, encode) = codec(asked, &filled);
     Ok(Bridged {
         record: Record {
             rust: format!("{own}::{}", std.model_name(asked.root)),
@@ -270,8 +278,8 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
         models: Models::new(std, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
         required: bridge.required,
-        encode: encode.map(|id| format!("{home}::encode_{id}")),
-        decode: format!("{home}::{decode}"),
+        encode,
+        decode,
         loads: bridge.loads,
     })
 }

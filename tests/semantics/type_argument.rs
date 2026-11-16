@@ -143,18 +143,8 @@ fn overloads(emitter: &mut Emitter) -> String {
     each.collect()
 }
 
-/// Only here: each overload a type argument picks runs, its result read as the type named.
-#[test]
-fn the_overload_a_type_argument_picks_runs() {
-    let cases = [
-        ("of(v, Point).x", "7"),
-        ("of(v, Points)[0].x + of(v, Score)", "6"),
-        ("of(v, Names)[1]", "\"b\""),
-        ("of(v, Names).size()", "2"),
-        ("of(v, Counts)['a,b']", "2"),
-        ("of(v, Small)[0] + 1u", "98u"),
-        ("of(v, Small).map(b, b * 2u)[2]", "196u"),
-    ];
+/// What each of `cases` gives, numbered: its expression emitted into one program, built and run.
+fn ran(cases: &[(&str, &str)]) -> Vec<(usize, String)> {
     let (decls, function) = declared();
     let mut emitter = Emitter::new(&[function], Box::new(Positional));
     let prelude = overloads(&mut emitter);
@@ -177,7 +167,22 @@ fn the_overload_a_type_argument_picks_runs() {
         &program(&fns, &prelude, &items(&mut emitter).unwrap()),
     );
     let _ = std::fs::remove_dir_all(&dir);
-    let got = answers(lines.unwrap_or_else(|e| panic!("rustc: {e}")));
+    answers(lines.unwrap_or_else(|e| panic!("rustc: {e}")))
+}
+
+/// Only here: each overload a type argument picks runs, its result read as the type named.
+#[test]
+fn the_overload_a_type_argument_picks_runs() {
+    let cases = [
+        ("of(v, Point).x", "7"),
+        ("of(v, Points)[0].x + of(v, Score)", "6"),
+        ("of(v, Names)[1]", "\"b\""),
+        ("of(v, Names).size()", "2"),
+        ("of(v, Counts)['a,b']", "2"),
+        ("of(v, Small)[0] + 1u", "98u"),
+        ("of(v, Small).map(b, b * 2u)[2]", "196u"),
+    ];
+    let got = ran(&cases);
     let want: Vec<_> = (cases.iter().enumerate())
         .map(|(n, (_, want))| (n, want.to_string()))
         .collect();

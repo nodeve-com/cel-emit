@@ -48,30 +48,15 @@ fn bridged(name: &str, module: &str, value: Value) -> Result<Bridged, String> {
     asked::bridged(&record(name, value), &ask(name, module))
 }
 
-/// Each kind that is no object: its schema, its type, and the Rust filling the type parameter.
-fn kinds() -> Vec<(Value, Type, &'static str)> {
-    let list = json!({"type": "array", "items": {"type": "number"}});
-    let map = json!({"type": "object", "additionalProperties": {"type": "integer"}});
+/// A kind: its schema, its type, and the Rust filling the type parameter.
+type Kind = (Value, Type, &'static str);
+
+/// Each kind of text that is no plain string.
+fn texts() -> Vec<Kind> {
     let text = |key: &str, value: &str| json!({"type": "string", key: value});
+    let stamp = "::chrono::DateTime<::chrono::Utc>";
     vec![
-        (json!({"type": "boolean"}), Type::Bool, "bool"),
-        (
-            json!({"type": "string"}),
-            Type::String,
-            "::std::string::String",
-        ),
-        (json!({"type": "number", "minimum": 0}), Type::Double, "f64"),
-        (json!({"type": "integer"}), Type::Int, "i64"),
-        (
-            json!({"type": "integer", "format": "int32"}),
-            Type::Narrow(Width::I32),
-            "i32",
-        ),
-        (
-            text("format", "date-time"),
-            Type::Timestamp,
-            "::chrono::DateTime<::chrono::Utc>",
-        ),
+        (text("format", "date-time"), Type::Timestamp, stamp),
         (
             text("format", "human-duration"),
             Type::Duration,
@@ -82,13 +67,27 @@ fn kinds() -> Vec<(Value, Type, &'static str)> {
             Type::Bytes,
             "::std::vec::Vec<u8>",
         ),
-        (list, Type::list(Type::Double), "::std::vec::Vec<f64>"),
-        (
-            map,
-            Type::map(Type::Int),
-            "::std::vec::Vec<(::std::string::String, i64)>",
-        ),
     ]
+}
+
+/// Each kind that is no object.
+fn kinds() -> Vec<Kind> {
+    let of = |kind: &str| json!({"type": kind});
+    let list = json!({"type": "array", "items": {"type": "number"}});
+    let map = json!({"type": "object", "additionalProperties": {"type": "integer"}});
+    let narrow = json!({"type": "integer", "format": "int32"});
+    let pairs = "::std::vec::Vec<(::std::string::String, i64)>";
+    let mut kinds = vec![
+        (of("boolean"), Type::Bool, "bool"),
+        (of("string"), Type::String, "::std::string::String"),
+        (json!({"type": "number", "minimum": 0}), Type::Double, "f64"),
+        (of("integer"), Type::Int, "i64"),
+        (narrow, Type::Narrow(Width::I32), "i32"),
+        (list, Type::list(Type::Double), "::std::vec::Vec<f64>"),
+        (map, Type::map(Type::Int), pairs),
+    ];
+    kinds.extend(texts());
+    kinds
 }
 
 #[test]
