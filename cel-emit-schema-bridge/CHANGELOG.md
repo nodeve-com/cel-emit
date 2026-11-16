@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.7.0...cel-emit-schema-bridge-v0.7.1) - 2026-11-16
+
+### Fixed
+
+- *(bridge)* a field the standard form fills later types as one that may be empty
+
 ## [0.7.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.6.2...cel-emit-schema-bridge-v0.7.0) - 2026-11-15
 
 ### Other
