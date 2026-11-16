@@ -78,7 +78,7 @@ impl Models {
                 .models
                 .get(k)
                 .filter(|m| !m.is_value())
-                .map(|_| types::model(&filled, k));
+                .map(|_| types::model(&filled, Some(std), k));
             let Some(Ok(Type::Message(message))) = made else {
                 return None;
             };
@@ -133,7 +133,8 @@ impl Bridge<'_> {
         place: String,
     ) -> Result<Property, Error> {
         let key = field.name.as_str();
-        let ty = types::value(self.filled, &field.ty).map_err(|e| e.at(key))?;
+        let ty =
+            types::value(self.filled, Some(self.asked.std), &field.ty).map_err(|e| e.at(key))?;
         let computed = model == self.holder && self.asked.computed.contains(&key);
         if computed && field.required {
             self.required.push(key.into());
@@ -214,14 +215,15 @@ impl Bridge<'_> {
 }
 
 /// Each type `filled` names that is a record, by its name.
-fn messages(filled: &Schema) -> BTreeMap<String, Type> {
-    let found = filled
-        .named
-        .iter()
-        .filter_map(|(name, ty)| match types::value(filled, ty) {
-            Ok(ty @ Type::Message(_)) => Some((name.clone(), ty)),
-            _ => None,
-        });
+fn messages(filled: &Schema, std: &StdForm) -> BTreeMap<String, Type> {
+    let found =
+        filled
+            .named
+            .iter()
+            .filter_map(|(name, ty)| match types::value(filled, Some(std), ty) {
+                Ok(ty @ Type::Message(_)) => Some((name.clone(), ty)),
+                _ => None,
+            });
     found.collect()
 }
 
@@ -248,7 +250,7 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
             rust: format!("{module}::{}", std.model_name(asked.root)),
             properties,
         },
-        messages: messages(&filled),
+        messages: messages(&filled, std),
         models: Models::new(std, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
         required: bridge.required,

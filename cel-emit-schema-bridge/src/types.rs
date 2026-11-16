@@ -3,6 +3,7 @@
 //! reason, never widened.
 
 use cel_emit::{Field, Type, Width};
+use schema_emit::emit::std_form::StdForm;
 use schema_emit::ir::{Base, Float, Int, Model, Schema, Ty};
 use schema_emit::Error;
 
@@ -10,34 +11,44 @@ use schema_emit::Error;
 /// each type as schema-emit fills it ([`Schema::filled`]). A model wrapping a root that is no
 /// object ([`schema_emit::ir::Model::is_value`]) is the type it holds.
 pub fn record(schema: &Schema, root: usize) -> Result<Type, Error> {
-    model(&schema.filled(), root)
+    model(&schema.filled(), None, root)
 }
 
-/// Model `root` of `filled`, a filled schema, as [`record`] gives it.
-pub(crate) fn model(filled: &Schema, root: usize) -> Result<Type, Error> {
+/// Model `root` of `std`'s schema as [`record`] gives it, where each field `std` fills later
+/// ([`StdForm::with_empty`]) is one that may be empty, as the struct schema-emit writes holds it.
+pub fn record_in(std: &StdForm, root: usize) -> Result<Type, Error> {
+    model(&std.schema.filled(), Some(std), root)
+}
+
+/// Model `root` of `filled`, a filled schema, as [`record_in`] gives it, or [`record`] with no
+/// `std`.
+pub(crate) fn model(filled: &Schema, std: Option<&StdForm>, root: usize) -> Result<Type, Error> {
     let value = filled.models.get(root).filter(|m| m.is_value());
-    let mut walk = Walk::new(filled);
+    let mut walk = Walk::new(filled, std);
     match value.and_then(|m| m.fields.first()) {
         Some(f) => walk.ty(&f.ty),
         None => walk.model(root),
     }
 }
 
-/// The type of a value of `t`, a type of `filled`, a filled schema.
-pub(crate) fn value(filled: &Schema, t: &Ty) -> Result<Type, Error> {
-    Walk::new(filled).ty(t)
+/// The type of a value of `t`, a type of `filled`, a filled schema, as [`model`] gives it.
+pub(crate) fn value(filled: &Schema, std: Option<&StdForm>, t: &Ty) -> Result<Type, Error> {
+    Walk::new(filled, std).ty(t)
 }
 
-/// A walk of a filled schema's types: the models being entered.
+/// A walk of a filled schema's types: the form that fills fields later, and the models being
+/// entered.
 struct Walk<'a> {
     schema: &'a Schema,
+    std: Option<&'a StdForm<'a>>,
     open: Vec<usize>,
 }
 
 impl<'a> Walk<'a> {
-    fn new(schema: &'a Schema) -> Self {
+    fn new(schema: &'a Schema, std: Option<&'a StdForm<'a>>) -> Self {
         Walk {
             schema,
+            std,
             open: Vec::new(),
         }
     }
@@ -64,23 +75,30 @@ impl<'a> Walk<'a> {
         }
         self.open.push(at);
         let mut fields = Vec::new();
-        for f in &m.fields {
+        for (i, f) in m.fields.iter().enumerate() {
             let ty = self
                 .ty(&f.ty)
                 .map_err(|e| e.at(&format!("{}.{}", m.name, f.name)))?;
-            // A field a record may lack is an option of its type.
-            let ty = match f.required {
+            // A field a record may lack, or the form fills later, is an option of its type.
+            let held = f.required && !self.later(at, i);
+            let ty = match held {
                 true => ty,
                 false => Type::Optional(Box::new(ty)),
             };
             fields.push(Field {
                 name: f.name.clone(),
                 ty,
-                required: f.required,
+                required: held,
             });
         }
         self.open.pop();
         Ok(Type::message(fields))
+    }
+
+    /// Whether the form fills field `field` of model `at` later, and no default holds it.
+    fn later(&self, at: usize, field: usize) -> bool {
+        let std = self.std;
+        std.is_some_and(|s| s.can_be_empty(self.schema.filling(at), field))
     }
 
     /// The type, a number at its stored width wherever it sits.

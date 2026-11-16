@@ -3,7 +3,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
 use cel_emit::{Field, Type, Width};
-use cel_emit_schema_bridge::types::record;
+use cel_emit_schema_bridge::types::{record, record_in};
+use schema_emit::emit::std_form::StdForm;
 use schema_emit::ir::{Base, Float, Int, Schema, Ty};
 use schema_emit::Error;
 use serde_json::{json, Value};
@@ -166,4 +167,38 @@ fn a_root_that_is_no_object_is_the_type_it_holds() {
         schema_emit::json_schema::lower("m", &json!({"type": "boolean"}), &Default::default(), &[])
             .unwrap();
     assert!(s.models[root].is_value());
+}
+
+/// A field filled later, at the record or inside a nested one, types as a field that may be
+/// empty, as a field the schema leaves optional does; a default keeps the field held.
+#[test]
+fn a_field_filled_later_reads_as_one_that_may_be_empty() {
+    let watts = json!({"type": "object", "required": ["watts"], "properties": {
+        "watts": {"type": "number"}}});
+    let schema = json!({"type": "object", "required": ["value", "place", "kept"], "properties": {
+        "value": watts,
+        "other": watts,
+        "place": {"type": "object", "required": ["key"], "properties": {
+            "key": {"type": "number"}}},
+        "kept": {"type": "integer", "default": 1},
+    }});
+    let (s, root) =
+        schema_emit::json_schema::lower("m", &schema, &Default::default(), &[]).unwrap();
+    let names = schema_emit::emit::std_form::names(&s);
+    let name = |i: usize| names.get(i).cloned().unwrap_or_default();
+    let std = StdForm::new(&s, &name)
+        .with_empty(root, &["value", "place.key", "kept"])
+        .unwrap();
+    let ty = record_in(&std, root).unwrap();
+    let by = |n: &str| ty.fields().iter().find(|f| f.name == n).unwrap().clone();
+    assert_eq!(by("value").ty, by("other").ty);
+    assert!(!by("value").required);
+    let key = by("place").ty.fields()[0].clone();
+    assert_eq!(
+        (key.ty, key.required),
+        (Type::Optional(Box::new(Type::Double)), false)
+    );
+    assert_eq!(by("kept").ty, Type::Int);
+    let held = record(&s, root).unwrap();
+    assert!(matches!(held.fields()[0].ty, Type::Message(_)));
 }
