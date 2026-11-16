@@ -3,8 +3,10 @@
 use cel_core::CelType;
 
 mod message;
+mod width;
 
 pub use message::{Field, Message};
+pub use width::Width;
 
 /// A value's type. A message is a [`Type::Message`]: its fields in order, and perhaps a name.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -39,48 +41,10 @@ pub enum Type {
     /// type holds it: a message's field, a parameter of its width, what a read of one widens
     /// ([`crate::tree::Node::Widen`]), or both sides of a comparison at one width.
     Narrow(Width),
-}
-
-/// A number's width where it is not CEL's own (`int64`, `uint64`, `float64`): it is stored as
-/// that Rust type, a write outside it is an error, and a read widens to [`Width::cel`] where what
-/// takes it computes in CEL's width.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Width {
-    I8,
-    I16,
-    I32,
-    I128,
-    U8,
-    U16,
-    U32,
-    U128,
-    F32,
-}
-
-impl Width {
-    /// The Rust type a message stores.
-    pub fn rust(self) -> &'static str {
-        match self {
-            Width::I8 => "i8",
-            Width::I16 => "i16",
-            Width::I32 => "i32",
-            Width::I128 => "i128",
-            Width::U8 => "u8",
-            Width::U16 => "u16",
-            Width::U32 => "u32",
-            Width::U128 => "u128",
-            Width::F32 => "f32",
-        }
-    }
-
-    /// The CEL type a field of this width computes in.
-    pub fn cel(self) -> Type {
-        match self {
-            Width::I8 | Width::I16 | Width::I32 | Width::I128 => Type::Int,
-            Width::U8 | Width::U16 | Width::U32 | Width::U128 => Type::Uint,
-            Width::F32 => Type::Double,
-        }
-    }
+    /// A value of a Rust type the embedder names, held here as that type's text: CEL's opaque
+    /// type. An expression moves it and never reads into it ([`crate::lower`](mod@crate::lower)),
+    /// so the emitted Rust only clones it. Two texts are two types.
+    Opaque(String),
 }
 
 impl Type {
@@ -167,7 +131,8 @@ impl Type {
     }
 
     /// Whether JSON can hold a value of this type ([`crate::tree::Node::Written`]): a time as
-    /// RFC 3339 or seconds, bytes as base64; not an absent value or a map keyed by other than a
+    /// RFC 3339 or seconds, bytes as base64, an opaque value by the function the embedder names
+    /// ([`crate::emit::Messages::writes`]); not an absent value or a map keyed by other than a
     /// string.
     pub fn writable(&self) -> bool {
         match self {
@@ -181,7 +146,8 @@ impl Type {
             | Type::Timestamp
             | Type::Duration
             | Type::Bytes
-            | Type::Narrow(_) => true,
+            | Type::Narrow(_)
+            | Type::Opaque(_) => true,
             Type::List(t) | Type::Nullable(t) => t.writable(),
             Type::Map(k, v) => **k == Type::String && v.writable(),
             Type::Message(fields) => fields.iter().all(|f| match &f.ty {
@@ -247,6 +213,7 @@ impl Type {
             Type::Optional(t) => format!("optional({})", t.display()),
             Type::Nullable(t) => format!("nullable({})", t.display()),
             Type::Narrow(w) => w.rust().into(),
+            Type::Opaque(rust) => format!("{OPAQUE}{rust})"),
             Type::Message(m) => {
                 let fields: Vec<String> = (m.fields.iter())
                     .map(|f| format!("{}: {}", f.name, f.ty.display()))
@@ -256,6 +223,15 @@ impl Type {
             }
         }
     }
+}
+
+/// What an opaque type's name in CEL starts with, before its Rust text and a `)`.
+const OPAQUE: &str = "opaque(";
+
+/// The opaque type CEL names `name`: none for an abstract type cel-emit did not declare.
+fn opaque_of(name: &str) -> Option<Type> {
+    let rust = name.strip_prefix(OPAQUE)?.strip_suffix(')')?;
+    Some(Type::Opaque(rust.into()))
 }
 
 /// `cel` as a [`Type`], where lowering takes it: a message only where `messages` declares it.
@@ -287,6 +263,7 @@ pub fn of_cel(cel: &CelType, messages: &std::collections::BTreeMap<String, Type>
             )
         }
         CelType::Message(name) => messages.get(name.as_ref())?.clone(),
+        CelType::Abstract { name, params } if params.is_empty() => opaque_of(name)?,
         _ => return None,
     })
 }

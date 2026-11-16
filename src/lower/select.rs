@@ -190,6 +190,7 @@ fn zero(ty: &Type) -> Result<Typed, Error> {
         Type::Narrow(_) => return invalid("a stored width outside its type"),
         Type::Number => return invalid("a field holding a mixed number"),
         Type::Dyn => return unsupported("a dyn field"),
+        Type::Opaque(_) => return unsupported(format!("an unset {}", ty.display())),
     };
     Ok(t)
 }

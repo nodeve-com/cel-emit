@@ -27,6 +27,7 @@ mod message;
 mod names;
 mod nullable;
 mod number;
+mod opaque;
 mod optional;
 mod parts;
 mod pattern;

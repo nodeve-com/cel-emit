@@ -67,9 +67,9 @@ pub(crate) fn filled(x: Typed, want: &Type) -> Result<Typed, Error> {
             want.clone(),
             Node::FromDyn(Box::new(x), want.clone()),
         )),
-        // A message or a list is read by its own `Deserialize` where the embedder declares it so;
-        // else the emitter refuses.
-        Type::Message(_) | Type::List(_) => Ok(Typed::new(
+        // A message or a list is read by its own `Deserialize` where the embedder declares it so,
+        // an opaque value by the function the embedder names; else the emitter refuses.
+        Type::Message(_) | Type::List(_) | Type::Opaque(_) => Ok(Typed::new(
             want.clone(),
             Node::FromDyn(Box::new(x), want.clone()),
         )),

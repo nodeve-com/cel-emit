@@ -18,6 +18,7 @@ mod lists_ext;
 mod math;
 mod named;
 mod nullable_message;
+mod opaque;
 mod optional;
 mod optional_message;
 mod optional_var;

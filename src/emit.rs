@@ -114,6 +114,7 @@ impl Emitter {
             Type::Null => format!("{STD}::Null"),
             Type::Optional(t) | Type::Nullable(t) => format!("Option<{}>", self.rust(t)?),
             Type::Narrow(w) => w.rust().into(),
+            Type::Opaque(rust) => rust.clone(),
         })
     }
 

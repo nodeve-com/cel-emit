@@ -22,32 +22,31 @@ impl Emitter {
         };
         let serde = self.fills_through_serde(kind);
         let f = match kind {
-            _ if serde => format!("to::<{}>", self.rust(kind)?),
-            Type::Int => "to_int".into(),
-            Type::Uint => "to_uint".into(),
-            Type::Double => "to_double".into(),
-            Type::Bool => "to_bool".into(),
-            Type::String => "to_str".into(),
-            Type::Timestamp => "to_timestamp".into(),
-            Type::Duration => "to_duration".into(),
-            Type::Bytes => "to_bytes".into(),
-            Type::List(of) if **of == Type::Dyn => "to_list".into(),
-            other => {
-                return Err(Error::Unsupported(format!(
-                    "a dyn read as {}",
-                    other.display()
-                )))
-            }
+            _ if serde => format!("{STD}::dynamic::to::<{}>", self.rust(kind)?),
+            Type::Opaque(rust) => self.named(rust, Does::Read)?,
+            other => format!("{STD}::dynamic::{}", typed_read(other)?),
         };
         Ok(match wrap {
             Some(wrap) => {
                 let x = self.optional_reference(x, vars)?;
-                format!("{STD}::dynamic::{wrap}({x}, {STD}::dynamic::{f})?")
+                format!("{STD}::dynamic::{wrap}({x}, {f})?")
             }
             None => {
                 let x = self.reference(x, false, vars)?;
-                format!("{STD}::dynamic::{f}({x})?")
+                format!("{f}({x})?")
             }
+        })
+    }
+
+    /// The function the embedder names for opaque type `rust`, which cel-emit neither reads nor
+    /// writes itself.
+    fn named(&self, rust: &str, does: Does) -> Result<String, Error> {
+        let (named, what) = match does {
+            Does::Read => (self.declare.reads(rust), "a dyn read as"),
+            Does::Write => (self.declare.writes(rust), "json.encode of"),
+        };
+        named.ok_or_else(|| {
+            Error::Unsupported(format!("{what} a {rust}: the embedder names no function"))
         })
     }
 
@@ -67,6 +66,7 @@ impl Emitter {
             Type::Message(message) => self.declare.deserializes(message),
             Type::List(t) | Type::Optional(t) | Type::Nullable(t) => self.reads_itself(t),
             Type::Map(..) | Type::Duration | Type::Bytes | Type::Number => false,
+            Type::Opaque(_) => false,
             _ => true,
         }
     }
@@ -94,6 +94,34 @@ impl Emitter {
         };
         Ok(format!("{STD}::{f}({inner})?"))
     }
+}
+
+/// Which of an opaque type's two functions.
+#[derive(Clone, Copy)]
+enum Does {
+    Read,
+    Write,
+}
+
+/// cel-emit-runtime's function reading a dyn as `ty`, a kind it reads itself.
+fn typed_read(ty: &Type) -> Result<&'static str, Error> {
+    Ok(match ty {
+        Type::Int => "to_int",
+        Type::Uint => "to_uint",
+        Type::Double => "to_double",
+        Type::Bool => "to_bool",
+        Type::String => "to_str",
+        Type::Timestamp => "to_timestamp",
+        Type::Duration => "to_duration",
+        Type::Bytes => "to_bytes",
+        Type::List(of) if **of == Type::Dyn => "to_list",
+        other => {
+            return Err(Error::Unsupported(format!(
+                "a dyn read as {}",
+                other.display()
+            )))
+        }
+    })
 }
 
 /// What writing a value as a dyn carries down: the depth that names what each level binds.
@@ -138,6 +166,7 @@ impl Emitter {
                 )
             }
             Type::Message(message) => self.dyn_message(x, message, w)?,
+            Type::Opaque(rust) => format!("{}(&({x}))?", self.named(rust, Does::Write)?),
             _ => scalar_dyn(x, ty, d)?,
         })
     }

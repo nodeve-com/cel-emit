@@ -50,6 +50,7 @@ impl<'a> Lower<'a> {
             return invalid("a ternary that isn't one");
         };
         let (then, other) = self.pair_as(then_expr, else_expr)?;
+        super::opaque::alike(&then, &other)?;
         let branch = |t: Typed| match t.node {
             Node::Null if matches!(ty, Type::Nullable(_)) => Typed::new(ty.clone(), Node::None),
             _ => super::message::held(t, ty),

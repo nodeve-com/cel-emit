@@ -129,7 +129,7 @@ impl<'a> Lower<'a> {
         let [id] = reference.overload_ids.as_slice() else {
             return Ok(None);
         };
-        let mut operands = self.operands(e)?;
+        let mut operands = self.moved(e, id)?;
         if matches!(id.as_str(), "equals" | "not_equals") {
             super::nullable::compare(&mut operands);
         }
@@ -263,6 +263,7 @@ impl Lower<'_> {
 
 /// A ternary's branches, made one type where one is a dyn.
 fn joined(a: Typed, b: Typed) -> Result<(Typed, Typed), Error> {
+    super::opaque::alike(&a, &b)?;
     if a.ty != b.ty && (a.ty == Type::Dyn || b.ty == Type::Dyn) {
         return Ok((fits(a, &Type::Dyn)?, fits(b, &Type::Dyn)?));
     }

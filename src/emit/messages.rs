@@ -28,6 +28,19 @@ pub trait Messages {
     fn deserializes(&self, _message: &Message) -> bool {
         false
     }
+    /// The Rust path of the function writing a [`Type::Opaque`] of Rust type `rust` as a dynamic
+    /// value: it takes `&T` and returns cel-emit-runtime's `Result<Value>`. `json.encode` writes
+    /// what it gives, wherever the value sits outside a message that writes itself. None, and
+    /// such a write is [`Error::Unsupported`].
+    fn writes(&self, _rust: &str) -> Option<String> {
+        None
+    }
+    /// The Rust path of the function reading a [`Type::Opaque`] of Rust type `rust` from a
+    /// dynamic value filling its place: it takes `&Value` and returns cel-emit-runtime's
+    /// `Result<T>`. None, and such a fill is [`Error::Unsupported`].
+    fn reads(&self, _rust: &str) -> Option<String> {
+        None
+    }
 }
 
 /// A message the embedder writes: `Clone`, `Default`, and `Debug`.

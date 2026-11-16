@@ -114,6 +114,12 @@ impl Index {
         }
     }
 
+    /// Whether an embedder's Rust runs overload `id`.
+    pub(crate) fn own(&self, id: &str) -> bool {
+        let entries = self.0.get(id).map_or(&[][..], Vec::as_slice);
+        entries.iter().any(|e| matches!(e, Entry::Own(_)))
+    }
+
     /// The Rust path running overload `id` on arguments of `args`' types, if one does.
     pub(crate) fn path(&self, id: &str, args: &[Type]) -> Option<String> {
         self.0.get(id)?.iter().find_map(|e| match e {

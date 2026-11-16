@@ -231,6 +231,7 @@ fn cel_type(ty: &Type, messages: &mut Messages) -> CelType {
         // A declared name is never a mixed number: a dyn that lowering refuses.
         Type::Number => CelType::Dyn,
         Type::Narrow(w) => cel_type(&w.cel(), messages),
+        Type::Opaque(_) => CelType::abstract_type(&ty.display(), &[]),
         Type::Optional(t) => CelType::optional(cel_type(t, messages)),
         Type::Nullable(t) => CelType::wrapper(cel_type(t, messages)),
         Type::List(t) => CelType::list(cel_type(t, messages)),

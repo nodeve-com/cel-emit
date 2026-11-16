@@ -12,6 +12,7 @@ pub(crate) fn equal(ty: &Type) -> bool {
         Type::List(t) | Type::Optional(t) | Type::Nullable(t) => equal(t),
         Type::Map(k, v) => equal(k) && equal(v),
         Type::Message(fields) => fields.iter().all(|f| equal(&f.ty)),
+        Type::Opaque(_) => false,
     }
 }
 
