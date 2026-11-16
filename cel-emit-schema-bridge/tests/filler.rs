@@ -73,6 +73,20 @@ fn properties(bridged: &Bridged) -> Vec<String> {
     each.collect()
 }
 
+/// What the program `name` prints for a record holding `id` and `pieces`, `title` filled from a
+/// property outside the open part and one inside.
+fn run(name: &str, bridged: &Bridged, held: &[&Value]) -> Value {
+    let program = program::Program {
+        name,
+        bridged,
+        held,
+        fill: ("title", "id + ':' + string(pieces)"),
+        beside: program::Beside::nothing(bridged),
+        encode: program::SERDE,
+    };
+    program::run(program, r#"{"id":"a","contents":{"pieces":2}}"#).unwrap()
+}
+
 #[test]
 fn into_names_an_open_part_and_its_properties_are_the_filling_types() {
     let bridged = bridged(Some("contents"), &[]).unwrap();
@@ -111,7 +125,7 @@ fn an_open_part_not_named_is_a_property_holding_its_filling_type() {
 
 #[test]
 fn a_computed_property_fills_in_an_open_part() {
-    let out = program::run(
+    let out = run(
         "filler_beside",
         &bridged(Some("contents"), &[]).unwrap(),
         &[],
@@ -145,7 +159,7 @@ fn a_generic_model_another_module_holds_is_read_by_its_path() {
     assert!(bridged
         .items
         .contains("pub type Book = crate::a::Parcel<Contents>;"));
-    let out = program::run("filler_apart", &bridged, &[&doc]);
+    let out = run("filler_apart", &bridged, &[&doc]);
     assert_eq!(
         out,
         json!({"id": "a", "contents": {"title": "a:2", "pieces": 2}})

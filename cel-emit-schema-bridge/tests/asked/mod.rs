@@ -30,8 +30,12 @@ fn paths(ask: &Ask) -> Vec<String> {
     }
 }
 
-/// `schema` bridged as `ask` asks.
-pub fn bridged(schema: &Value, ask: &Ask) -> Result<Bridged, String> {
+/// `schema`'s standard form as `ask` asks, and the record's model in it, given to `then`.
+fn formed<T>(
+    schema: &Value,
+    ask: &Ask,
+    then: impl FnOnce(&StdForm, usize) -> Result<T, schema_emit::Error>,
+) -> Result<T, String> {
     let lowered = schema_emit::json_schema::lower(ask.name, schema, &Map::new(), &[]);
     let (lowered, root) = lowered.map_err(|e| e.to_string())?;
     let named = names(&lowered);
@@ -45,12 +49,24 @@ pub fn bridged(schema: &Value, ask: &Ask) -> Result<Bridged, String> {
     let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
     let std = StdForm::new(&lowered, &name).with_external(&theirs);
     let std = std.with_empty(root, &paths).map_err(|e| e.to_string())?;
-    let asked = Asked {
-        std: &std,
-        root,
-        into: ask.into,
-        computed: ask.computed,
-        module: ask.module,
-    };
-    bridge(&asked).map_err(|e| e.to_string())
+    then(&std, root).map_err(|e| e.to_string())
+}
+
+/// `schema` bridged as `ask` asks.
+pub fn bridged(schema: &Value, ask: &Ask) -> Result<Bridged, String> {
+    formed(schema, ask, |std, root| {
+        bridge(&Asked {
+            std,
+            root,
+            into: ask.into,
+            computed: ask.computed,
+            module: ask.module,
+        })
+    })
+}
+
+/// `schema`'s record as another expression reads it whole.
+#[allow(dead_code)]
+pub fn read(schema: &Value, ask: &Ask) -> Result<cel_emit::Type, String> {
+    formed(schema, ask, cel_emit_schema_bridge::types::record_in)
 }

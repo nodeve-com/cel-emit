@@ -50,6 +50,10 @@ pub struct Bridged {
     pub required: Vec<String>,
     /// The Rust path of the function decoding the record.
     pub decode: String,
+    /// The Rust path of the function writing the record to a serializer, where its serde impl
+    /// doesn't: a record filling a dynamic reference with a type that is no object
+    /// ([`StdForm::is_bare`]).
+    pub encode: Option<String>,
     /// The Rust path of each function checking a check's pattern tables, to call once.
     pub loads: Vec<String>,
 }
@@ -242,9 +246,17 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
     let properties = bridge.properties(asked.root)?;
     let (messages, types) = named(&filled, std);
     let module = asked.module;
-    // A filler has no decoder of its own: the struct holding it decodes it.
-    let generic = filled.filling(asked.root);
-    let home = (std.external)(generic).unwrap_or_else(|| module.into());
+    // A filler has no decoder of its own: the struct holding it decodes it. One filling with a
+    // type that is no struct reads and writes by functions of its own.
+    let bare = std.is_bare(asked.root);
+    let reader = if bare {
+        asked.root
+    } else {
+        filled.filling(asked.root)
+    };
+    let home = (std.external)(reader).unwrap_or_else(|| module.into());
+    let decode = std.decoder(reader);
+    let encode = decode.strip_prefix("decode_").filter(|_| bare);
     Ok(Bridged {
         record: Record {
             rust: format!("{module}::{}", std.model_name(asked.root)),
@@ -255,7 +267,8 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
         models: Models::new(std, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
         required: bridge.required,
-        decode: format!("{home}::{}", std.decoder(generic)),
+        encode: encode.map(|id| format!("{home}::encode_{id}")),
+        decode: format!("{home}::{decode}"),
         loads: bridge.loads,
     })
 }

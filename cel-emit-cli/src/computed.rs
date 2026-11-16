@@ -31,7 +31,7 @@ const WALK: &str = "
             empty.push(entry.key);
         }
     }
-    println!(\"{}\", serde_json::to_string(&record).map_err(|e| e.to_string())?);
+    println!(\"{}\", encode(&record)?);
     match empty.is_empty() {
         true => Ok(()),
         false => Err(format!(\"required and empty: {}\", empty.join(\", \"))),
@@ -57,6 +57,9 @@ fn computes(expressions: &[(&str, &str)], bridged: &Bridged) -> Vec<Compute> {
 /// from stdin and walking it.
 fn source(bridged: &Bridged, items: &str, index: &str) -> Result<String, String> {
     let (types, record, decode) = (&bridged.items, &bridged.record.rust, &bridged.decode);
+    // A struct writes by its serde impl, unless the bridge names a function of its own.
+    let encode = bridged.encode.as_deref();
+    let encode = encode.unwrap_or("::schema_emit_runtime::decode::Serialize::serialize");
     let loads: String = bridged
         .loads
         .iter()
@@ -71,6 +74,12 @@ fn source(bridged: &Bridged, items: &str, index: &str) -> Result<String, String>
             ::schema_emit_runtime::decode::json(text, |d| {decode}(d))
                 .map(|(record, _)| record)
                 .map_err(|e| format!(\"{{e:?}}\"))
+        }}
+        pub fn encode(record: &{record}) -> Result<String, String> {{
+            let mut out = Vec::new();
+            {encode}(record, &mut serde_json::Serializer::new(&mut out))
+                .map_err(|e| e.to_string())?;
+            String::from_utf8(out).map_err(|e| e.to_string())
         }}
         fn main() -> Result<(), String> {{
             {STDIN}
