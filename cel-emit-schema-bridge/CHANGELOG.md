@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.7.1...cel-emit-schema-bridge-v0.8.0) - 2026-11-16
+
+### Added
+
+- *(bridge)* take schema-emit 0.7.1; a record filling a dynamic reference with a type that is no object reads and writes by its own functions
+- a type argument names any type declared under a name
+
+### Fixed
+
+- *(bridge)* a record another module holds is named by that module's path
+
+### Other
+
+- each function within clippy's line count
+
 ## [0.7.1](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.7.0...cel-emit-schema-bridge-v0.7.1) - 2026-11-16
 
 ### Fixed
