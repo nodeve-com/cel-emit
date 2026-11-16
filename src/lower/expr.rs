@@ -150,7 +150,8 @@ impl<'a> Lower<'a> {
                 _ => return unsupported("a zone other than a string literal"),
             }
         }
-        super::pattern::call(id, operands).map(Some)
+        let call = super::pattern::call(id, operands)?;
+        Ok(Some(self.declared_result(id, call)))
     }
 
     /// Why `e` has no overload cel-emit runs.
@@ -224,13 +225,13 @@ impl<'a> Lower<'a> {
         }
     }
 
-    /// Whether `a` is a message's name standing as a type, a call's type argument: it picks the
-    /// overload and is no operand.
+    /// Whether `a` is a declared type's name standing as a type, a call's type argument: it picks
+    /// the overload and is no operand.
     fn type_argument(&self, a: &SpannedExpr) -> bool {
         let Expr::Ident(name) = &a.node else {
             return false;
         };
-        self.decls.messages.contains_key(name)
+        (self.decls.messages.contains_key(name) || self.decls.types.contains_key(name))
             && matches!(self.info.get_type(a.id), Some(CelType::Type(_)))
     }
 

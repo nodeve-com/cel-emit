@@ -32,17 +32,7 @@ pub fn environment(decls: &Decls) -> Env {
     for (name, n) in &decls.names {
         scope.add(name, &n.ty);
     }
-    let Scope {
-        messages,
-        mut roots,
-    } = scope;
-    // A message's name is also a type value, a function's type argument, unless
-    // a name in scope already takes it.
-    for (name, held) in &messages.names {
-        roots
-            .entry(name.clone())
-            .or_insert_with(|| CelType::type_of(CelType::message(held)));
-    }
+    let (messages, roots) = scope.typed(decls);
     for (root, ty) in roots {
         env.add_variable(root, ty);
     }
@@ -56,6 +46,27 @@ struct Scope {
 }
 
 impl Scope {
+    /// The messages and the variables, each declared type's name a variable too: a type value,
+    /// a function's type argument, unless a name in scope already takes it.
+    fn typed(self, decls: &Decls) -> (Messages, BTreeMap<String, CelType>) {
+        let Scope {
+            mut messages,
+            mut roots,
+        } = self;
+        for (name, held) in &messages.names {
+            roots
+                .entry(name.clone())
+                .or_insert_with(|| CelType::type_of(CelType::message(held)));
+        }
+        for (name, ty) in &decls.types {
+            let held = cel_type(ty, &mut messages);
+            roots
+                .entry(name.clone())
+                .or_insert_with(|| CelType::type_of(held));
+        }
+        (messages, roots)
+    }
+
     /// Declares the name `name` of type `ty`. A dotted name's first part is a variable holding a
     /// message, and each part before the last a message field of the one before.
     fn add(&mut self, name: &str, ty: &Type) {

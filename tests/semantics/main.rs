@@ -27,5 +27,6 @@ mod same_name;
 mod share;
 mod strings;
 mod time;
+mod type_argument;
 mod widths;
 mod written;

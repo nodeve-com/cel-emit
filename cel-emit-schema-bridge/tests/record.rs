@@ -108,6 +108,34 @@ fn a_property_reads_as_its_value_and_a_named_type_builds() {
     assert_eq!(types[2], &label);
 }
 
+/// A definition the record reaches that is no record is offered by its name too, apart from
+/// the records.
+#[test]
+fn a_named_type_that_is_no_record_is_offered_by_its_name() {
+    let mut schema = schema();
+    let label = json!({"$ref": "#/$defs/Label"});
+    schema["$defs"]["Labels"] = json!({"type": "array", "items": label});
+    schema["$defs"]["Tags"] = json!({"type": "array", "items": {"type": "string"}});
+    schema["$defs"]["Count"] = json!({"type": "integer", "format": "int32"});
+    for name in ["Labels", "Tags", "Count"] {
+        schema["properties"][name] = json!({"$ref": format!("#/$defs/{name}")});
+    }
+    let bridged = bridged(&schema, Some("data"), &["label"]).unwrap();
+    let label = bridged.messages.get("Label").cloned().unwrap();
+    assert_eq!(bridged.messages.len(), 1);
+    let want = [
+        ("Count", Type::Narrow(cel_emit::Width::I32)),
+        ("Labels", Type::list(label)),
+        ("Tags", Type::list(Type::String)),
+    ];
+    let got: Vec<(&str, Type)> = bridged
+        .types
+        .iter()
+        .map(|(name, ty)| (name.as_str(), ty.clone()))
+        .collect();
+    assert_eq!(got, want);
+}
+
 #[test]
 fn without_into_the_records_own_properties_fill() {
     let bridged = bridged(&schema(), None, &["price"]).unwrap();

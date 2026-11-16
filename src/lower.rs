@@ -81,7 +81,7 @@ pub(crate) fn lowered_at(source: &str, decls: &Decls, at: Root) -> Result<Lowere
     for n in decls.names.values() {
         register(&n.ty, &mut messages);
     }
-    for ty in decls.messages.values() {
+    for ty in decls.messages.values().chain(decls.types.values()) {
         register(ty, &mut messages);
     }
     let mut lower = Lower {

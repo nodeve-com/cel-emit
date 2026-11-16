@@ -36,6 +36,9 @@ pub struct Bridged {
     /// Each record type the schema names ([`Schema::named`]), for an expression to build by that
     /// name.
     pub messages: BTreeMap<String, Type>,
+    /// Each other type the schema names that cel-emit holds, a list or a scalar, for a call to
+    /// name as its type argument (cel-emit's `Decls::types`).
+    pub types: BTreeMap<String, Type>,
     /// Each message's Rust.
     pub models: Models,
     /// The types and checks, for a module holding `use ::schema_emit_runtime as __s;`, in a
@@ -214,17 +217,13 @@ impl Bridge<'_> {
     }
 }
 
-/// Each type `filled` names that is a record, by its name.
-fn messages(filled: &Schema, std: &StdForm) -> BTreeMap<String, Type> {
-    let found =
-        filled
-            .named
-            .iter()
-            .filter_map(|(name, ty)| match types::value(filled, Some(std), ty) {
-                Ok(ty @ Type::Message(_)) => Some((name.clone(), ty)),
-                _ => None,
-            });
-    found.collect()
+/// Each type `filled` names that cel-emit holds, by its name: the records, then the rest.
+fn named(filled: &Schema, std: &StdForm) -> (BTreeMap<String, Type>, BTreeMap<String, Type>) {
+    let held = filled.named.iter().filter_map(|(name, ty)| {
+        let ty = types::value(filled, Some(std), ty).ok()?;
+        Some((name.clone(), ty))
+    });
+    held.partition(|(_, ty)| matches!(ty, Type::Message(_)))
 }
 
 /// `asked`'s record as computed properties take it.
@@ -241,6 +240,7 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
         holder: asked.root,
     };
     let properties = bridge.properties(asked.root)?;
+    let (messages, types) = named(&filled, std);
     let module = asked.module;
     // A filler has no decoder of its own: the struct holding it decodes it.
     let generic = filled.filling(asked.root);
@@ -250,7 +250,8 @@ pub fn bridge(asked: &Asked) -> Result<Bridged, Error> {
             rust: format!("{module}::{}", std.model_name(asked.root)),
             properties,
         },
-        messages: messages(&filled, std),
+        messages,
+        types,
         models: Models::new(std, module),
         items: format!("{}{}{CHECKED}", std.items()?, bridge.checks),
         required: bridge.required,

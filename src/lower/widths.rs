@@ -1,14 +1,19 @@
-//! Stored widths in a call: what a parameter of a width takes, a comparison at one width, and a
-//! stored collection a call reads one element of.
+//! Stored widths in a call: what a parameter of a width takes, a result declared at one, a
+//! comparison at one width, and a stored collection a call reads one element of.
 
 use super::*;
 
 impl<'a> Lower<'a> {
+    /// The embedder's overload `id`.
+    fn declared_overload(&self, id: &str) -> Option<&'a crate::Overload> {
+        let mut declared = self.decls.functions.iter().flat_map(|f| &f.decl.overloads);
+        declared.find(|o| o.id == id)
+    }
+
     /// Each operand of an embedder's overload `id` whose parameter holds a width, taken as a field
     /// of that width takes it.
     pub(super) fn declared_widths(&self, id: &str, operands: &mut [Typed]) -> Result<(), Error> {
-        let declared = self.decls.functions.iter().flat_map(|f| &f.decl.overloads);
-        let Some(o) = declared.into_iter().find(|o| o.id == id) else {
+        let Some(o) = self.declared_overload(id) else {
             return Ok(());
         };
         for (operand, param) in operands.iter_mut().zip(&o.params) {
@@ -18,6 +23,15 @@ impl<'a> Lower<'a> {
             }
         }
         Ok(())
+    }
+
+    /// `call`, the call of overload `id`: where an embedder declares its result at a width, a
+    /// read of that stored type, as a field of it is.
+    pub(super) fn declared_result(&self, id: &str, call: Node) -> Node {
+        match self.declared_overload(id).map(|o| &o.result) {
+            Some(result) if result.narrow() => Typed::stored(result.clone(), call).node,
+            _ => call,
+        }
     }
 }
 

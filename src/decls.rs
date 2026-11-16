@@ -52,8 +52,9 @@ pub struct Decl {
 pub struct Overload {
     pub id: String,
     pub params: Vec<Type>,
-    /// The message type a call names as its last argument, as in `f(x, Message)`. The call picks
-    /// this overload for that message, and passes nothing at run time for the argument.
+    /// The type a call names as its last argument, as in `f(x, Message)`: a message of
+    /// [`Decls::messages`], or a type of [`Decls::types`]. The call picks this overload for that
+    /// type, and passes nothing at run time for the argument.
     pub names: Option<Type>,
     pub result: Type,
 }
@@ -76,12 +77,12 @@ impl Decl {
         self
     }
 
-    /// The last overload added also takes the message type `message` as its last argument, as in
-    /// `f(x, Message)`: `params` stay the arguments before it. Declare one overload per message,
+    /// The last overload added also takes the type `named` as its last argument, as in
+    /// `f(x, Message)`: `params` stay the arguments before it. Declare one overload per type,
     /// each with its own id.
-    pub fn naming(mut self, message: Type) -> Decl {
+    pub fn naming(mut self, named: Type) -> Decl {
         if let Some(o) = self.overloads.last_mut() {
-            o.names = Some(message);
+            o.names = Some(named);
         }
         self
     }
@@ -114,6 +115,10 @@ pub struct Decls {
     /// Each message an expression may build (`Comfort{…}`) or read whole, by name. A field a
     /// message leaves unset reads its zero value, as a proto3 field does.
     pub messages: BTreeMap<String, Type>,
+    /// Each other type a call may name as its type argument ([`Overload::names`]): a list, a
+    /// map, or a scalar, by the name the embedder gives it. A name `names` or `messages` holds
+    /// keeps that meaning. Names of equal types are one type, which one overload serves.
+    pub types: BTreeMap<String, Type>,
     /// Each enum by the name an expression writes it, its values by name. `Enum(n)` and
     /// `Enum('NAME')` construct one; an enum's values are names of their own, in `names`.
     pub enums: BTreeMap<String, BTreeMap<String, i32>>,
