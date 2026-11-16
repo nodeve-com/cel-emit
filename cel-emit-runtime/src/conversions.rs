@@ -127,6 +127,11 @@ pub fn bytes_to_string(b: &[u8]) -> Result<String> {
         .map_err(|_| Error::Cast)
 }
 
+/// `string(b)` of a bool: `true` or `false`.
+pub fn bool_to_string(b: bool) -> Result<String> {
+    Ok(b.to_string())
+}
+
 pub fn int_to_string(i: i64) -> Result<String> {
     Ok(i.to_string())
 }
@@ -204,6 +209,12 @@ mod tests {
         assert_eq!(double_to_uint(1.8446744073709552e19), Err(Error::Overflow));
         assert_eq!(double_to_uint(f64::NAN), Err(Error::Overflow));
         assert_eq!(uint_to_string(42), Ok("42".into()));
+    }
+
+    #[test]
+    fn a_bool_writes_as_cel_spells_it() {
+        assert_eq!(bool_to_string(true), Ok("true".into()));
+        assert_eq!(bool_to_string(false), Ok("false".into()));
     }
 
     #[test]

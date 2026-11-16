@@ -84,6 +84,9 @@ pub const CASES: &[&str] = &[
     "string(math.greatest([1, 3, 2]))",
     "string(math.least([1.5, 0.5]))",
     "string(math.greatest(1u, 2u))",
+    "string(true)",
+    "string(1 > 2)",
+    "string([1, 2].exists(x, x == 2)) + '!'",
     "[?optional.of(2), 1][0] + 1",
     "[?optional.of(2)].map(e, e * 3)[0]",
     // Rewrites in combination: fold fusion inside binds, constant selection.

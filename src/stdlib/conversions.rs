@@ -15,6 +15,7 @@ pub(super) const FUNCTIONS: &[Std] = &[
     Std::reads("string_to_double", "conversions::string_to_double"),
     Std::reads("string_to_int", "conversions::string_to_int"),
     Std::reads("string_to_bool", "conversions::string_to_bool"),
+    Std::any("bool_to_string", "conversions::bool_to_string"),
     Std::any("int_to_string", "conversions::int_to_string"),
     Std::any("double_to_string", "conversions::double_to_string"),
     Std::any("float32_to_string", "conversions::float32_to_string"),

@@ -1,8 +1,24 @@
-//! A failed call is its error kind, and an `||` of two failures reports the left one.
+//! A failed call is its error kind, and an `||` of two failures reports the left one. A bool
+//! converts to text.
 
+use cel_core::Value;
 use cel_emit_runtime::Error;
 
-use crate::cases::{check, list, Got};
+use crate::cases::{check, list, s, Got};
+
+/// Only here: `string()` of a bool, a constant or one read, is `true` or `false`, as cel-core
+/// gives it.
+#[test]
+fn a_bool_converts_to_text() {
+    check(|cases| {
+        for (b, text) in [(true, "true"), (false, "false")] {
+            let inputs = [("b", Value::Bool(b))];
+            cases.gives("string(b)", &inputs, Got::Value(s(text)));
+            cases.agrees("string(b) + string(!b)", &inputs);
+        }
+        cases.gives("string(1 > 2)", &[], Got::Value(s("false")));
+    });
+}
 
 /// Only here: the kind a failed call gives, overflow, division, or function, and which of two
 /// failures an `||` reports.
