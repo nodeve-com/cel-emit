@@ -1,0 +1,4 @@
+# A package releases only for a commit that changes it. A release commit rewrites the workspace's
+# Cargo.lock, which cargo packages into the root crate, and would otherwise release it again.
+[workspace]
+release_commits = "^(feat|fix|perf|refactor|docs)"
