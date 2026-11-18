@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-v0.8.1...cel-emit-v0.9.0) - 2026-11-18
+
+### Added
+
+- [**breaking**] a dynamic value failing to fill a message names the place inside it
+
+### Other
+
+- a failure inside a decoded value names its place
+
 ## [0.8.1](https://github.com/nodeve-com/cel-emit/compare/cel-emit-v0.8.0...cel-emit-v0.8.1) - 2026-11-18
 
 ### Fixed
