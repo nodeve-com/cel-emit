@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "cel-emit"
-version = "0.8.1"
+version = "0.9.0"
 dependencies = [
  "cel-core-conformance",
  "cel-core-nodeve",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "cel-emit-runtime"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "any-value",
  "base64",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "cel-emit-schema-bridge"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "cel-emit",
  "schema-emit",
