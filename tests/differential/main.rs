@@ -2,7 +2,9 @@
 //! lowered, emitted, built natively, and run; the two must agree on the value or on being an
 //! error. All cases build as one program against the prebuilt cel-emit-runtime rlib (found beside
 //! this test's binary), each run under `catch_unwind`; a build that fails is retried case by case.
-//! Cases in `KNOWN_FAILING` or `INTENDED_DEPARTURES` may disagree; a new disagreement fails the test.
+//! Cases in `KNOWN_FAILING` or `INTENDED_DEPARTURES` may disagree, and those in `REFUSED` are
+//! refused; any other disagreement or refusal fails the test, as does an entry in `KNOWN_FAILING`
+//! that agrees or in `REFUSED` that emits.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 
@@ -10,6 +12,7 @@ mod cases;
 #[path = "../common/mod.rs"]
 mod common;
 mod declared;
+mod exceptions;
 mod messages;
 mod shaped;
 
@@ -77,8 +80,8 @@ impl cel_core::Activation for NoNames {
 }
 
 /// The Rust of one case, a function `c{n}` returning its `show`n result, or why it has none.
-fn function(n: usize, source: &str, emitter: &mut Emitter) -> Result<String, String> {
-    let tree = cel_emit::lower(source, &declared::declared()).map_err(|e| e.to_string())?;
+fn function(n: usize, source: &str, emitter: &mut Emitter) -> Result<String, Error> {
+    let tree = cel_emit::lower(source, &declared::declared())?;
     // A list or map of dyn is shown as the dyn it makes.
     let tree = match &tree.ty {
         Type::List(t) | Type::Map(_, t) if **t == Type::Dyn => {
@@ -86,16 +89,16 @@ fn function(n: usize, source: &str, emitter: &mut Emitter) -> Result<String, Str
         }
         _ => tree,
     };
-    let expr = emitter.expr(&tree, &NoVars).map_err(|e| e.to_string())?;
+    let expr = emitter.expr(&tree, &NoVars)?;
     let show = match tree.ty {
         Type::Int | Type::Bool => "format!(\"{}\", v)",
         Type::Uint => "format!(\"{}u\", v)",
         Type::Double => "format!(\"{:?}\", v)",
         Type::String => "format!(\"{:?}\", v)",
         Type::Dyn => "show(v)",
-        ref other => return Err(format!("result of type {other:?}")),
+        ref other => return Err(Error::Invalid(format!("result of type {other:?}"))),
     };
-    let rust = emitter.rust(&tree.ty).map_err(|e| e.to_string())?;
+    let rust = emitter.rust(&tree.ty)?;
     Ok(format!(
         "fn c{n}() -> String {{ let r: s::Result<{rust}> = (|| s::ok({expr}))(); \
          match r {{ Ok(v) => {show}, Err(_) => \"err\".into() }} }}\n"
@@ -144,7 +147,7 @@ fn emitted_code_agrees_with_the_interpreter() {
         .chain(shaped::CASES)
         .copied()
         .collect();
-    let fns = emit_all(&all, &mut emitter, &mut wrong);
+    let (fns, stale) = emit_all(&all, &mut emitter, &mut wrong);
     let items = common::items(&mut emitter).unwrap();
     let (answers, failed) = run_all(&fns, &items, &scratch);
     for (n, why) in failed {
@@ -158,27 +161,34 @@ fn emitted_code_agrees_with_the_interpreter() {
             wrong.insert(source, format!("emitted {got}, interpreter {want}"));
         }
     }
-    report(&wrong);
+    report(&wrong, stale);
 }
 
-/// Each of `all` emitted as a function; a failure other than a refusal is `wrong`.
+/// Each of `all` emitted as a function, and each case of `REFUSED` that emits; a failure other than
+/// a listed refusal is `wrong`.
 fn emit_all<'a>(
     all: &[&'a str],
     emitter: &mut Emitter,
     wrong: &mut Wrong<'a>,
-) -> Vec<(usize, String)> {
+) -> (Vec<(usize, String)>, Vec<String>) {
     let mut fns = Vec::new();
+    let mut stale = Vec::new();
     for (n, source) in all.iter().enumerate() {
+        let refused = exceptions::REFUSED.contains(source);
         match function(n, source, emitter) {
-            Ok(f) => fns.push((n, f)),
-            // A refusal is by design (README: refused, never stubbed): a gap, not a mismatch.
-            Err(e) if e.starts_with("unsupported") => eprintln!("refused: {source}: {e}"),
+            Ok(f) => {
+                if refused {
+                    stale.push(format!("emits now; remove from REFUSED: {source}"));
+                }
+                fns.push((n, f));
+            }
+            Err(Error::Unsupported(_)) if refused => {}
             Err(e) => {
                 wrong.insert(source, format!("not emitted: {e}"));
             }
         }
     }
-    fns
+    (fns, stale)
 }
 
 /// The answer of each function in `fns`, built together, else one at a time; a program that
@@ -210,17 +220,17 @@ fn run_all(
     (answers, failed)
 }
 
-/// Prints each disagreement, and fails on those not known.
-fn report(wrong: &Wrong) {
-    for source in cases::KNOWN_FAILING {
+/// Prints each disagreement, and fails on those not known and on `stale` entries of the lists.
+fn report(wrong: &Wrong, mut stale: Vec<String>) {
+    for source in exceptions::KNOWN_FAILING {
         if !wrong.contains_key(source) {
-            eprintln!("agrees now; remove from KNOWN_FAILING: {source}");
+            stale.push(format!("agrees now; remove from KNOWN_FAILING: {source}"));
         }
     }
     let new: Vec<String> = wrong
         .iter()
         .filter(|(s, _)| {
-            !cases::KNOWN_FAILING.contains(s) && !cases::INTENDED_DEPARTURES.contains(s)
+            !exceptions::KNOWN_FAILING.contains(s) && !exceptions::INTENDED_DEPARTURES.contains(s)
         })
         .map(|(s, why)| format!("{s}\n    {why}"))
         .collect();
@@ -228,4 +238,5 @@ fn report(wrong: &Wrong) {
         eprintln!("disagrees: {s}: {why}");
     }
     assert!(new.is_empty(), "new disagreements:\n{}", new.join("\n"));
+    assert!(stale.is_empty(), "{}", stale.join("\n"));
 }

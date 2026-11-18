@@ -120,32 +120,38 @@ impl Index {
         entries.iter().any(|e| matches!(e, Entry::Own(_)))
     }
 
+    /// The Rust running overload `id` on arguments of `args`' types, if one does: an embedder's,
+    /// else the first of cel-emit-runtime's taking them.
+    fn entry(&self, id: &str, args: &[Type]) -> Option<&Entry> {
+        self.0.get(id)?.iter().find(|e| match e {
+            Entry::Own(_) => true,
+            Entry::Std(s) => (s.takes)(args),
+        })
+    }
+
     /// The Rust path running overload `id` on arguments of `args`' types, if one does.
     pub(crate) fn path(&self, id: &str, args: &[Type]) -> Option<String> {
-        self.0.get(id)?.iter().find_map(|e| match e {
-            Entry::Own(path) => Some(path.clone()),
-            Entry::Std(s) => (s.takes)(args).then(|| format!("{STD}::{}", s.path)),
+        Some(match self.entry(id, args)? {
+            Entry::Own(path) => path.clone(),
+            Entry::Std(s) => format!("{STD}::{}", s.path),
         })
     }
 
-    /// How overload `id` on `args`' types takes its arguments.
+    /// How the Rust running overload `id` on `args`' types takes its arguments.
     pub(crate) fn pass(&self, id: &str, args: &[Type]) -> Pass {
-        let entries = self.0.get(id).map_or(&[][..], Vec::as_slice);
-        let std = entries.iter().find_map(|e| match e {
-            Entry::Std(s) if (s.takes)(args) => Some(s.pass),
-            _ => None,
-        });
-        std.unwrap_or(Pass::Each)
+        match self.entry(id, args) {
+            Some(Entry::Std(s)) => s.pass,
+            _ => Pass::Each,
+        }
     }
 
-    /// Whether overload `id` on `args`' types reads them by reference.
+    /// Whether the Rust running overload `id` on `args`' types reads them by reference.
     pub(crate) fn borrows(&self, id: &str, args: &[Type]) -> bool {
-        self.0.get(id).is_some_and(|entries| {
-            entries.iter().any(|e| match e {
-                Entry::Own(_) => true,
-                Entry::Std(s) => s.borrows && (s.takes)(args),
-            })
-        })
+        match self.entry(id, args) {
+            Some(Entry::Own(_)) => true,
+            Some(Entry::Std(s)) => s.borrows,
+            None => false,
+        }
     }
 }
 
