@@ -92,7 +92,18 @@ impl<'a> Walk<'a> {
             });
         }
         self.open.pop();
-        Ok(Type::message(fields))
+        Ok(match self.name(at) {
+            Some(name) => Type::named(name, fields),
+            None => Type::message(fields),
+        })
+    }
+
+    /// The name the schema gives model `at`, if one of its definitions is that model: two
+    /// definitions of equal fields are two types.
+    fn name(&self, at: usize) -> Option<&'a str> {
+        (self.schema.named.iter())
+            .find(|(_, ty)| matches!(ty.base, Base::Model(m) if m == at))
+            .map(|(name, _)| name.as_str())
     }
 
     /// Whether the form fills field `field` of model `at` later, and no default holds it.

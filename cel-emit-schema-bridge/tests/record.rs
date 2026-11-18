@@ -185,3 +185,23 @@ fn a_record_another_module_holds_is_named_by_that_modules_path() {
     let path = cel_emit::emit::Messages::path(&mut bridged.models.clone(), 0, label);
     assert_eq!(path, "types::Label");
 }
+
+#[test]
+fn definitions_of_equal_fields_are_two_types() {
+    let w = json!({"type": "object", "required": ["w"], "properties": {"w": {"type": "number"}}});
+    let schema = json!({
+        "$defs": {"Sample": w, "Peak": w},
+        "type": "object",
+        "properties": {
+            "sample": {"$ref": "#/$defs/Sample"},
+            "peak": {"$ref": "#/$defs/Peak"},
+        },
+    });
+    let bridged = bridged(&schema, None, &["sample", "peak"]).unwrap();
+    let name = |n: &str| match &bridged.messages[n] {
+        Type::Message(m) => m.name.clone(),
+        _ => None,
+    };
+    assert_eq!(name("Sample").as_deref(), Some("Sample"));
+    assert_eq!(name("Peak").as_deref(), Some("Peak"));
+}
