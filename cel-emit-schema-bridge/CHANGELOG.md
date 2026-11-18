@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.11.0...cel-emit-schema-bridge-v0.12.0) - 2026-11-18
+
+### Added
+
+- [**breaking**] a message the schema names carries its name, so two definitions of equal fields are two types
+
+### Other
+
+- schema-emit 0.8.0, whose named definitions include shared ones a root reaches
+
 ## [0.11.0](https://github.com/nodeve-com/cel-emit/compare/cel-emit-schema-bridge-v0.10.1...cel-emit-schema-bridge-v0.11.0) - 2026-11-18
 
 ### Added
