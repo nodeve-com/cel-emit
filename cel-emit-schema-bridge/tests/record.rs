@@ -98,14 +98,18 @@ fn a_required_computed_property_may_be_empty_and_is_named() {
     assert!(bridged.items.contains("pub fn check_0<"));
 }
 
+/// A property neither required nor defaulted reads as an optional; any other as its value.
 #[test]
-fn a_property_reads_as_its_value_and_a_named_type_builds() {
+fn an_optional_property_reads_as_one_and_a_named_type_builds() {
     let bridged = bridged(&schema(), Some("data"), &["label"]).unwrap();
     let label = bridged.messages.get("Label").cloned().unwrap();
     assert!(matches!(label, Type::Message(_)));
+    let optional = |ty: &Type| Type::Optional(Box::new(ty.clone()));
     let types: Vec<&Type> = bridged.record.properties.iter().map(|p| &p.ty).collect();
-    assert_eq!(types[1], &Type::String);
-    assert_eq!(types[2], &label);
+    assert_eq!(types[0], &Type::Int);
+    assert_eq!(types[1], &optional(&Type::String));
+    assert_eq!(types[2], &optional(&label));
+    assert_eq!(types[3], &Type::Int);
 }
 
 /// A definition the record reaches that is no record is offered by its name too, apart from

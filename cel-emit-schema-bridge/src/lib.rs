@@ -108,6 +108,11 @@ impl Bridge<'_> {
         let key = field.name.as_str();
         let ty =
             types::value(self.filled, Some(self.asked.std), &field.ty).map_err(|e| e.at(key))?;
+        // A field neither required nor defaulted may be empty, so it reads as an optional.
+        let ty = match field.required || field.ty.default.is_some() {
+            true => ty,
+            false => Type::Optional(Box::new(ty)),
+        };
         let computed = model == self.holder && self.asked.computed.contains(&key);
         if computed && field.required {
             self.required.push(key.into());
