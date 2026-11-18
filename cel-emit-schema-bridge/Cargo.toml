@@ -8,7 +8,7 @@ repository = "https://github.com/nodeve-com/cel-emit"
 include = ["/src", "/README.md", "/LICENSE"]
 
 [dependencies]
-cel-emit = { path = "..", version = "0.8.0" }
+cel-emit = { path = "..", version = "0.8.1" }
 # The schema's models, their Rust, and each property's check.
 schema-emit = "0.7.2"
 
