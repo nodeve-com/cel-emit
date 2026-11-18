@@ -32,7 +32,7 @@ pub(super) fn reads(t: &Typed, held: &[usize]) -> String {
     read.sort_unstable();
     read.dedup();
     read.iter().fold(String::new(), |mut out, n| {
-        let _ = write!(out, "let l{n} = jl{n}.as_ref().map_err(|e| *e)?; ");
+        let _ = write!(out, "let l{n} = jl{n}.as_ref().map_err(|e| e.clone())?; ");
         out
     })
 }

@@ -28,6 +28,16 @@ pub trait Messages {
     fn deserializes(&self, _message: &Message) -> bool {
         false
     }
+    /// The Rust path of the function reading a dynamic value through a message's
+    /// `Deserialize`, in place of cel-emit-runtime's `dynamic::to`: generic over the type it
+    /// reads, it takes `&Value` and returns cel-emit-runtime's `Result<T>`. A function of the
+    /// embedder's can name the place inside the value that fails, as [`Error::Unfit`] does.
+    /// None, and `dynamic::to` reads it.
+    ///
+    /// [`Error::Unfit`]: cel_emit_runtime::Error::Unfit
+    fn deserializer(&self) -> Option<String> {
+        None
+    }
     /// The Rust path of the function writing a [`Type::Opaque`] of Rust type `rust` as a dynamic
     /// value: it takes `&T` and returns cel-emit-runtime's `Result<Value>`. `json.encode` writes
     /// what it gives, wherever the value sits outside a message that writes itself. None, and

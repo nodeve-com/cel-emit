@@ -3,7 +3,7 @@
 
 use super::{narrow, place, Emitter, Vars};
 use crate::functions::STD;
-use crate::tree::{Node, Typed};
+use crate::tree::{Fail, Node, Typed};
 use crate::types::Type;
 use crate::{walk, Error};
 
@@ -93,7 +93,11 @@ impl Emitter {
             Node::Let(..) => self.lets(t, vars)?,
             Node::Fail(error) => {
                 let ty = self.rust(&t.ty)?;
-                format!("{STD}::fail::<{ty}>({STD}::Error::{error:?})?")
+                let error = match error {
+                    Fail::Unfit(u) => format!("unfit({:?}, {:?})", u.place, u.reason),
+                    kind => format!("{kind:?}"),
+                };
+                format!("{STD}::fail::<{ty}>({STD}::Error::{error})?")
             }
             _ => return not_a("control", t),
         })

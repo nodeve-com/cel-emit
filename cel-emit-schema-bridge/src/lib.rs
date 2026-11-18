@@ -83,6 +83,28 @@ pub fn checked<T>(
 }
 ";
 
+/// The function [`Models`] names to read a dynamic value through a model's `Deserialize`: a value
+/// that fails names the place inside it that schema-emit's failure holds, with a reason word.
+const READ: &str = "
+#[allow(dead_code)]
+pub fn read<T: for<'de> __s::decode::Deserialize<'de>>(
+    x: &::cel_emit_runtime::Value,
+) -> ::cel_emit_runtime::Result<T> {
+    let _ = __s::decode::Unfit::raised();
+    ::cel_emit_runtime::dynamic::to::<T>(x).map_err(|e| match __s::decode::Unfit::raised() {
+        Some(unfit) => {
+            let reason = match unfit.why {
+                __s::decode::Why::Absent => \"absent\",
+                __s::decode::Why::Range(_) => \"range\",
+                _ => \"cast\",
+            };
+            ::cel_emit_runtime::Error::unfit(unfit.path, reason)
+        }
+        None => e,
+    })
+}
+";
+
 /// One bridging: the filled schema, what was asked, and the checks written so far.
 struct Bridge<'a> {
     filled: &'a Schema,
@@ -219,10 +241,11 @@ fn codec(asked: &Asked, filled: &Schema) -> (String, Option<String>) {
     (format!("{home}::{decode}"), encode)
 }
 
-/// The module's items: the form's, each tuple's functions, `checks`, and the checks' helper.
+/// The module's items: the form's, each tuple's functions, `checks`, the checks' helper, and the
+/// dynamic read.
 fn items(std: &StdForm, filled: &Schema, checks: &str) -> Result<String, Error> {
     let (form, tuples) = (std.items()?, tuples::items(filled, std)?);
-    Ok(format!("{form}{tuples}{checks}{CHECKED}"))
+    Ok(format!("{form}{tuples}{checks}{CHECKED}{READ}"))
 }
 
 /// `asked`'s record as computed properties take it.

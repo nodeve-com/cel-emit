@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn a_deciding_element_absorbs_the_others_errors() {
         let xs = [Err(Error::Division), Ok(false), Ok(true)];
-        assert_eq!(all(xs, true, |x| x), Ok(false));
+        assert_eq!(all(xs.clone(), true, |x| x), Ok(false));
         assert_eq!(all(xs, false, |x| x), Ok(true));
         assert_eq!(
             all([Ok(true), Err(Error::Overflow)], true, |x| x),

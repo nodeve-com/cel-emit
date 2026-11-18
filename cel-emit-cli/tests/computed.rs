@@ -125,6 +125,50 @@ fn a_check_refuses_a_value_naming_its_place() {
     assert_eq!(record["data"], json!({}));
 }
 
+const CLOSED: &str = r##"{
+  "$defs": {
+    "Closed": {
+      "type": "object",
+      "required": ["n"],
+      "properties": {"n": {"type": "integer"}},
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "required": ["text"],
+  "properties": {
+    "text": {"type": "string"},
+    "value": {"$ref": "#/$defs/Closed"}
+  },
+  "additionalProperties": false
+}"##;
+
+/// What `value`'s failure prints, `value` filled from `text` decoded as JSON.
+fn decoded(text: &str) -> String {
+    let exe = built(
+        "computed_closed",
+        &[("value", "json.decode(text)")],
+        CLOSED,
+        None,
+    );
+    let (out, err, ok) = programs::run(&exe, &json!({ "text": text }).to_string());
+    assert!(ok, "{err}");
+    assert_eq!(parsed(&out), json!({ "text": text }));
+    err
+}
+
+#[test]
+fn a_decoded_value_that_does_not_fit_names_the_place_inside_it() {
+    let unfit = |place: &str, reason: &str| {
+        format!("Expression(Unfit(Unfit {{ place: \"{place}\", reason: \"{reason}\" }}))\n")
+    };
+    let extra = decoded(r#"{"n":1,"extra":true}"#);
+    assert_eq!(extra, format!("value.extra: {}", unfit(".extra", "cast")));
+    let absent = decoded("{}");
+    assert_eq!(absent, format!("value.n: {}", unfit(".n", "absent")));
+    assert_eq!(decoded("{"), "value: Expression(Cast)\n");
+}
+
 #[test]
 fn a_definition_both_files_name_is_refused() {
     let clash = cel_emit_cli::with_defs(INTO, "Label", "{}").unwrap_err();

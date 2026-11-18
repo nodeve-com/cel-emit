@@ -49,10 +49,15 @@ pub enum Reason {
 }
 
 impl Failure {
-    /// The expression filling `key` raised `error`.
+    /// The expression filling `key` raised `error`: the place is `key`, followed by the place
+    /// inside the value where `error` names one.
     pub fn expression(key: &'static str, error: Error) -> Failure {
+        let place = match &error {
+            Error::Unfit(unfit) => Cow::Owned(format!("{key}{}", unfit.place)),
+            _ => Cow::Borrowed(key),
+        };
         Failure {
-            place: Cow::Borrowed(key),
+            place,
             reason: Reason::Expression(error),
         }
     }
@@ -93,6 +98,16 @@ mod tests {
         assert_eq!(
             computed::<i64>("total", Err(Error::Overflow)),
             Err(Outcome::Failed(failure))
+        );
+    }
+
+    #[test]
+    fn an_unfit_value_fails_at_the_place_inside_it() {
+        let failure = Failure::expression("value", Error::unfit(".pair[0]", "cast"));
+        assert_eq!(failure.place, "value.pair[0]");
+        assert_eq!(
+            failure.reason,
+            Reason::Expression(Error::unfit(".pair[0]", "cast"))
         );
     }
 

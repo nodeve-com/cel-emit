@@ -12,6 +12,8 @@ use crate::types;
 pub struct Models {
     records: Vec<(Message, String)>,
     tuples: Vec<Tuple>,
+    /// The Rust path of the bridge's function reading a dynamic value through `Deserialize`.
+    read: String,
 }
 
 impl Messages for Models {
@@ -22,6 +24,19 @@ impl Messages for Models {
 
     fn fields(&self, message: &Message) -> Vec<String> {
         std_form::fields(message.fields.iter().map(|f| f.name.as_str()))
+    }
+
+    /// schema-emit writes each model's `Serialize` and `Deserialize`.
+    fn serializes(&self, _: &Message) -> bool {
+        true
+    }
+
+    fn deserializes(&self, _: &Message) -> bool {
+        true
+    }
+
+    fn deserializer(&self) -> Option<String> {
+        Some(self.read.clone())
     }
 
     fn writes(&self, rust: &str) -> Option<String> {
@@ -58,6 +73,7 @@ impl Models {
         Models {
             records: records.collect(),
             tuples: tuples::tuples(&filled, std, module),
+            read: format!("{module}::read"),
         }
     }
 }

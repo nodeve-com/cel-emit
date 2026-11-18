@@ -22,7 +22,10 @@ impl Emitter {
         };
         let serde = self.fills_through_serde(kind);
         let f = match kind {
-            _ if serde => format!("{STD}::dynamic::to::<{}>", self.rust(kind)?),
+            _ if serde => {
+                let to = (self.declare.deserializer()).unwrap_or(format!("{STD}::dynamic::to"));
+                format!("{to}::<{}>", self.rust(kind)?)
+            }
             Type::Opaque(rust) => self.named(rust, Does::Read)?,
             other => format!("{STD}::dynamic::{}", typed_read(other)?),
         };
